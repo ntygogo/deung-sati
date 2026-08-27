@@ -258,6 +258,10 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+.main-content.is-chat-tab {
+  overflow: hidden;
+}
+
 /* Bottom Navigation Bar */
 .bottom-nav {
   height: 68px;
@@ -760,13 +764,14 @@ html, body {
 
 /* Chat Input Bar */
 .chat-input-bar {
-  padding: var(--space-md);
+  padding: 8px 12px;
   background-color: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
   display: flex;
   gap: var(--space-sm);
-  align-items: flex-end;
+  align-items: center;
   flex-shrink: 0;
+  z-index: 15;
 }
 
 .chat-input {

@@ -181,7 +181,7 @@ const AppInner: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="main-content">
+      <main className={`main-content ${activeTab === 'chat' ? 'is-chat-tab' : ''}`}>
         {activeTab === 'today' && (
           <TodayView onStartChat={handleStartChat} />
         )}
