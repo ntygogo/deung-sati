@@ -100,7 +100,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
           <p className="sub-modal-sub">
             {planCategory === 'corporate'
               ? 'โซลูชันดูแลสุขภาพใจพนักงาน ลดความเหนื่อยล้า (Burnout) และสร้างวัฒนธรรมการสื่อสารที่ปลอดภัยในองค์กร'
-              : 'พื้นที่ดูแลใจไร้ขีดจำกัด ปลดล็อก AI ถอดรหัสจิตวิทยาเชิงลึก & คลื่นเสียงบำบัดพรีเมียม'}
+              : 'พื้นที่ดูแลใจไร้ขีดจำกัด ถอดรหัสลูปใจ ชี้ให้เห็นความจริง & คลื่นเสียงผ่อนคลายพรีเมียม'}
           </p>
         </div>
 
@@ -311,11 +311,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <h4 className="benefits-heading">สิ่งที่คุณจะได้รับจากแพ็กเกจ พลัส:</h4>
               <div className="benefit-item">
                 <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>แชท AI จิตวิทยาไม่อั้น 24 ชม.</strong> — ระบายและถอดรหัสใจได้ทุกเวลา</span>
+                <span><strong>แชทดึงสติ &amp; แยกแยะความจริงไม่อั้น 24 ชม.</strong> — ระบายและถอดรหัสลูปใจได้ทุกเวลา</span>
               </div>
               <div className="benefit-item">
                 <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>สังเคราะห์ลูปพฤติกรรม 5 ลูป ไม่จำกัด</strong> — ค้นหาปมในวัยเด็กและทางเลือกใหม่</span>
+                <span><strong>สังเคราะห์ลูปพฤติกรรม 5 ลูป ไม่จำกัด</strong> — ค้นหาปมที่ทำซ้ำและเห็นทางเลือกใหม่</span>
               </div>
               <div className="benefit-item">
                 <div className="benefit-check-icon"><Check size={13} /></div>

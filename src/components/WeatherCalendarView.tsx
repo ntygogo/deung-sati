@@ -7,20 +7,28 @@ import {
   TrendingUp,
   Sparkles,
   X,
+  Trash2,
+  Check,
 } from 'lucide-react';
+import { MOOD_WEATHER_OPTIONS } from '../constants/moodOptions';
 
 interface WeatherCalendarViewProps {
   entries?: GratitudeEntry[];
+  onSaveEntry?: (entry: GratitudeEntry) => void;
+  onDeleteEntry?: (id: string) => void;
   onSelectEntry?: (entry: GratitudeEntry) => void;
+  openForDateStr?: string;
+  onClosePicker?: () => void;
 }
 
 const MOOD_EMOTICONS: Record<
   MoodWeather,
-  { emoticon: string; label: string; color: string; bg: string; barColor: string }
+  { emoticon: string; label: string; subtitle: string; color: string; bg: string; barColor: string }
 > = {
   sunny: {
     emoticon: '😎✨',
     label: 'ตัวแม่ตัวมัม',
+    subtitle: 'สดใส พลังงานล้น',
     color: '#e09f3e',
     bg: 'rgba(224, 159, 62, 0.18)',
     barColor: '#e09f3e',
@@ -28,6 +36,7 @@ const MOOD_EMOTICONS: Record<
   partly_cloudy: {
     emoticon: '🫠🧋',
     label: 'ไหลชิลล์ๆ',
+    subtitle: 'ปล่อยใจจอยๆ สบายๆ',
     color: '#219ebc',
     bg: 'rgba(33, 158, 188, 0.18)',
     barColor: '#219ebc',
@@ -35,6 +44,7 @@ const MOOD_EMOTICONS: Record<
   rainy: {
     emoticon: '🥀🪫',
     label: 'ถ่านหมดเกลี้ยง',
+    subtitle: 'ล้า หมดพลัง นอยด์',
     color: '#4a7c59',
     bg: 'rgba(74, 124, 89, 0.18)',
     barColor: '#4a7c59',
@@ -42,6 +52,7 @@ const MOOD_EMOTICONS: Record<
   stormy: {
     emoticon: '🌋🧨',
     label: 'ไฟลุกพร้อมบวก',
+    subtitle: 'หงุดหงิด โกรธ ล่ก',
     color: '#c84b31',
     bg: 'rgba(200, 75, 49, 0.18)',
     barColor: '#c84b31',
@@ -50,21 +61,28 @@ const MOOD_EMOTICONS: Record<
 
 const WEEKDAY_NAMES = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entries = [] }) => {
+const monthNamesThai = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+];
+
+export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({
+  entries = [],
+  onSaveEntry,
+  onDeleteEntry,
+  openForDateStr,
+  onClosePicker,
+}) => {
   const safeEntries = Array.isArray(entries) ? entries : [];
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedDayEntry, setSelectedDayEntry] = useState<GratitudeEntry | null>(null);
+  
+  // Active Day Logger / Viewer State
+  const [activeDateStr, setActiveDateStr] = useState<string | null>(null);
+  const [editingMood, setEditingMood] = useState<MoodWeather>('partly_cloudy');
+  const [editingText, setEditingText] = useState<string>('');
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
-
-  // Month navigation
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-
-  // Days in month
-  const firstDayIndex = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   // Create entries lookup map by YYYY-MM-DD
   const entriesMap = new Map<string, GratitudeEntry>();
@@ -73,6 +91,21 @@ export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entrie
     const dStr = e.date || (e.createdAt ? new Date(e.createdAt).toISOString().split('T')[0] : '');
     if (dStr) entriesMap.set(dStr, e);
   });
+
+  // Watch openForDateStr prop
+  React.useEffect(() => {
+    if (openForDateStr) {
+      handleDayClick(openForDateStr);
+    }
+  }, [openForDateStr]);
+
+  // Month navigation
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  // Days in month
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   // Calculate monthly stats
   const currentMonthEntries = safeEntries.filter((e) => {
@@ -96,12 +129,60 @@ export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entrie
 
   const totalChecks = currentMonthEntries.length;
 
+  // When clicking a day cell
+  const handleDayClick = (dayString: string) => {
+    setActiveDateStr(dayString);
+    const existing = entriesMap.get(dayString);
+    if (existing) {
+      setEditingMood(existing.moodWeather || 'partly_cloudy');
+      setEditingText(existing.text || '');
+    } else {
+      setEditingMood('partly_cloudy');
+      setEditingText('');
+    }
+  };
+
+  const handleCloseEditor = () => {
+    setActiveDateStr(null);
+    if (onClosePicker) onClosePicker();
+  };
+
+  // Save day log
+  const handleSaveDayLog = () => {
+    if (!activeDateStr) return;
+
+    const existing = entriesMap.get(activeDateStr);
+    const newOrUpdatedEntry: GratitudeEntry = {
+      id: existing ? existing.id : `mood-${Date.now()}-${activeDateStr}`,
+      date: activeDateStr,
+      moodWeather: editingMood,
+      text: editingText.trim() || `เช็คอินสภาพใจ ${MOOD_EMOTICONS[editingMood].label}`,
+      tag: '🌦️ สภาพใจ',
+      createdAt: existing ? existing.createdAt : new Date(`${activeDateStr}T12:00:00`).toISOString(),
+    };
+
+    if (onSaveEntry) {
+      onSaveEntry(newOrUpdatedEntry);
+    }
+    handleCloseEditor();
+  };
+
+  // Delete day log
+  const handleDeleteDayLog = () => {
+    if (!activeDateStr) return;
+    const existing = entriesMap.get(activeDateStr);
+    if (existing && onDeleteEntry) {
+      onDeleteEntry(existing.id);
+    }
+    handleCloseEditor();
+  };
+
   // Generate witty, colorful, playful personality report
   const getPlayfulSummary = () => {
     if (totalChecks === 0) {
       return {
         badge: '🔮 พยากรณ์ใจล่วงหน้า',
-        text: 'ยังไม่มีดาต้าให้แซวเลยเธอ! มาเริ่มเช็คอินวันแรกให้โลกรู้ว่าวันนี้ร่างเป็นของเหลวหรือตัวแม่ตัวมัม 555',
+        text: 'ยังไม่มีดาต้าในเดือนนี้เลย! แตะเลือกวันที่บนปฏิทินเพื่อบันทึกสภาพใจวันแรกได้เลยจ้า ✨',
         themeClass: 'playful-neutral',
       };
     }
@@ -144,10 +225,13 @@ export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entrie
 
   const playfulReport = getPlayfulSummary();
 
-  const monthNamesThai = [
-    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
-  ];
+  const formattedActiveDate = activeDateStr
+    ? new Date(`${activeDateStr}T12:00:00`).toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
 
   return (
     <div className="weather-calendar-card">
@@ -168,6 +252,10 @@ export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entrie
             <ChevronRight size={16} />
           </button>
         </div>
+      </div>
+
+      <div className="cal-tap-hint-text">
+        <span>💡 แตะที่วันที่บนปฏิทินเพื่อบันทึกหรือดูความรู้สึกย้อนหลัง</span>
       </div>
 
       {/* Weekday Names Header */}
@@ -196,60 +284,110 @@ export const WeatherCalendarView: React.FC<WeatherCalendarViewProps> = ({ entrie
             new Date().getMonth() === month &&
             new Date().getFullYear() === year;
 
+          const isSelected = activeDateStr === dayString;
           const moodConfig = entry && entry.moodWeather ? MOOD_EMOTICONS[entry.moodWeather] : null;
 
           return (
             <button
               key={`day-${dayNum}`}
               type="button"
-              className={`cal-day-cell ${isToday ? 'today' : ''} ${entry ? 'has-entry' : ''}`}
-              onClick={() => {
-                if (entry) setSelectedDayEntry(entry);
-              }}
+              className={`cal-day-cell ${isToday ? 'today' : ''} ${entry ? 'has-entry' : ''} ${isSelected ? 'is-active-day' : ''}`}
+              onClick={() => handleDayClick(dayString)}
               style={{
-                backgroundColor: moodConfig ? moodConfig.bg : undefined,
-                borderColor: isToday ? 'var(--primary)' : undefined,
+                backgroundColor: moodConfig ? moodConfig.bg : isSelected ? 'rgba(79, 122, 107, 0.15)' : undefined,
+                borderColor: isSelected ? 'var(--primary)' : isToday ? '#B86A3E' : undefined,
+                borderWidth: isSelected || isToday ? '2px' : undefined,
               }}
-              title={entry ? `${dayNum} ${monthNamesThai[month]}: ${moodConfig?.label}` : undefined}
+              title={entry ? `${dayNum} ${monthNamesThai[month]}: ${moodConfig?.label}` : `แตะเพื่อบันทึกวันที่ ${dayNum}`}
             >
               <span className="cal-day-number">{dayNum}</span>
-              {moodConfig && (
-                <span className="cal-day-emoticon">
-                  {moodConfig.emoticon}
-                </span>
+              {moodConfig ? (
+                <span className="cal-day-emoticon">{moodConfig.emoticon}</span>
+              ) : (
+                <span className="cal-day-add-hint">+</span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* Selected Day Memory Preview Popup */}
-      {selectedDayEntry && (
-        <div className="cal-day-entry-preview">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: '1rem' }}>
-                {MOOD_EMOTICONS[selectedDayEntry.moodWeather]?.emoticon}
-              </span>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {new Date(selectedDayEntry.createdAt || selectedDayEntry.date).toLocaleDateString('th-TH', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })} • {MOOD_EMOTICONS[selectedDayEntry.moodWeather]?.label}
-              </span>
+      {/* Interactive Day Logger & Editor Card */}
+      {activeDateStr && (
+        <div className="cal-day-editor-card">
+          <div className="cal-editor-header">
+            <div className="cal-editor-title-row">
+              <CalendarIcon size={16} className="text-primary" />
+              <strong>{formattedActiveDate}</strong>
             </div>
             <button
               type="button"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-              onClick={() => setSelectedDayEntry(null)}
+              className="btn-cal-editor-close"
+              onClick={handleCloseEditor}
+              aria-label="ปิด"
             >
-              <X size={14} />
+              <X size={15} />
             </button>
           </div>
-          <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', marginTop: 4, fontStyle: 'italic' }}>
-            "{selectedDayEntry.text}"
-          </p>
+
+          <label className="cal-editor-prompt">วันนี้ใจของคุณตรงกับข้อไหน?</label>
+          
+          <div className="cal-editor-mood-grid">
+            {MOOD_WEATHER_OPTIONS.map((opt) => {
+              const isSelected = editingMood === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`cal-editor-mood-btn ${isSelected ? 'active' : ''}`}
+                  onClick={() => setEditingMood(opt.id)}
+                  style={{
+                    borderColor: isSelected ? opt.color : undefined,
+                    backgroundColor: isSelected ? opt.bg : undefined,
+                  }}
+                >
+                  <span className="cal-editor-mood-emo">{opt.emoticon}</span>
+                  <div className="cal-editor-mood-txt">
+                    <strong>{opt.label}</strong>
+                    <small>{opt.subtitle}</small>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="cal-editor-note-box">
+            <label className="cal-editor-note-label">บันทึกสั้นๆ 1 ประโยค (ไม่บังคับ):</label>
+            <input
+              type="text"
+              className="cal-editor-note-input"
+              placeholder="เช่น วันนี้งานเหนื่อยแต่ได้กินของอร่อย, ทะเลาะกับแฟนแต่ปรับความเข้าใจแล้ว..."
+              value={editingText}
+              onChange={(e) => setEditingText(e.target.value)}
+              maxLength={120}
+            />
+          </div>
+
+          <div className="cal-editor-actions">
+            {entriesMap.has(activeDateStr) && (
+              <button
+                type="button"
+                className="btn-cal-delete"
+                onClick={handleDeleteDayLog}
+                title="ลบบันทึกวันนี้"
+              >
+                <Trash2 size={14} />
+                <span>ลบ</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-cal-save"
+              onClick={handleSaveDayLog}
+            >
+              <Check size={16} />
+              <span>บันทึกลงปฏิทิน ✨</span>
+            </button>
+          </div>
         </div>
       )}
 

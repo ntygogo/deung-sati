@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { MoodWeather, GratitudeEntry } from '../types';
 import {
   X,
-  Sparkles,
+  Edit2,
 } from 'lucide-react';
 import { WeatherCalendarView } from './WeatherCalendarView';
 import { MOOD_WEATHER_OPTIONS } from '../constants/moodOptions';
@@ -13,6 +13,8 @@ interface MoodWeatherModalProps {
   entries?: GratitudeEntry[];
   selectedMood: MoodWeather;
   onSelectMood: (mood: MoodWeather) => void;
+  onSaveDayEntry?: (entry: GratitudeEntry) => void;
+  onDeleteDayEntry?: (id: string) => void;
   onSelectDayEntry?: (entry: GratitudeEntry) => void;
 }
 
@@ -22,16 +24,21 @@ export const MoodWeatherModal: React.FC<MoodWeatherModalProps> = ({
   entries = [],
   selectedMood = 'partly_cloudy',
   onSelectMood,
+  onSaveDayEntry,
+  onDeleteDayEntry,
   onSelectDayEntry,
 }) => {
   if (!isOpen) return null;
 
   const safeEntries = Array.isArray(entries) ? entries : [];
-  const currentOption = MOOD_WEATHER_OPTIONS.find((m) => m.id === selectedMood);
+  const currentOption = MOOD_WEATHER_OPTIONS.find((m) => m.id === selectedMood) || MOOD_WEATHER_OPTIONS[1];
+  const [triggerTodayPicker, setTriggerTodayPicker] = useState<boolean>(false);
+
+  const todayStr = new Date().toISOString().split('T')[0];
 
   return (
     <div className="jar-modal-overlay" onClick={onClose}>
-      <div className="jar-modal-card mood-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="jar-modal-card mood-modal-card-clean" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="jar-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -39,60 +46,52 @@ export const MoodWeatherModal: React.FC<MoodWeatherModalProps> = ({
               <span>🌦️</span>
             </div>
             <div>
-              <h3 className="jar-modal-title">สภาพจิตใจ & พยากรณ์ใจรายเดือน</h3>
-              <p className="jar-modal-sub">แตะเลือกอารมณ์ของคุณวันนี้เพื่อบันทึกลงปฏิทิน</p>
+              <h3 className="jar-modal-title">สภาพใจ &amp; พยากรณ์อารมณ์</h3>
+              <p className="jar-modal-sub">บันทึกความรู้สึกและติดตามสภาพใจรายเดือน</p>
             </div>
           </div>
-          <button type="button" className="btn-close-modal" onClick={onClose}>
+          <button type="button" className="btn-close-modal" onClick={onClose} aria-label="ปิด">
             <X size={18} />
           </button>
         </div>
 
-        {/* 4 Expressive Emoticons Grid */}
-        <div className="mood-modal-selection-section">
-          <span className="mood-modal-prompt-label">
-            🎭 สภาพใจของคุณตอนนี้ตรงกับข้อไหนมากที่สุด?
-          </span>
-
-          <div className="mood-modal-grid">
-            {MOOD_WEATHER_OPTIONS.map((opt) => {
-              const isSelected = selectedMood === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`mood-modal-btn ${isSelected ? 'active' : ''}`}
-                  onClick={() => onSelectMood(opt.id)}
-                  style={{
-                    borderColor: isSelected ? opt.color : undefined,
-                    backgroundColor: isSelected ? opt.bg : undefined,
-                  }}
-                >
-                  <span className="mood-modal-emoticon">{opt.emoticon}</span>
-                  <div className="mood-modal-btn-text">
-                    <span className="mood-modal-btn-label">{opt.label}</span>
-                    <span className="mood-modal-btn-sub">{opt.subtitle}</span>
-                  </div>
-                </button>
-              );
-            })}
+        {/* Compact Today's Status Banner (Clean & Non-cluttered) */}
+        <div className="mood-today-compact-banner">
+          <div className="today-mood-left">
+            <span className="today-tag-pill">วันนี้</span>
+            <div className="today-mood-indicator">
+              <span className="today-mood-emo">{currentOption.emoticon}</span>
+              <div className="today-mood-text-group">
+                <span className="today-mood-name">{currentOption.label}</span>
+                <span className="today-mood-desc">{currentOption.subtitle}</span>
+              </div>
+            </div>
           </div>
 
-          {currentOption && (
-            <div className="mood-modal-active-toast">
-              <Sparkles size={14} style={{ color: currentOption.color }} />
-              <span>
-                บันทึกวันนี้เป็น <strong>{currentOption.emoticon} {currentOption.label}</strong> ({currentOption.subtitle}) เรียบร้อยแล้ว!
-              </span>
-            </div>
-          )}
+          <button
+            type="button"
+            className="btn-quick-log-today"
+            onClick={() => setTriggerTodayPicker(true)}
+          >
+            <Edit2 size={13} />
+            <span>เปลี่ยน / บันทึก</span>
+          </button>
         </div>
 
-        {/* Weather Calendar & Playful Personality Report */}
+        {/* Weather Calendar & Interactive Day Popups */}
         <div className="mood-modal-calendar-section">
           <WeatherCalendarView
             entries={safeEntries}
+            onSaveEntry={(entry) => {
+              if (onSaveDayEntry) onSaveDayEntry(entry);
+              if (entry.date === todayStr) {
+                onSelectMood(entry.moodWeather);
+              }
+            }}
+            onDeleteEntry={onDeleteDayEntry}
             onSelectEntry={onSelectDayEntry}
+            openForDateStr={triggerTodayPicker ? todayStr : undefined}
+            onClosePicker={() => setTriggerTodayPicker(false)}
           />
         </div>
       </div>

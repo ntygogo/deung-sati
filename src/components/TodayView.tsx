@@ -75,6 +75,51 @@ export const TodayView: React.FC<TodayViewProps> = ({ onStartChat }) => {
     setEntries((prev) => prev.filter((e) => e.id !== id));
   };
 
+  const handleSelectTodayMood = (mood: MoodWeather) => {
+    setSelectedMood(mood);
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    const existingIndex = entries.findIndex(
+      (e) => (e.date === todayStr) || (e.createdAt && e.createdAt.startsWith(todayStr))
+    );
+
+    if (existingIndex >= 0) {
+      const updated = [...entries];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        moodWeather: mood,
+      };
+      setEntries(updated);
+    } else {
+      const newEntry: GratitudeEntry = {
+        id: `mood-${Date.now()}`,
+        date: todayStr,
+        moodWeather: mood,
+        text: 'เช็คอินสภาพใจประจำวัน',
+        tag: '🌦️ สภาพใจ',
+        createdAt: new Date().toISOString(),
+      };
+      setEntries([newEntry, ...entries]);
+    }
+  };
+
+  const handleSaveDayEntry = (savedEntry: GratitudeEntry) => {
+    const existingIndex = entries.findIndex(
+      (e) => e.id === savedEntry.id || (e.date && e.date === savedEntry.date)
+    );
+    if (existingIndex >= 0) {
+      const updated = [...entries];
+      updated[existingIndex] = savedEntry;
+      setEntries(updated);
+    } else {
+      setEntries([savedEntry, ...entries]);
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (savedEntry.date === todayStr) {
+      setSelectedMood(savedEntry.moodWeather);
+    }
+  };
+
   const primaryChips = [
     t('chip1'),
     t('chip2'),
@@ -168,7 +213,9 @@ export const TodayView: React.FC<TodayViewProps> = ({ onStartChat }) => {
         onClose={() => setIsMoodModalOpen(false)}
         entries={entries}
         selectedMood={selectedMood}
-        onSelectMood={setSelectedMood}
+        onSelectMood={handleSelectTodayMood}
+        onSaveDayEntry={handleSaveDayEntry}
+        onDeleteDayEntry={handleDeleteEntry}
       />
 
       {/* 🏺 Floating Gratitude Jar Widget (Floats invitingly on bottom-left) */}
