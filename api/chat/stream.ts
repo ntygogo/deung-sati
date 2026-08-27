@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const apiKey =
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
-    'AQ.Ab8RN6JhTEr6m7dIHU_Siox8oRpZJyzGe-Mg8phiX15TSROG3g';
+    'AQ.Ab8RN6KCEvnaXfqgMinUvKsKoNfrLnmDUGkkLylwmbfhXvva2Q';
 
   // Set SSE Headers
   res.writeHead(200, {
@@ -34,8 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-    const contents = messages.map((m: any) => ({
-      role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
+    
+    // Clean messages for Gemini: must start with user message
+    const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
+    const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
+    const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
+
+    const contents = sliced.map((m: any) => ({
+      role: m.role === 'assistant' || m.role === 'model' || m.role === 'ai' ? 'model' : 'user',
       parts: [{ text: m.content || m.text || '' }],
     }));
 
