@@ -144,12 +144,7 @@ export async function streamChatResponse({
     }
     // TikTok / scrolling reaction (Ask Before Interpreting)
     else if (/tiktok|มือถือ|ไถ|เล่นเกม|ดูคลิป|ดูยูทูป/i.test(latestUserMsg) && turnCount <= 3) {
-      fallbackText = `ตอนที่ไถ TikTok อยู่ ใกล้กับข้อไหนมากกว่า?
-
-- แค่อยากไม่คิดเรื่องนี้
-- แอบหวังว่าเขาจะมาสนใจ
-- ไม่ได้คิดอะไร ทำไปเฉยๆ
-- อื่นๆ`;
+      fallbackText = `ตอนที่หยิบมือถือมาไถดูคลิป ตอนนั้นในใจแค่รู้สึกเบื่ออยากพักสมอง หรือแอบอยากหนีจากเรื่องที่กวนใจอยู่เหรอ?`;
     }
     // Dynamic Context-Aware Semantic CBT Generator
     const hasRelationship = /แฟน|คนรัก|คนคุย|เขา|เธอ|สามี|ภรรยา/i.test(latestUserMsg);
