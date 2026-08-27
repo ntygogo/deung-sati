@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { GroundingModal } from './GroundingModal';
 import { LoopEditorModal } from './LoopEditorModal';
+import { streamClientAiResponse } from '../utils/aiClientEngine';
 
 interface ChatViewProps {
   initialTopic?: string;
@@ -299,17 +300,32 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
-        console.error('Streaming error:', err);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMsgId
-              ? {
-                  ...msg,
-                  text: 'ขออภัยด้วยครับ การเชื่อมต่อติดขัดชั่วคราว ลองส่งข้อความใหม่อีกครั้งนะ',
-                  isStreaming: false,
-                }
-              : msg
-          )
+        console.warn('Backend endpoint unavailable on static host, switching to Client AI Engine seamlessly:', err);
+        let accumulatedClientText = '';
+        await streamClientAiResponse(
+          history,
+          (chunk) => {
+            accumulatedClientText += chunk;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMsgId
+                  ? { ...msg, text: accumulatedClientText, isStreaming: true }
+                  : msg
+              )
+            );
+          },
+          (fullText) => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMsgId
+                  ? { ...msg, text: fullText, isStreaming: false }
+                  : msg
+              )
+            );
+            if (history.length >= 3) {
+              checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: fullText }]);
+            }
+          }
         );
       }
     } finally {
@@ -344,11 +360,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
             userConfirmed: false,
           });
           setShowLoopOffer(true);
+          return;
         }
       }
     } catch (err) {
-      console.warn('Could not extract loop:', err);
+      console.warn('Could not extract loop via backend, generating client loop:', err);
     }
+
+    // Client-side intelligent loop extraction fallback
+    const userMsgs = allMessages.filter((m) => m.role === 'user');
+    const latestUserText = userMsgs[userMsgs.length - 1]?.text || 'เรื่องที่กังวล';
+    setCurrentLoopData({
+      id: `loop-${Date.now()}`,
+      title: 'ลูปอารมณ์และการตอบสนองอัตโนมัติ',
+      event: { value: latestUserText, sourceType: 'user_explicit' },
+      feeling: { value: 'อึดอัด • กังวล • เครียด', sourceType: 'user_explicit' },
+      interpretation: { value: 'รู้สึกว่าสถานการณ์นี้อยู่นอกเหนือการควบคุม หรือกลัวความผิดหวัง', sourceType: 'ai_reflection' },
+      needFear: { value: 'ต้องการความปลอดภัย ความเข้าใจ และการยอมรับ', sourceType: 'ai_reflection' },
+      habitualResponse: { value: 'พยายามคิดวนซ้ำๆ หรือถอยห่างออกมาเงียบๆ', sourceType: 'user_explicit' },
+      habitualResult: { value: 'ความรู้สึกยังคงคั่งค้างและสะสมความล้า', sourceType: 'ai_reflection' },
+      newChoice: { value: 'หยุดพักหายใจ ดึงสติรับรู้ความรู้สึก แล้วสื่อสารความต้องการอย่างตรงไปตรงมา', sourceType: 'user_explicit' },
+      userConfirmed: false,
+    });
+    setShowLoopOffer(true);
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
