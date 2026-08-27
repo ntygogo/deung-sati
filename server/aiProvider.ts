@@ -54,9 +54,11 @@ export async function streamChatResponse({
   if (isKeyPresent) {
     const candidateModels = [
       primaryModel,
-      'gemini-3.1-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-2.5-flash',
+      'gemini-1.5-pro',
       'gemini-flash-latest',
-      'gemini-3.5-flash',
     ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
