@@ -299,35 +299,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
         checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: accumulatedText }]);
       }
     } catch (err: unknown) {
-      if ((err as Error).name !== 'AbortError') {
-        console.warn('Backend endpoint unavailable on static host, switching to Client AI Engine seamlessly:', err);
-        let accumulatedClientText = '';
-        await streamClientAiResponse(
-          history,
-          (chunk) => {
-            accumulatedClientText += chunk;
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMsgId
-                  ? { ...msg, text: accumulatedClientText, isStreaming: true }
-                  : msg
-              )
-            );
-          },
-          (fullText) => {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMsgId
-                  ? { ...msg, text: fullText, isStreaming: false }
-                  : msg
-              )
-            );
-            if (history.length >= 3) {
-              checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: fullText }]);
-            }
+      console.warn('Backend unavailable, streaming from Client AI Engine seamlessly:', err);
+      let accumulatedClientText = '';
+      await streamClientAiResponse(
+        history,
+        (chunk) => {
+          accumulatedClientText += chunk;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, text: accumulatedClientText, isStreaming: true }
+                : msg
+            )
+          );
+        },
+        (fullText) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMsgId
+                ? { ...msg, text: fullText, isStreaming: false }
+                : msg
+            )
+          );
+          if (history.length >= 3) {
+            checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: fullText }]);
           }
-        );
-      }
+        }
+      );
     } finally {
       setIsAiStreaming(false);
     }

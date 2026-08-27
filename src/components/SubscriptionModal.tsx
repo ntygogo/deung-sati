@@ -18,11 +18,14 @@ import {
   Award,
 } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext';
+
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpgradeSuccess: () => void;
   isAlreadyPlus?: boolean;
+  onOpenAuth?: () => void;
 }
 
 type PlanCategory = 'individual' | 'corporate';
@@ -34,7 +37,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   onClose,
   onUpgradeSuccess,
   isAlreadyPlus = false,
+  onOpenAuth,
 }) => {
+  const { currentUser, upgradePlus } = useAuth();
   const [planCategory, setPlanCategory] = useState<PlanCategory>('individual');
   const [selectedPlan, setSelectedPlan] = useState<BillingPlan>('yearly');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('promptpay');
@@ -64,6 +69,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
+      upgradePlus(selectedPlan);
       onUpgradeSuccess();
       setShowQrStep(false);
     }, 1500);
@@ -272,6 +278,18 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
              👤 INDIVIDUAL / PERSONAL PLAN CONTENT
              ================================================================ */
           <div className="sub-content-body">
+            {/* User Account Association Status */}
+            {currentUser ? (
+              <div className="sub-user-account-badge">
+                <ShieldCheck size={14} className="text-emerald-500" />
+                <span>อัปเกรดสิทธิ์ผูกกับบัญชี: <strong>{currentUser.email}</strong></span>
+              </div>
+            ) : onOpenAuth ? (
+              <div className="sub-user-guest-warning" onClick={() => { onClose(); onOpenAuth(); }}>
+                <span>💡 ยังไม่ได้ล็อกอิน? <u>เข้าสู่ระบบ/สมัครสมาชิก</u> เพื่อผูกสิทธิ์ถาวร</span>
+              </div>
+            ) : null}
+
             {/* Plan Selector Toggle */}
             <div className="sub-plans-grid">
               <div

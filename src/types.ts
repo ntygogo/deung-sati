@@ -81,3 +81,18 @@ export interface GratitudeEntry {
   createdAt: string;
 }
 
+export type MembershipTier = 'free' | 'monthly' | 'yearly' | 'lifetime';
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  isPlus: boolean;
+  tier: MembershipTier;
+  plusExpiresAt?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  avatarUrl?: string;
+}
+
+

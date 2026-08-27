@@ -14,11 +14,15 @@ import {
   Shield,
   HeartHandshake,
   Crown,
+  User,
 } from 'lucide-react';
 import { EmergencyModal } from './components/EmergencyModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
 
 const INITIAL_SAMPLE_LOOPS: LoopMapData[] = [
   {
@@ -36,19 +40,15 @@ const INITIAL_SAMPLE_LOOPS: LoopMapData[] = [
 
 const AppInner: React.FC = () => {
   const { t } = useLanguage();
+  const { currentUser, isLoggedIn, isPlus } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('today');
   const [chatInitialTopic, setChatInitialTopic] = useState<string | undefined>(undefined);
   const [isPrivateSession, setIsPrivateSession] = useState<boolean>(false);
   const [showPrivateModal, setShowPrivateModal] = useState<boolean>(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState<boolean>(false);
   const [showSubModal, setShowSubModal] = useState<boolean>(false);
-  const [isPlusUser, setIsPlusUser] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('deung_sati_is_plus_user') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
   const [savedLoops, setSavedLoops] = useState<LoopMapData[]>(INITIAL_SAMPLE_LOOPS);
 
   const handleStartChat = (topic?: string) => {
@@ -80,12 +80,7 @@ const AppInner: React.FC = () => {
   };
 
   const handleUpgradeSuccess = () => {
-    setIsPlusUser(true);
-    try {
-      localStorage.setItem('deung_sati_is_plus_user', 'true');
-    } catch (e) {
-      console.warn(e);
-    }
+    // Upgraded via AuthContext
   };
 
   return (
@@ -101,21 +96,47 @@ const AppInner: React.FC = () => {
           {/* Multi-Language Switcher (TH | EN | 中文 | 日本語) */}
           <LanguageSwitcher />
 
+          {/* User Account Login / Profile Button */}
+          {isLoggedIn && currentUser ? (
+            <button
+              type="button"
+              className="auth-profile-header-btn"
+              onClick={() => setShowProfileModal(true)}
+              title={`เข้าสู่ระบบในชื่อ: ${currentUser.name}`}
+            >
+              <div className="auth-profile-avatar">
+                <span>{currentUser.name.charAt(0).toUpperCase()}</span>
+              </div>
+              <span className="auth-profile-name">{currentUser.name}</span>
+              {isPlus && <Crown size={12} className="text-amber-500" />}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="auth-login-header-btn"
+              onClick={() => setShowAuthModal(true)}
+              title="เข้าสู่ระบบ / สมัครสมาชิก"
+            >
+              <User size={13} />
+              <span>เข้าสู่ระบบ</span>
+            </button>
+          )}
+
           {/* Deung Sati Plus Subscription Button */}
           <button
-            className={`plus-header-btn ${isPlusUser ? 'is-plus' : ''}`}
+            className={`plus-header-btn ${isPlus ? 'is-plus' : ''}`}
             onClick={() => setShowSubModal(true)}
             title={
-              isPlusUser
+              isPlus
                 ? 'คุณเป็นสมาชิก ดึงสติ พลัส แล้ว'
                 : 'อัปเกรดเป็น ดึงสติ พลัส (Deung Sati Plus)'
             }
           >
-            <Crown size={14} className={isPlusUser ? 'text-amber-500' : 'text-amber-600'} />
-            <span>{isPlusUser ? t('plusMember') : t('plusBtn')}</span>
+            <Crown size={14} className={isPlus ? 'text-amber-500' : 'text-amber-600'} />
+            <span>{isPlus ? t('plusMember') : t('plusBtn')}</span>
           </button>
 
-          {/* Red Emergency Warning Beacon Button (Pure Transparent Button with "ฉุกเฉิน" below) */}
+          {/* Red Emergency Warning Beacon Button */}
           <button
             className="emergency-beacon-header-btn"
             onClick={() => setShowEmergencyModal(true)}
@@ -141,19 +162,35 @@ const AppInner: React.FC = () => {
         </div>
       </header>
 
+      {/* Private Session Indicator Banner */}
+      {isPrivateSession && (
+        <div className="private-session-bar">
+          <div className="private-badge">
+            <Shield size={12} />
+            <span>{t('privateBadge')}</span>
+          </div>
+          <span className="private-text">{t('privateDesc')}</span>
+          <button
+            type="button"
+            className="btn-exit-private"
+            onClick={() => setIsPrivateSession(false)}
+          >
+            {t('privateTurnOff')}
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <main className="app-content">
+      <main className="main-content">
         {activeTab === 'today' && (
-          <TodayView
-            onStartChat={handleStartChat}
-          />
+          <TodayView onStartChat={handleStartChat} />
         )}
 
         {activeTab === 'chat' && (
           <ChatView
-            initialTopic={chatInitialTopic}
             isPrivateSession={isPrivateSession}
             onSaveLoop={handleSaveLoop}
+            initialTopic={chatInitialTopic}
             onNavigateToLoops={() => setActiveTab('loops')}
             onNavigateToExercises={() => setActiveTab('exercises')}
           />
@@ -165,16 +202,16 @@ const AppInner: React.FC = () => {
             onUpdateLoop={handleUpdateLoop}
             onDeleteLoop={handleDeleteLoop}
             onStartNewChat={(topic) => handleStartChat(topic)}
-            onLoadSampleLoops={(samples) => setSavedLoops(samples)}
           />
         )}
 
-        {activeTab === 'exercises' && <ExercisesView onStartChat={handleStartChat} />}
+        {activeTab === 'exercises' && <ExercisesView />}
+
         {activeTab === 'services' && <ServicesView />}
       </main>
 
-      {/* Bottom 5-Tab Navigation */}
-      <nav className="bottom-nav" aria-label="แถบนำทางหลัก">
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
         <button
           className={`nav-item ${activeTab === 'today' ? 'active' : ''}`}
           onClick={() => setActiveTab('today')}
@@ -234,6 +271,19 @@ const AppInner: React.FC = () => {
         </button>
       </nav>
 
+      {/* Auth Modal (Sign in / Sign up) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
+
+      {/* User Profile & Account Management Modal */}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onOpenSubscribe={() => setShowSubModal(true)}
+      />
+
       {/* Private Session Explanation Modal */}
       {showPrivateModal && (
         <PrivateSessionModal
@@ -253,7 +303,8 @@ const AppInner: React.FC = () => {
         isOpen={showSubModal}
         onClose={() => setShowSubModal(false)}
         onUpgradeSuccess={handleUpgradeSuccess}
-        isAlreadyPlus={isPlusUser}
+        isAlreadyPlus={isPlus}
+        onOpenAuth={() => setShowAuthModal(true)}
       />
     </div>
   );
@@ -261,11 +312,12 @@ const AppInner: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <LanguageProvider>
-      <AppInner />
-    </LanguageProvider>
+    <AuthProvider>
+      <LanguageProvider>
+        <AppInner />
+      </LanguageProvider>
+    </AuthProvider>
   );
 };
 
 export default App;
-
