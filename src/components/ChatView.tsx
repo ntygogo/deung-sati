@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   LoopMapData,
   SafetyClassificationResult,
+  EmotionalCheckinData,
 } from '../types';
 import {
   Send,
@@ -50,6 +51,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [isAiStreaming, setIsAiStreaming] = useState<boolean>(false);
+  const [checkinData, setCheckinData] = useState<EmotionalCheckinData>({ step: 'idle' });
   const [currentLoopData, setCurrentLoopData] = useState<LoopMapData | null>(null);
   const [isLoopSaved, setIsLoopSaved] = useState<boolean>(false);
   const [showGroundingModal, setShowGroundingModal] = useState<boolean>(false);
@@ -99,29 +101,23 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       recognition.onstart = () => {
         setIsListening(true);
-        setSpeechHint('🎙️ กำลังฟังเสียงภาษาไทยของคุณ... พูดเล่าได้เลยนะ');
+        setSpeechHint('กำลังฟังเสียงภาษาไทยของคุณ... (พูดเสร็จแล้วกดหยุด)');
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onresult = (event: any) => {
-        let finalChunk = '';
+        let transcript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalChunk += transcript;
-          }
+          transcript += event.results[i][0].transcript;
         }
-        if (finalChunk.trim()) {
-          setInputText((prev) => {
-            const prefix = prev ? prev.trim() + ' ' : '';
-            return prefix + finalChunk.trim();
-          });
+        if (transcript.trim()) {
+          setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
         }
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onerror = (event: any) => {
-        console.warn('Speech Recognition error:', event.error);
+        console.warn('Speech recognition error:', event.error);
         setIsListening(false);
         setSpeechHint(null);
       };
@@ -133,18 +129,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch (err) {
-      console.error('Failed to start speech recognition:', err);
+    } catch (e) {
+      console.error('Failed to start speech recognition:', e);
       setIsListening(false);
-      setSpeechHint(null);
     }
   };
 
   // Initialize chat session
   useEffect(() => {
-    startInitialConversation(initialTopic);
+    if (initialTopic) {
+      startInitialConversation(initialTopic);
+    } else {
+      startInitialConversation();
+    }
     return () => {
       abortControllerRef.current?.abort();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          console.warn(e);
+        }
+      }
     };
   }, [initialTopic]);
 
@@ -156,6 +162,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setIsLoopSaved(false);
     setCurrentLoopData(null);
     setShowLoopOffer(false);
+    setCheckinData({ step: 'idle' });
 
     if (topic) {
       const userText = `ตอนนี้ฉันรู้สึก: "${topic}"`;
@@ -207,7 +214,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, messages: formattedMessages }),
+        body: JSON.stringify({ sessionId, messages: formattedMessages, checkinState: checkinData }),
         signal: abortControllerRef.current.signal,
       });
 
@@ -218,6 +225,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let accumulatedText = '';
+      let serverOptions: string[] | undefined = undefined;
       let buffer = '';
 
       const processBlock = (block: string) => {
@@ -244,13 +252,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
           }
         } else if (eventType === 'chunk' && dataStr) {
           try {
-            const { text: chunk } = JSON.parse(dataStr);
+            const { text: chunk, options: opts } = JSON.parse(dataStr);
+            if (opts) serverOptions = opts;
             if (chunk) {
               accumulatedText += chunk;
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMsgId
-                    ? { ...msg, text: accumulatedText, isStreaming: true }
+                    ? { ...msg, text: accumulatedText, options: serverOptions, isStreaming: true }
                     : msg
                 )
               );
@@ -260,7 +269,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           }
         } else if (eventType === 'done' && dataStr) {
           try {
-            const { fullText } = JSON.parse(dataStr);
+            const { fullText, options: opts } = JSON.parse(dataStr);
+            if (opts) serverOptions = opts;
             if (fullText) {
               accumulatedText = fullText;
             }
@@ -294,7 +304,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMsgId
-            ? { ...msg, text: accumulatedText, isStreaming: false }
+            ? { ...msg, text: accumulatedText, options: serverOptions, isStreaming: false }
             : msg
         )
       );
@@ -307,7 +317,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       let accumulatedClientText = '';
       await streamClientAiResponse(
         history,
-        (chunk) => {
+        checkinData,
+        (chunk: string) => {
           accumulatedClientText += chunk;
           setMessages((prev) =>
             prev.map((msg) =>
@@ -317,16 +328,34 @@ export const ChatView: React.FC<ChatViewProps> = ({
             )
           );
         },
-        (fullText) => {
+        (clientResponse) => {
+          if (clientResponse.checkinData) {
+            setCheckinData(clientResponse.checkinData);
+          }
+          if (clientResponse.safetyMode) {
+            setSafetyState({ mode: clientResponse.safetyMode, risk_type: [], reason: '', confidence: 1 });
+          }
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === aiMsgId
-                ? { ...msg, text: fullText, isStreaming: false }
+                ? {
+                    ...msg,
+                    text: clientResponse.text,
+                    options: clientResponse.options,
+                    checkinData: clientResponse.checkinData,
+                    exerciseCard: clientResponse.exerciseCard,
+                    isStreaming: false,
+                  }
                 : msg
             )
           );
-          if (history.length >= 3) {
-            checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: fullText }]);
+          if (
+            history.length >= 4 &&
+            (!clientResponse.checkinData ||
+              clientResponse.checkinData.step === 'idle' ||
+              clientResponse.checkinData.step === 'completed')
+          ) {
+            checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: clientResponse.text }]);
           }
         }
       );
@@ -387,11 +416,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setShowLoopOffer(true);
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputText.trim() || isAiStreaming) return;
+  const handleSendMessage = async (customText?: string | React.FormEvent) => {
+    let userText = '';
+    if (typeof customText === 'string') {
+      userText = customText.trim();
+    } else if (customText && typeof customText === 'object' && 'preventDefault' in customText) {
+      customText.preventDefault();
+      userText = inputText.trim();
+    } else {
+      userText = inputText.trim();
+    }
 
-    const userText = inputText.trim();
+    if (!userText || isAiStreaming) return;
     setInputText('');
 
     const userMsg: ChatMessage = {
@@ -411,6 +447,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setIsLoopSaved(true);
     }
   };
+
+  // Find options from latest AI message if available and not streaming
+  const latestAiMessage = messages.filter((m) => m.role === 'ai').pop();
+  const activeQuickOptions =
+    !isAiStreaming &&
+    latestAiMessage?.options &&
+    latestAiMessage.options.length > 0
+      ? latestAiMessage.options
+      : undefined;
 
   return (
     <div className="chat-screen">
@@ -434,10 +479,31 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="messages-list">
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => (
           <div key={msg.id} className={`message-row ${msg.role}`}>
             <div className="bubble">
               {msg.text}
+
+              {/* Special Moment: Micro-Exercise Card (Guided Check-in Step 6) */}
+              {msg.exerciseCard && (
+                <div className="checkin-exercise-card">
+                  <div className="checkin-exercise-header">
+                    <div className="checkin-exercise-title-group">
+                      <Wind size={16} className="text-emerald-600" />
+                      <span className="checkin-exercise-title">{msg.exerciseCard.title}</span>
+                    </div>
+                    <span className="checkin-exercise-badge">{msg.exerciseCard.duration}</span>
+                  </div>
+                  <p className="checkin-exercise-desc">{msg.exerciseCard.description}</p>
+                  <div className="checkin-exercise-steps">
+                    {msg.exerciseCard.steps.map((stepText, sIdx) => (
+                      <div key={sIdx} className="checkin-step-item">
+                        <span>{stepText}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Special Moment: Fact vs Story gentle reflection */}
               {msg.specialType === 'fact_story' && msg.factStory && (
@@ -465,14 +531,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <button
                         key={i}
                         className="choice-option-btn"
-                        onClick={() => {
-                          setInputText(`ฉันสนใจทางเลือก: "${opt.replace(/^[^\s]+\s/, '')}"`);
-                        }}
+                        onClick={() => handleSendMessage(opt)}
                       >
                         {opt}
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Inline Quick Options for this AI Message */}
+              {msg.role === 'ai' && msg.options && msg.options.length > 0 && idx === messages.length - 1 && !isAiStreaming && (
+                <div className="msg-quick-options">
+                  {msg.options.map((opt, oIdx) => (
+                    <button
+                      key={oIdx}
+                      type="button"
+                      className="quick-option-chip"
+                      onClick={() => handleSendMessage(opt)}
+                    >
+                      {opt}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -704,6 +784,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
           >
             เสร็จสิ้น
           </button>
+        </div>
+      )}
+
+      {/* Pinned Quick Option Chips Bar */}
+      {activeQuickOptions && (
+        <div className="pinned-quick-options-bar">
+          {activeQuickOptions.map((opt, oIdx) => (
+            <button
+              key={oIdx}
+              type="button"
+              className="quick-option-chip"
+              onClick={() => handleSendMessage(opt)}
+            >
+              {opt}
+            </button>
+          ))}
         </div>
       )}
 

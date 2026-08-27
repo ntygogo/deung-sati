@@ -10586,6 +10586,130 @@ html, body {
   color: var(--text-muted);
 }
 
+/* ==========================================================================
+   Guided Emotional Check-in & Quick Option Chips Styles
+   ========================================================================== */
+
+.msg-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.quick-option-chip {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.quick-option-chip:hover {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(194, 65, 12, 0.2);
+}
+
+.quick-option-chip:active {
+  transform: scale(0.96);
+}
+
+/* Micro-Exercise Card (Step 6) */
+.checkin-exercise-card {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.12) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.checkin-exercise-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.checkin-exercise-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checkin-exercise-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #065f46;
+}
+
+.checkin-exercise-badge {
+  padding: 2px 7px;
+  background-color: #059669;
+  color: #FFFFFF;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.checkin-exercise-desc {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.checkin-exercise-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background-color: rgba(255, 255, 255, 0.65);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.checkin-step-item {
+  font-size: 0.75rem;
+  color: #047857;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.pinned-quick-options-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: var(--bg-canvas);
+  border-top: 1px solid var(--border-subtle);
+  animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+
 
 
 
