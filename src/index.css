@@ -245,14 +245,17 @@ html, body {
 }
 
 /* Main Viewport */
+.main-content,
 .app-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Bottom Navigation Bar */
@@ -455,7 +458,10 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  flex: 1;
+  min-height: 0;
   background-color: var(--bg-canvas);
+  overflow: hidden;
 }
 
 .chat-scenario-bar {
@@ -491,7 +497,9 @@ html, body {
 
 .messages-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: var(--space-lg) var(--space-md);
   display: flex;
   flex-direction: column;
