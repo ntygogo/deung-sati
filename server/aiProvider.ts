@@ -105,10 +105,8 @@ export async function streamChatResponse({
   // 2. Context-Aware Dynamic Fallback Generator (Non-orchestrated, responsive, anti-repetitive):
   try {
     const userMessages = messages.filter((m) => m.role === 'user');
-    const assistantMessages = messages.filter((m) => m.role === 'assistant');
     const latestUserMsg = userMessages[userMessages.length - 1]?.content || '';
     const turnCount = userMessages.length;
-    const previousAssistantTexts = assistantMessages.map((m) => m.content);
 
     let fallbackText = '';
 
@@ -173,10 +171,14 @@ export async function streamChatResponse({
         fallbackText = `ฟังดูเจ็บและกระทบความรู้สึกมากเลยนะ... คำพูดจากเพื่อนหรือคนรอบข้างบางทีก็สร้างแผลในใจเราได้ลึกจริงๆ\n\nตอนที่ได้ยินคำนั้น วินาทีแรกในใจคุณรู้สึกยังไงบ้าง? (เช่น โกรธ, เสียใจ, หรือรู้สึกไม่มั่นใจในตัวเอง)`;
       } else if (hasRelationship && hasSadness) {
         fallbackText = `ฟังแล้วสัมผัสได้ถึงความน้อยใจเลยนะ... เวลาคนที่เราแคร์ทำตัวนิ่งใส่หรือไม่เป็นอย่างที่หวัง มันเจ็บข้างในมากจริงๆ\n\nตอนที่เกิดเรื่องนั้นขึ้น ในใจลึกๆ คุณอยากให้เขาทำหรือพูดอะไรกับคุณมากที่สุด?`;
-      } else if (hasWork) {
+      } else if (hasWork && (hasExhaustion || hasAnger)) {
         fallbackText = `เรื่องงานเวลามีเรื่องให้ปวดหัว มันดูดพลังชีวิตเราไปหมดเลยเนอะ...\n\nอะไรคือสิ่งที่ทำให้คุณรู้สึกเหนื่อยหรือหงุดหงิดกับเรื่องนี้มากที่สุดในตอนนี้?`;
       } else if (hasFamily) {
         fallbackText = `เรื่องในครอบครัวมักเป็นเรื่องที่ละเอียดอ่อนและกระทบใจเราได้ลึกที่สุดเนอะ...\n\nอะไรคือสิ่งที่ทำให้คุณรู้สึกอึดอัดใจกับเรื่องนี้มากที่สุด?`;
+      } else if (hasAnxiety) {
+        fallbackText = `ความกังวลใจมันทำให้ข้างในรู้สึกกระวนกระวายและคิดวนไม่หยุดเลยเนอะ...\n\nอะไรคือสิ่งเลวร้ายที่สุดที่คุณกำลังกลัวว่าจะเกิดขึ้นจากเรื่องนี้?`;
+      } else if (hasExhaustion) {
+        fallbackText = `เหมือนตอนนี้พลังงานข้างในมันล้าจนไม่อยากแบกอะไรแล้วเนอะ...\n\nความรู้สึกเหนื่อยนี้มันสะสมมาจากเรื่องไหนเป็นพิเศษไหม?`;
       } else {
         fallbackText = `รับฟังอยู่นะครับ... เรื่อง "${cleanSnippet}" คงกวนใจคุณมาสักพักแล้วใช่ไหม\n\nตอนที่เรื่องนี้เกิดขึ้น ความรู้สึกแรกที่แวบขึ้นมาในใจคืออะไร?`;
       }
