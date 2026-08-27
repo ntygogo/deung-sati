@@ -36,7 +36,7 @@ async function callDirectGeminiApi(
 2. รับฟังอารมณ์สั้นๆ 1 ประโยค แล้วถามคำถามชวนคิด 1 คำถาม
 3. ห้ามพูดซ้ำกับประโยคเดิมที่เคยตอบไปแล้วในแชท`;
 
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?alt=sse&key=${apiKey.trim()}`;
 
     const res = await fetch(url, {
