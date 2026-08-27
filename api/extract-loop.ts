@@ -8,11 +8,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { messages } = req.body || {};
   const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    'AQ.Ab8RN6KCEvnaXfqgMinUvKsKoNfrLnmDUGkkLylwmbfhXvva2Q';
+    process.env.GEMINI_API_KEY;
 
-  try {
+   try {
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
     const userText = Array.isArray(messages)
       ? messages.map((m: any) => `${m.role}: ${m.content}`).join('\n')

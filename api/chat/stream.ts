@@ -21,9 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    'AQ.Ab8RN6KCEvnaXfqgMinUvKsKoNfrLnmDUGkkLylwmbfhXvva2Q';
+    process.env.GEMINI_API_KEY;
 
   // Set SSE Headers
   res.writeHead(200, {
