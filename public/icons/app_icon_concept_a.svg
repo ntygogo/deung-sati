@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGradA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b6b55" />
+      <stop offset="50%" stop-color="#244d3c" />
+      <stop offset="100%" stop-color="#143024" />
+    </linearGradient>
+
+    <!-- Golden Spark Gradient -->
+    <linearGradient id="goldSpark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE8A3" />
+      <stop offset="40%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+
+    <!-- Warm Glow Filter -->
+    <filter id="glowA" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Soft Ambient Light Filter -->
+    <radialGradient id="ambientLight" cx="30%" cy="20%" r="70%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.25)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+    </radialGradient>
+  </defs>
+
+  <!-- iOS App Icon Squircle Base -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bgGradA)" />
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#ambientLight)" />
+  <rect x="18" y="18" width="476" height="476" rx="106" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="4" />
+
+  <!-- Outer Mindful Aura Circles -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="rgba(245, 158, 11, 0.12)" stroke-width="32" />
+  <circle cx="256" cy="256" r="130" fill="none" stroke="rgba(245, 158, 11, 0.22)" stroke-width="12" stroke-dasharray="16 10" />
+
+  <!-- Gentle Zen Enso Ring (Open Mindful Circle) -->
+  <path d="M 256 120 A 136 136 0 1 1 140 310" fill="none" stroke="url(#goldSpark)" stroke-width="18" stroke-linecap="round" filter="url(#glowA)" />
+
+  <!-- Central Radiant Awareness Spark (สติที่สว่างวาบ) -->
+  <g filter="url(#glowA)">
+    <!-- 4-pointed Diamond Star -->
+    <path d="M 256 160 Q 256 256 160 256 Q 256 256 256 352 Q 256 256 352 256 Q 256 256 256 160 Z" fill="url(#goldSpark)" />
+    <!-- Center Core Glow -->
+    <circle cx="256" cy="256" r="18" fill="#FFFBEB" />
+  </g>
+
+  <!-- Tiny Gentle Sprout (การงอกงามของสติ) -->
+  <path d="M 256 120 C 270 95 300 100 300 120 C 300 140 270 135 256 120 Z" fill="#86EFAC" opacity="0.9" />
+  <path d="M 256 120 C 242 100 215 105 215 125 C 215 142 245 135 256 120 Z" fill="#4ADE80" opacity="0.8" />
+</svg>
