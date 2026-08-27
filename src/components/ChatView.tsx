@@ -198,8 +198,113 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setSafetyState({ mode: 'normal', risk_type: [], reason: 'normal', confidence: 1 });
     }
 
-    let accumulatedClientText = '';
     try {
+      const formattedMessages = history.map((m) => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      }));
+
+      const res = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, messages: formattedMessages }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error('Network response was not ok');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let accumulatedText = '';
+      let buffer = '';
+
+      const processBlock = (block: string) => {
+        if (!block.trim()) return;
+        const lines = block.split('\n');
+        let eventType = '';
+        let dataStr = '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('event:')) {
+            eventType = trimmed.slice(6).trim();
+          } else if (trimmed.startsWith('data:')) {
+            dataStr = trimmed.slice(5).trim();
+          }
+        }
+
+        if (eventType === 'safety' && dataStr) {
+          try {
+            const safetyData = JSON.parse(dataStr);
+            setSafetyState(safetyData);
+          } catch (e) {
+            console.error('Safety parse error:', e);
+          }
+        } else if (eventType === 'chunk' && dataStr) {
+          try {
+            const { text: chunk } = JSON.parse(dataStr);
+            if (chunk) {
+              accumulatedText += chunk;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMsgId
+                    ? { ...msg, text: accumulatedText, isStreaming: true }
+                    : msg
+                )
+              );
+            }
+          } catch (e) {
+            console.error('Chunk parse error:', e);
+          }
+        } else if (eventType === 'done' && dataStr) {
+          try {
+            const { fullText } = JSON.parse(dataStr);
+            if (fullText) {
+              accumulatedText = fullText;
+            }
+          } catch (e) {
+            console.error('Done event parse error:', e);
+          }
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          processBlock(block);
+        }
+      }
+
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const remainingBlocks = buffer.split('\n\n');
+        for (const block of remainingBlocks) {
+          processBlock(block);
+        }
+      }
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? { ...msg, text: accumulatedText, isStreaming: false }
+            : msg
+        )
+      );
+
+      if (history.length >= 3) {
+        checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: accumulatedText }]);
+      }
+    } catch (err: unknown) {
+      console.warn('Backend unavailable, streaming from Client AI Engine seamlessly:', err);
+      let accumulatedClientText = '';
       await streamClientAiResponse(
         history,
         (chunk) => {
@@ -224,16 +329,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             checkAndOfferLoopMap([...history, { id: aiMsgId, role: 'ai', text: fullText }]);
           }
         }
-      );
-    } catch (err: unknown) {
-      console.warn('Chat streaming error, providing safe fallback:', err);
-      const fallbackMsg = 'รับฟังอยู่นะครับ... มีเรื่องอะไรที่กำลังกวนใจคุณอยู่ เล่าให้ฟังได้เลยนะ 🌿';
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMsgId
-            ? { ...msg, text: fallbackMsg, isStreaming: false }
-            : msg
-        )
       );
     } finally {
       setIsAiStreaming(false);
