@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <defs>
+    <!-- Base Gradient (Metallic Industrial Base) -->
+    <linearGradient id="baseMetal" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="25%" stop-color="#4b5563" />
+      <stop offset="50%" stop-color="#9ca3af" />
+      <stop offset="75%" stop-color="#4b5563" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+
+    <!-- Chrome Collar -->
+    <linearGradient id="chromeRing" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#9ca3af" />
+      <stop offset="40%" stop-color="#f3f4f6" />
+      <stop offset="60%" stop-color="#e5e7eb" />
+      <stop offset="100%" stop-color="#6b7280" />
+    </linearGradient>
+
+    <!-- Red Translucent Fluted Dome -->
+    <radialGradient id="redDome" cx="45%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#ff7675" />
+      <stop offset="25%" stop-color="#ff2a2a" />
+      <stop offset="70%" stop-color="#d63031" />
+      <stop offset="100%" stop-color="#800000" />
+    </radialGradient>
+
+    <!-- Inner Core Lamp Glow -->
+    <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="40%" stop-color="#fffa65" stop-opacity="0.75" />
+      <stop offset="80%" stop-color="#ff4d4d" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#ff4d4d" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="beaconAura" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Mounting Base -->
+  <path d="M36 82 L64 82 L61 95 L39 95 Z" fill="url(#baseMetal)" />
+  <!-- Chrome Collar Ring -->
+  <rect x="25" y="73" width="50" height="9" rx="2" fill="url(#chromeRing)" />
+  <!-- Red Lower Rim Ring -->
+  <rect x="20" y="66" width="60" height="7" rx="1.5" fill="#c0392b" />
+  <rect x="20" y="67" width="60" height="2" fill="#e74c3c" opacity="0.8" />
+
+  <!-- Main Red Siren Dome -->
+  <path d="M22 66 C22 36 32 10 50 10 C68 10 78 36 78 66 Z" fill="url(#redDome)" />
+
+  <!-- Dome Ribbed / Fluted Grooves -->
+  <path d="M28 66 C28 40 36 18 50 18 C64 18 72 40 72 66" stroke="#ff7675" stroke-width="1.2" fill="none" opacity="0.6" />
+  <path d="M35 66 C35 44 41 26 50 26 C59 26 65 44 65 66" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.5" />
+  <path d="M42 66 C42 48 46 34 50 34 C54 34 58 48 58 66" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.7" />
+
+  <!-- Horizontal Dome Rings -->
+  <ellipse cx="50" cy="22" rx="12" ry="3" stroke="#e17055" stroke-width="0.8" fill="none" opacity="0.7" />
+  <ellipse cx="50" cy="36" rx="20" ry="4" stroke="#e17055" stroke-width="0.8" fill="none" opacity="0.7" />
+  <ellipse cx="50" cy="50" rx="25" ry="5" stroke="#e17055" stroke-width="0.8" fill="none" opacity="0.7" />
+
+  <!-- Glowing Internal Bulb -->
+  <circle cx="50" cy="45" r="14" fill="url(#innerGlow)" filter="url(#beaconAura)" />
+  <ellipse cx="50" cy="45" rx="5" ry="9" fill="#ffffff" opacity="0.85" />
+
+  <!-- Curved Glossy Dome Reflection Highlight -->
+  <path d="M27 60 C26 40 34 20 46 13" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.8" />
+  <circle cx="48" cy="14" r="2.5" fill="#ffffff" opacity="0.9" />
+</svg>

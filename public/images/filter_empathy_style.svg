@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+  <defs>
+    <radialGradient id="filterBg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#fff8f0" />
+      <stop offset="60%" stop-color="#faeee4" />
+      <stop offset="100%" stop-color="#f5e4d5" />
+    </radialGradient>
+    <radialGradient id="filterAura" cx="50%" cy="55%" r="48%">
+      <stop offset="0%" stop-color="#fee2e2" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#d1fae5" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#fff8f0" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="angryBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+    <linearGradient id="filterLensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ee7b7" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="400" height="300" rx="16" fill="url(#filterBg)" />
+  <circle cx="200" cy="150" r="125" fill="url(#filterAura)" />
+
+  <!-- Floating Sparkles & Anger Sparks -->
+  <path d="M70 65 Q72 75 80 77 Q72 79 70 89 Q68 79 60 77 Q68 75 70 65 Z" fill="#ef4444" opacity="0.75" />
+  <path d="M330 60 Q332 68 338 70 Q332 72 330 80 Q328 72 322 70 Q328 68 330 60 Z" fill="#10b981" opacity="0.75" />
+
+  <!-- === MAIN SCENE: ANGRY RED SHOUTING CHARACTER FILTERED INTO PEACEFUL LETTER === -->
+  <g transform="translate(200, 145)">
+    
+    <!-- 1. 😡 LEFT: CUTE ANGRY RED PERSON SHOUTING -->
+    <g transform="translate(-105, 5)">
+      <!-- Anger Steam Poofs from Head -->
+      <path d="M-18 -45 Q-25 -60 -10 -65 Q0 -55 -12 -45 Z" fill="#fca5a5" opacity="0.8" />
+      <path d="M12 -48 Q22 -62 30 -52 Q22 -42 12 -45 Z" fill="#fca5a5" opacity="0.8" />
+
+      <!-- Anger Symbol 💢 -->
+      <g transform="translate(22, -45) scale(0.65)" stroke="#dc2626" stroke-width="2.5" fill="none" stroke-linecap="round">
+        <path d="M-5 -12 L-5 12 M5 -12 L5 12 M-12 -5 L12 -5 M-12 5 L12 5" />
+      </g>
+
+      <!-- Little Red Body -->
+      <path d="M-22 45 C-26 20 -20 5 0 5 C20 5 26 20 22 45 Z" fill="url(#angryBodyGrad)" stroke="#991b1b" stroke-width="2.5" />
+
+      <!-- Cute Round Red Head -->
+      <circle cx="0" cy="-18" r="25" fill="url(#angryBodyGrad)" stroke="#991b1b" stroke-width="2.5" />
+
+      <!-- Angry Eyebrows (`\ /`) -->
+      <path d="M-18 -26 L-4 -19" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+      <path d="M18 -26 L4 -19" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+
+      <!-- Angry Straining Eyes (> <) -->
+      <path d="M-16 -16 L-8 -12 L-16 -8" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+      <path d="M16 -16 L8 -12 L16 -8" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+      <!-- Shouting Wide Open Mouth with White Fangs/Teeth -->
+      <path d="M-10 -2 Q0 16 10 -2 Z" fill="#7f1d1d" stroke="#991b1b" stroke-width="2" />
+      <path d="M-7 -1 L7 -1 L5 3 L-5 3 Z" fill="#ffffff" />
+      <ellipse cx="0" cy="8" rx="4" ry="3" fill="#f87171" />
+
+      <!-- Shouting Angry Arms (Hands clenched shouting forward) -->
+      <path d="M-20 20 L-32 5 L-25 -5" stroke="url(#angryBodyGrad)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+      <path d="M18 20 L30 8 L24 -2" stroke="url(#angryBodyGrad)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+      <!-- Angry Jagged Soundwaves / Words 🗯️ -->
+      <g transform="translate(38, -8)">
+        <path d="M0 -5 L18 -18 L12 -4 L25 -6 L14 8 L24 14 L8 12 L12 24 L0 10 Z" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8" />
+        <text x="7" y="6" font-family="sans-serif" font-weight="900" font-size="11" fill="#dc2626">#&amp;@!</text>
+      </g>
+    </g>
+
+    <!-- 2. 🛡️ MIDDLE: MAGICAL GLOWING NVC FILTER LENS / FUNNEL -->
+    <g transform="translate(-10, 0)">
+      <!-- Filter Funnel / Lens Ring -->
+      <ellipse cx="0" cy="0" rx="14" ry="46" fill="url(#filterLensGrad)" stroke="#047857" stroke-width="2.5" opacity="0.9" />
+      <ellipse cx="0" cy="0" rx="8" ry="38" fill="#a7f3d0" opacity="0.6" />
+      
+      <!-- Sparkles of Purification Filtering through -->
+      <path d="M0 -15 Q2 -8 8 -6 Q2 -4 0 3 Q-2 -4 -8 -6 Q-2 -8 0 -15 Z" fill="#ffffff" />
+      <path d="M0 12 Q2 16 6 18 Q2 20 0 24 Q-2 20 -6 18 Q-2 16 0 12 Z" fill="#ffffff" />
+      <circle cx="0" cy="-28" r="3" fill="#ffffff" />
+      <circle cx="0" cy="30" r="2.5" fill="#ffffff" />
+
+      <!-- Flowing Arrow across Filter -->
+      <path d="M-22 0 L-6 0 M12 0 L28 0" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3 3" />
+    </g>
+
+    <!-- 3. 💌 RIGHT: FILTERED INTO GENTLE SWEET PEACEFUL MESSAGE -->
+    <g transform="translate(85, 0)">
+      <!-- Gentle Floating Speech Bubble with Heart Letter -->
+      <rect x="-42" y="-30" width="84" height="60" rx="12" fill="#ffffff" stroke="#10b981" stroke-width="2.5" />
+      <!-- Envelope Flap -->
+      <path d="M-42 -30 L0 5 L42 -30" fill="none" stroke="#10b981" stroke-width="2" stroke-linejoin="round" />
+      
+      <!-- Glowing Red/Pink Heart Seal -->
+      <circle cx="0" cy="6" r="13" fill="#fce7f3" />
+      <path d="M0 2 C-3 -2, -7 0, -7 5 C-7 10, 0 14, 0 15 C0 14, 7 10, 7 5 C7 0, 3 -2, 0 2 Z" fill="#e11d48" />
+
+      <!-- Floating Olive Leaves around peaceful message -->
+      <path d="M30 -25 Q42 -32 45 -20" stroke="#10b981" stroke-width="2" fill="none" />
+      <ellipse cx="40" cy="-24" rx="5" ry="2.5" transform="rotate(-20 40 -24)" fill="#34d399" />
+      
+      <!-- Gentle Floating Little Stars -->
+      <path d="M-30 -38 Q-28 -34 -24 -33 Q-28 -32 -30 -28 Q-32 -32 -36 -33 Q-32 -34 -30 -38 Z" fill="#fbbf24" />
+      <path d="M35 25 Q37 28 41 29 Q37 30 35 33 Q33 30 29 29 Q33 28 35 25 Z" fill="#34d399" />
+    </g>
+
+  </g>
+</svg>

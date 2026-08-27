@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+  <defs>
+    <radialGradient id="relBg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#fff8f0" />
+      <stop offset="60%" stop-color="#faeee4" />
+      <stop offset="100%" stop-color="#f5e4d5" />
+    </radialGradient>
+    <radialGradient id="relAura" cx="50%" cy="55%" r="48%">
+      <stop offset="0%" stop-color="#ffedd5" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#fed7aa" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#fff8f0" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="400" height="300" rx="16" fill="url(#relBg)" />
+  <circle cx="200" cy="150" r="125" fill="url(#relAura)" />
+  
+  <!-- Floating Night Sparkles -->
+  <path d="M100 65 Q102 75 110 77 Q102 79 100 89 Q98 79 90 77 Q98 75 100 65 Z" fill="#fbbf24" opacity="0.75" />
+  <path d="M300 60 Q302 68 308 70 Q302 72 300 80 Q298 72 292 70 Q298 68 300 60 Z" fill="#f97316" opacity="0.7" />
+
+  <!-- === GLOWING FLOATING SKY LANTERN === -->
+  <g transform="translate(200, 140)">
+    <!-- Sky Lantern Body -->
+    <g transform="translate(0, -10)">
+      <!-- Outer Glow -->
+      <path d="M-40 45 C-50 10 -40 -35 0 -45 C40 -35 50 10 40 45 Z" fill="#ffedd5" opacity="0.6" filter="url(#softGlowFilter)" />
+      <!-- Lantern Paper -->
+      <path d="M-35 45 C-45 10 -35 -30 0 -40 C35 -30 45 10 35 45 Z" fill="#fed7aa" stroke="#ea580c" stroke-width="2.5" />
+      <!-- Top and Bottom Rims -->
+      <ellipse cx="0" cy="-40" rx="15" ry="5" fill="#f97316" stroke="#c2410c" stroke-width="1.5" />
+      <ellipse cx="0" cy="45" rx="35" ry="8" fill="#f97316" stroke="#c2410c" stroke-width="2" />
+      
+      <!-- Inner Warm Candle Flame Glow -->
+      <circle cx="0" cy="25" r="16" fill="#fef08a" />
+      <path d="M0 10 C-6 18 -6 28 0 34 C6 28 6 18 0 10 Z" fill="#f59e0b" />
+
+      <!-- Floating Ribbon Strands of Release -->
+      <path d="M-15 50 Q-25 70 -10 90" stroke="#f97316" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8" />
+      <path d="M15 50 Q25 70 10 90" stroke="#f97316" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.8" />
+      <path d="M0 52 Q5 75 0 98" stroke="#ea580c" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.9" />
+    </g>
+
+    <!-- Small Secondary Distant Lanterns -->
+    <g transform="translate(-65, -55) scale(0.4)">
+      <path d="M-30 40 C-40 10 -30 -30 0 -35 C30 -30 40 10 30 40 Z" fill="#fef08a" stroke="#ea580c" stroke-width="2" />
+    </g>
+    <g transform="translate(70, -45) scale(0.35)">
+      <path d="M-30 40 C-40 10 -30 -30 0 -35 C30 -30 40 10 30 40 Z" fill="#fef08a" stroke="#ea580c" stroke-width="2" />
+    </g>
+  </g>
+</svg>

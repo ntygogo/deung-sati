@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+  <defs>
+    <radialGradient id="quizBg" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#fff8f0" />
+      <stop offset="60%" stop-color="#faeee4" />
+      <stop offset="100%" stop-color="#f5e4d5" />
+    </radialGradient>
+    <radialGradient id="quizAura" cx="50%" cy="55%" r="48%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#fed7aa" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#fff8f0" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" rx="16" fill="url(#quizBg)" />
+  <circle cx="200" cy="150" r="125" fill="url(#quizAura)" />
+  
+  <!-- Floating Sparkles & Question Sparkles -->
+  <path d="M100 65 Q102 75 110 77 Q102 79 100 89 Q98 79 90 77 Q98 75 100 65 Z" fill="#fbbf24" opacity="0.75" />
+  <path d="M300 60 Q302 68 308 70 Q302 72 300 80 Q298 72 292 70 Q298 68 300 60 Z" fill="#f97316" opacity="0.7" />
+
+  <!-- === CUTE INNER CHILD & SHIELD WITH MAGNIFYING LENS === -->
+  <g transform="translate(195, 140)">
+    <!-- Gentle Golden Shield Shape in Background -->
+    <path d="M0 -60 C40 -60 55 -40 50 15 C45 55 0 75 0 75 C0 75 -45 55 -50 15 C-55 -40 -40 -60 0 -60 Z" fill="url(#shieldGrad)" opacity="0.4" stroke="#d97706" stroke-width="2" />
+    
+    <!-- Cute Inner Child Silhouette (Sitting with gentle smile) -->
+    <!-- Body -->
+    <ellipse cx="0" cy="20" rx="26" ry="24" fill="#60a5fa" />
+    <!-- Head -->
+    <circle cx="0" cy="-18" r="22" fill="#fde6d2" />
+    <!-- Hair -->
+    <path d="M-20 -24 C-18 -40 0 -44 18 -38 C22 -26 18 -18 18 -18 C12 -28 0 -30 -14 -22 Z" fill="#4a3b32" />
+    <!-- Closed Eyes & Smile -->
+    <path d="M-10 -18 Q-5 -14 0 -18" stroke="#5c4033" stroke-width="2" stroke-linecap="round" fill="none" />
+    <path d="M4 -18 Q9 -14 14 -18" stroke="#5c4033" stroke-width="2" stroke-linecap="round" fill="none" />
+    <ellipse cx="-7" cy="-12" rx="4" ry="2.5" fill="#fca5a5" opacity="0.7" />
+    <ellipse cx="11" cy="-12" rx="4" ry="2.5" fill="#fca5a5" opacity="0.7" />
+    <path d="M-2 -8 Q2 -5 6 -8" stroke="#b45309" stroke-width="1.8" stroke-linecap="round" fill="none" />
+
+    <!-- Glowing Heart in Chest -->
+    <g transform="translate(0, 18) scale(0.9)">
+      <path d="M0 4 C-3 0, -7 2, -7 7 C-7 12, 0 16, 0 17 C0 16, 7 12, 7 7 C7 2, 3 0, 0 4 Z" fill="#f43f5e" />
+    </g>
+
+    <!-- Cute Magnifying Glass Inspecting the Character -->
+    <g transform="translate(35, -20) rotate(25)">
+      <!-- Glass Rim -->
+      <circle cx="0" cy="0" r="32" fill="none" stroke="#d97706" stroke-width="4" />
+      <circle cx="0" cy="0" r="28" fill="#e0f2fe" opacity="0.4" />
+      <!-- Handle -->
+      <path d="M22 22 L45 45" stroke="#92400e" stroke-width="7" stroke-linecap="round" />
+      <!-- Star inside Lens -->
+      <path d="M-6 -10 Q-4 -4 2 -2 Q-4 0 -6 6 Q-8 0 -14 -2 Q-8 -4 -6 -10 Z" fill="#fbbf24" />
+    </g>
+  </g>
+</svg>
