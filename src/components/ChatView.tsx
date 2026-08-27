@@ -4,6 +4,8 @@ import type {
   LoopMapData,
   SafetyClassificationResult,
   EmotionalCheckinData,
+  CbtConversationStage,
+  ConversationIntent,
 } from '../types';
 import {
   Send,
@@ -51,6 +53,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [isAiStreaming, setIsAiStreaming] = useState<boolean>(false);
+  const [cbtStage, setCbtStage] = useState<CbtConversationStage>(1);
+  const [conversationIntent, setConversationIntent] = useState<ConversationIntent>('unclear');
   const [checkinData, setCheckinData] = useState<EmotionalCheckinData>({ step: 'idle' });
   const [currentLoopData, setCurrentLoopData] = useState<LoopMapData | null>(null);
   const [isLoopSaved, setIsLoopSaved] = useState<boolean>(false);
@@ -63,6 +67,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isSubmittingRef = useRef<boolean>(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
@@ -163,6 +168,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setCurrentLoopData(null);
     setShowLoopOffer(false);
     setCheckinData({ step: 'idle' });
+    setCbtStage(1);
+    setConversationIntent('unclear');
 
     if (topic) {
       const userText = `ตอนนี้ฉันรู้สึก: "${topic}"`;
@@ -177,7 +184,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const greetingMsg: ChatMessage = {
         id: `ai-greet-${Date.now()}`,
         role: 'ai',
-        text: 'สวัสดีครับ... มีอะไรเกิดขึ้นกับคุณตอนนี้ เล่าให้ฟังได้นะ ไม่ต้องรีบเรียบเรียง',
+        text: 'สวัสดี... มีอะไรเกิดขึ้นกับเธอตอนนี้ เล่าให้เราฟังได้นะ ไม่ต้องรีบเรียบเรียง',
       };
       setMessages([greetingMsg]);
     }
@@ -205,6 +212,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setSafetyState({ mode: 'normal', risk_type: [], reason: 'normal', confidence: 1 });
     }
 
+    const fetchController = new AbortController();
+    abortControllerRef.current = fetchController;
+    const fetchTimeout = setTimeout(() => fetchController.abort(), 15000);
+
     try {
       const formattedMessages = history.map((m) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
@@ -214,9 +225,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, messages: formattedMessages, checkinState: checkinData }),
-        signal: abortControllerRef.current.signal,
+        body: JSON.stringify({
+          sessionId,
+          messages: formattedMessages,
+          sessionState: {
+            cbtStage,
+            conversationIntent,
+            checkinState: checkinData,
+          },
+        }),
+        signal: fetchController.signal,
       });
+      clearTimeout(fetchTimeout);
 
       if (!res.ok || !res.body) {
         throw new Error('Network response was not ok');
@@ -269,8 +289,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
           }
         } else if (eventType === 'done' && dataStr) {
           try {
-            const { fullText, options: opts } = JSON.parse(dataStr);
+            const {
+              fullText,
+              options: opts,
+              checkinData: newCheckin,
+              exerciseCard: newExercise,
+            } = JSON.parse(dataStr);
             if (opts) serverOptions = opts;
+            if (newExercise) serverExercise = newExercise;
+            if (newCheckin) setCheckinData(newCheckin);
             if (fullText) {
               accumulatedText = fullText;
             }
@@ -279,6 +306,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           }
         }
       };
+
+      let serverExercise: any = undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -304,7 +333,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMsgId
-            ? { ...msg, text: accumulatedText, options: serverOptions, isStreaming: false }
+            ? {
+                ...msg,
+                text: accumulatedText,
+                options: serverOptions,
+                exerciseCard: serverExercise,
+                isStreaming: false,
+              }
             : msg
         )
       );
@@ -318,6 +353,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       await streamClientAiResponse(
         history,
         checkinData,
+        cbtStage,
         (chunk: string) => {
           accumulatedClientText += chunk;
           setMessages((prev) =>
@@ -331,6 +367,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
         (clientResponse) => {
           if (clientResponse.checkinData) {
             setCheckinData(clientResponse.checkinData);
+          }
+          if (clientResponse.cbtStage) {
+            setCbtStage(clientResponse.cbtStage);
+          }
+          if (clientResponse.conversationIntent) {
+            setConversationIntent(clientResponse.conversationIntent);
           }
           if (clientResponse.safetyMode) {
             setSafetyState({ mode: clientResponse.safetyMode, risk_type: [], reason: '', confidence: 1 });
@@ -361,6 +403,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       );
     } finally {
       setIsAiStreaming(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -427,7 +470,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       userText = inputText.trim();
     }
 
-    if (!userText || isAiStreaming) return;
+    if (!userText || isAiStreaming || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setInputText('');
 
     const userMsg: ChatMessage = {

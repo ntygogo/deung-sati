@@ -56,7 +56,7 @@ apiApp.get('/session/:sessionId', (req: Request, res: Response) => {
 // 4. Pure Gemini Streaming Chat endpoint (SSE)
 apiApp.post('/chat/stream', async (req: Request, res: Response) => {
   try {
-    const { messages, sessionId = 'default-session' } = req.body;
+    const { messages, sessionId = 'default-session', sessionState } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required' });
       return;
@@ -81,17 +81,32 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
     // Send safety event
     res.write(`event: safety\ndata: ${JSON.stringify(safety)}\n\n`);
 
-    // Stream AI response directly from Gemini Multi-Turn
+    // Stream AI response directly from Gemini Multi-Turn with Shared Protocol Fallback
     await streamChatResponse({
       messages,
       safety,
+      sessionState,
       onChunk: (chunkText: string) => {
         res.write(`event: chunk\ndata: ${JSON.stringify({ text: chunkText })}\n\n`);
       },
-      onDone: (fullText: string, source: 'gemini' | 'fallback') => {
+      onDone: (
+        fullText: string,
+        source: 'gemini' | 'fallback',
+        options?: string[],
+        checkinData?: any,
+        exerciseCard?: any
+      ) => {
         // Record assistant turn in session
         sessionStore.recordAssistantTurn(sessionId, fullText);
-        res.write(`event: done\ndata: ${JSON.stringify({ fullText, source })}\n\n`);
+        res.write(
+          `event: done\ndata: ${JSON.stringify({
+            fullText,
+            source,
+            options,
+            checkinData,
+            exerciseCard,
+          })}\n\n`
+        );
         res.end();
       },
       onError: (err: Error) => {

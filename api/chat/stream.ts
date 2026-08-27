@@ -1,42 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-
-const DUENG_SATI_SYSTEM_PROMPT = `คุณคือ "เพื่อนดึงสติ" (Dueng Sati) จากหนังสือ "ทั้งที่รู้ว่าไม่ดี... ทำไมยังทำซ้ำ" โดย นัตตี้ (NTYGOGO)
-บุคลิก: เพื่อนสนิทที่เข้าใจคน ฟังเก่ง อบอุ่น จริงใจ และถามคำถามชวนคิดได้ลึกซึ้ง
-ไม่ใช่หมอ ไม่ใช่นักจิตวิทยา และไม่ใช่แบบสอบถาม
-
-[1. ลำดับบทสนทนาหลัก 1–7 (CORE CBT FLOW)]
-1. รับฟัง & สร้างพื้นที่ปลอดภัย: สะท้อนสิ่งที่ได้ยินสั้นๆ อย่างอ่อนโยน
-2. แยกแยะความจริง vs ความคิด: ชวนสังเกตว่าอะไรคือสิ่งที่เกิดขึ้นตรงๆ vs สิ่งที่ใจเราคิดปรุงแต่ง
-3. สำรวจความรู้สึก & ร่างกาย: สังเกตอารมณ์และสภาวะข้างใน
-4. มองเห็นความกลัว & ความต้องการที่ซ่อนอยู่: ทำไมเรื่องนี้ถึงกระทบใจเรา
-5. เชื่อมโยงลูปความเคยชิน (Habitual Loop): เมื่อรู้สึกแบบนี้ ปกติเราเผลอตอบสนองอย่างไร และผลที่ได้คืออะไร
-6. ชวนค้นหาทางเลือกใหม่ (New Conscious Choice): ทางเลือกเล็กๆ ที่เราทำได้จริงด้วยความเมตตาต่อตัวเอง
-7. สรุปเป็นแผนผังลูปความคิด (Loop Map) & คืนความนิ่งให้ใจ
-
-[2. GUIDED EMOTIONAL CHECK-IN (โหมดเสริมเมื่อผู้ใช้ติดขัด)]
-เงื่อนไข: เมื่อผู้ใช้ตอบ "ไม่รู้", "บอกไม่ถูก", "งง", "ว่างเปล่า", เล่าแต่เหตุการณ์แต่ไม่รู้ความรู้สึก หรือใช้คำกว้างๆ (แย่, ไม่โอเค)
-- ขออนุญาตก่อนเสมอ: "เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม... อยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?"
-- ถ้าผู้ใช้ตอบตกลง พาทำทีละข้อ: สำรวจร่างกาย ➔ ลักษณะความรู้สึก (หนัก/ตึง/แน่น/ว่างเปล่า) ➔ สิ่งที่เกิดก่อนหน้า ➔ ช่วยหาคำเรียกอารมณ์ ➔ แยกความจริง vs ความคิด ➔ แบบฝึกหัดสั้น 1-3 นาที
-- จบโหมด: สรุปไม่เกิน 3 ประโยค แล้วถามว่าจะคุยต่อหรือกลับสู่บทสนทนาเดิม
-
-[3. กฎเหล็ก]
-- ตอบสั้น 1-3 ประโยค ภาษาพูดธรรมชาติ 100%
-- ห้ามแสดงเลข 1-6 กับผู้ใช้เด็ดขาด
-- หากตรวจพบความเสี่ยงทำร้ายตนเอง เข้าสู่ Crisis Safety ทันที`;
+import { DUENG_SATI_MASTER_PROMPT } from '../../server/prompts/duengSatiMasterPrompt';
+import {
+  evaluateCheckinConsent,
+  isCrisisMessage,
+  classifyConversationIntent,
+  isExplicitTopicShift,
+  CHIP_LABELS,
+  type EmotionalCheckinData,
+  type SessionStatePayload,
+} from '../../src/shared/chat-protocol';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, checkinState } = req.body || {};
+  const { messages, sessionState } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
 
-  const apiKey =
-    process.env.GEMINI_API_KEY;
+  const checkinState: EmotionalCheckinData =
+    sessionState?.checkinState || req.body.checkinState || { step: 'idle' };
+
+  const apiKey = process.env.GEMINI_API_KEY || '';
 
   // Set SSE Headers
   res.writeHead(200, {
@@ -45,97 +33,112 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     'Connection': 'keep-alive',
   });
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-    
-    // Clean messages for Gemini: must start with user message
-    const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
-    const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
-    const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
+  const userMsgs = messages.filter((m: any) => m.role === 'user');
+  const latestUser = (userMsgs[userMsgs.length - 1]?.content || userMsgs[userMsgs.length - 1]?.text || '').trim();
 
-    const contents = sliced.map((m: any) => ({
-      role: m.role === 'assistant' || m.role === 'model' || m.role === 'ai' ? 'model' : 'user',
-      parts: [{ text: m.content || m.text || '' }],
-    }));
-
-    const stream = await ai.models.generateContentStream({
-      model: 'gemini-3.6-flash',
-      contents,
-      config: {
-        systemInstruction: DUENG_SATI_SYSTEM_PROMPT,
-        temperature: 0.75,
-      },
-    });
-
-    let fullText = '';
-    for await (const chunk of stream) {
-      const textChunk = chunk.text || '';
-      if (textChunk) {
-        fullText += textChunk;
-        res.write(`event: chunk\ndata: ${JSON.stringify({ text: textChunk })}\n\n`);
-      }
-    }
-
-    res.write(`event: done\ndata: ${JSON.stringify({ fullText })}\n\n`);
-    res.end();
-  } catch (err: any) {
-    console.error('[Vercel Serverless Stream Error]:', err?.message || err);
-
-    // Context-Aware Dynamic CBT Fallback Engine
-    const userMsgs = messages.filter((m: any) => m.role === 'user' || m.role === 'user');
-    const latestUser = (userMsgs[userMsgs.length - 1]?.content || '').trim();
-    const turnCount = userMsgs.length;
-
-    let dynamicReply = '';
-    let quickOptions: string[] | undefined = undefined;
-
-    // Check Guided Emotional Check-in Triggers
-    const isVagueOrStuck =
-      /ไม่รู้(ว่ารู้สึกอะไร|อะ|เลย|อ่ะ|วะ)?$|^งง$|^บอกไม่ถูก$|^ว่างเปล่า$|^เฉยๆ$|^แย่$|^ไม่โอเค$|^แย่มาก$/i.test(latestUser) ||
-      (latestUser.length < 6 && /ไม่รู้|งง|ตัน/i.test(latestUser));
-
-    if (isVagueOrStuck && turnCount >= 1 && (!checkinState || checkinState.step === 'idle')) {
-      dynamicReply = `เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม\n\nอยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?`;
-      quickOptions = ['ลองดู', 'ยังไม่อยากทำ', 'คุยต่อแบบเดิม'];
-    } else {
-      const hasRelationship = /แฟน|คนรัก|คนคุย|เขา|เธอ|สามี|ภรรยา/i.test(latestUser);
-      const hasWork = /งาน|หัวหน้า|เจ้านาย|เพื่อนร่วมงาน|ลูกค้า|บริษัท|ประชุม|ลาออก/i.test(latestUser);
-      const hasFamily = /แม่|พ่อ|ครอบครัว|พี่|น้อง|ญาติ/i.test(latestUser);
-      const hasFriends = /เพื่อน|กลุ่ม|แก๊ง|เพื่อนสนิท/i.test(latestUser);
-      const hasAnger = /โกรธ|โมโห|หงุดหงิด|เกลียด|ประสาทเสีย|หัวร้อน|ด่า|จับผิด/i.test(latestUser);
-      const hasSadness = /น้อยใจ|เสียใจ|ร้องไห้|นอยด์|โดดเดี่ยว|เจ็บ|ไม่รัก|ทิ้ง|หายไป/i.test(latestUser);
-      const hasExhaustion = /เหนื่อย|ล้า|หมดไฟ|ท้อ|เบื่อ|เซ็ง|หมดแรง/i.test(latestUser);
-      const hasAnxiety = /กังวล|กลัว|เครียด|แพนิก|ไม่มั่นใจ|ล่ก|ฟุ้งซ่าน/i.test(latestUser);
-
-      if (turnCount === 1) {
-        if (hasAnger && hasWork) {
-          dynamicReply = `โดนเรื่องงานหรือคนในที่ทำงานทำให้อารมณ์เสียแบบนี้ เข้าใจเลยว่าทำไมถึงหงุดหงิดขนาดนี้...\n\nอะไรในเหตุการณ์นี้คือสิ่งที่ทำให้เธอรู้สึกว่าล้ำเส้นที่สุด?`;
-        } else if (hasRelationship && (hasSadness || hasAnger)) {
-          dynamicReply = `ฟังแล้วสัมผัสได้ถึงความอึดอัดใจเลยนะ... เวลาคนที่เราแคร์ทำให้รู้สึกแบบนี้ มันทั้งนอยด์ทั้งเหนื่อยใจเนอะ\n\nตอนที่เกิดเรื่องนั้นขึ้น ในใจลึกๆ เธออยากให้เขาทำหรือพูดอะไรกับเธอมากที่สุด?`;
-        } else if (hasFriends) {
-          dynamicReply = `เรื่องเพื่อนบางทีก็เป็นเรื่องที่กระทบใจเราได้ลึกและเจ็บจริงๆ...\n\nตอนที่ได้ยินหรือเจอแบบนั้น ความรู้สึกแรกที่แวบขึ้นมาในใจคืออะไร?`;
-        } else if (hasFamily) {
-          dynamicReply = `เรื่องในครอบครัวมักเป็นเรื่องที่ละเอียดอ่อนและสะสมอยู่ในใจเราได้ง่ายเนอะ...\n\nอะไรคือสิ่งที่ทำให้เธอรู้สึกอึดอัดใจกับเรื่องนี้มากที่สุด?`;
-        } else if (hasSadness || hasExhaustion) {
-          dynamicReply = `ฟังดูเหนื่อยและอึดอัดใจมากเลยนะ... เหมือนข้างในมันแบกอะไรไว้เยอะจนล้าไปหมด\n\nความรู้สึกนี้มันเริ่มสะสมมาจากเรื่องไหนเป็นพิเศษไหม?`;
-        } else if (hasAnxiety) {
-          dynamicReply = `ความกังวลใจมันทำให้สมองคิดวนไม่หยุดเลยเนอะ...\n\nอะไรคือสิ่งเลวร้ายที่สุดที่ใจเธอกำลังกลัวว่าจะเกิดขึ้น?`;
-        } else {
-          dynamicReply = `รับฟังอยู่นะ... เรื่องนี้คงกวนใจเธอมาสักพักแล้วใช่ไหม\n\nตอนที่เรื่องนี้เกิดขึ้น วินาทีแรกความรู้สึกไหนแวบขึ้นมาในใจมากที่สุด?`;
-        }
-      } else if (turnCount === 2) {
-        dynamicReply = `เข้าใจเลย พอความรู้สึกนั้นเกิดขึ้น สมองเรามักจะเริ่มสร้าง "เรื่องเล่าในหัว" ต่อทันที\n\nตอนนั้นเธอกำลังบอกตัวเองว่ายังไงอยู่บ้าง? (เช่น "เขาไม่แคร์เรา", "ทำไมต้องเป็นแบบนี้", หรือ "ไม่มีใครเข้าใจ")`;
-      } else if (turnCount === 3) {
-        dynamicReply = `สิ่งที่น่าสังเกตคือ... พอมันมีความคิดแบบนั้นขึ้นมา เรามักจะเผลอตอบสนองด้วยความเคยชินเดิมๆ (เช่น เงียบ, ประชด, หรือเก็บมากดดันตัวเอง)\n\nเวลาเจอเรื่องแบบนี้ ปกติแล้วเธอทำยังไงต่อ แล้วผลที่ตามมามันช่วยให้สบายใจขึ้นจริงไหม?`;
-      } else if (turnCount === 4) {
-        dynamicReply = `ถ้าเราลองมองดูตัวเองจากมุมมองของเพื่อนที่มีสติ และรักตัวเอง...\n\nเธอคิดว่ามีทางเลือกเล็กๆ ไหนที่เราทำได้ โดยไม่ต้องเอาคำพูดหรือการกระทำของคนอื่นมาทำร้ายใจตัวเองไหม?`;
-      } else {
-        dynamicReply = `พอได้ลองมองย้อนดูลูปนี้แบบนี้ ความรู้สึกข้างในเริ่มเบาลงบ้างไหม หรือยังมีจุดไหนที่ยังติดค้างในใจอีก เล่าต่อได้เลยนะ`;
-      }
-    }
-
-    res.write(`event: chunk\ndata: ${JSON.stringify({ text: dynamicReply, options: quickOptions })}\n\n`);
-    res.write(`event: done\ndata: ${JSON.stringify({ fullText: dynamicReply, options: quickOptions })}\n\n`);
-    res.end();
+  // Priority 0: Crisis Safety Gate
+  if (isCrisisMessage(latestUser)) {
+    const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ... ขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+    res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: ['crisis'] })}\n\n`);
+    res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ fullText: crisisText, safetyMode: 'protect' })}\n\n`);
+    return res.end();
   }
+
+  // 1. Primary: Gemini API Streaming
+  if (apiKey && apiKey.trim()) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+
+      const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
+      const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
+      const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
+
+      const contents = sliced.map((m: any) => ({
+        role: m.role === 'assistant' || m.role === 'model' || m.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: m.content || m.text || '' }],
+      }));
+
+      const stream = await ai.models.generateContentStream({
+        model: 'gemini-3.6-flash',
+        contents,
+        config: {
+          systemInstruction: DUENG_SATI_MASTER_PROMPT,
+          temperature: 0.75,
+          maxOutputTokens: 1000,
+        },
+      });
+
+      let fullText = '';
+      for await (const chunk of stream) {
+        const textChunk = chunk.text || '';
+        if (textChunk) {
+          fullText += textChunk;
+          res.write(`event: chunk\ndata: ${JSON.stringify({ text: textChunk })}\n\n`);
+        }
+      }
+
+      res.write(`event: done\ndata: ${JSON.stringify({ fullText })}\n\n`);
+      return res.end();
+    } catch (err: any) {
+      console.warn('[Vercel Serverless Stream Warning]: Gemini API stream failed, switching to deterministic serverless fallback:', err?.message || err);
+    }
+  }
+
+  // 2. Deterministic Context-Aware Serverless Fallback
+  let dynamicReply = '';
+  let quickOptions: string[] | undefined = undefined;
+  let updatedCheckin: EmotionalCheckinData = { ...checkinState };
+
+  // Explicit Topic Change
+  if (isExplicitTopicShift(latestUser)) {
+    dynamicReply = `ได้เลย งั้นเราพักเรื่องนั้นไว้ก่อนนะ... ตอนนี้มีเรื่องไหนที่เธออยากเล่าต่อ เล่าให้เราฟังได้เลย`;
+    updatedCheckin = { step: 'idle' };
+  }
+  // Check-in Offered State with Strict Consent Evaluation
+  else if (checkinState.step === 'offered' || checkinState.step === 'awaiting_consent') {
+    const consent = evaluateCheckinConsent(latestUser);
+    if (consent === 'affirmative') {
+      dynamicReply = `ถ้ายังไม่ต้องตั้งชื่ออารมณ์ ตอนนี้ร่างกายตรงไหนรู้สึกชัดที่สุด?`;
+      quickOptions = [...CHIP_LABELS.STEP1_BODY];
+      updatedCheckin = { step: 'step1_body' };
+    } else if (consent === 'declined') {
+      dynamicReply = `ได้เลย ไม่เป็นไรเลยนะ... งั้นเราคุยกันต่อตามปกติ เธออยากเล่าหรือระบายเรื่องไหนต่อ เล่าได้เลยนะ`;
+      updatedCheckin = { step: 'declined' };
+    } else {
+      dynamicReply = `ไม่เป็นไรเลยนะ เธอยังไม่ต้องรีบตัดสินใจก็ได้ ตอนนี้อยากให้เราอยู่ฟังเธอเล่าต่อ หรืออยากลองสังเกตร่างกายด้วยกันแค่หนึ่งคำถามดี?`;
+      quickOptions = [...CHIP_LABELS.CONSENT_AMBIGUOUS];
+      updatedCheckin = { step: 'awaiting_consent' };
+    }
+  }
+  // Standard Exploration & Check-in Trigger Check
+  else {
+    const intent = classifyConversationIntent(latestUser, messages);
+
+    if (intent === 'exploring' && checkinState.step !== 'declined' && checkinState.step !== 'completed') {
+      dynamicReply = `เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม\n\nอยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?`;
+      quickOptions = [...CHIP_LABELS.CONSENT_OFFER];
+      updatedCheckin = { step: 'offered' };
+    } else if (intent === 'pausing') {
+      dynamicReply = `เข้าใจเลยว่าตอนนั้นมันโกรธจนอยากระเบิดออกมาเดี๋ยวนี้...\n\nแต่ลองหยุดหายใจลึกๆ 10 วินาที... ถ้าทำไปตอนนี้ ความสะใจอยู่กับเราแป๊บเดียว แล้วผลแย่ที่สุดที่จะตามมาหลังจากนั้น เธอพร้อมรับมือกับมันจริงๆ หรือเปล่า?`;
+    } else {
+      dynamicReply = `รับฟังอยู่นะ... เรื่องนี้คงกวนใจเธอมาสักพักแล้วใช่ไหม\n\nตอนที่เรื่องนี้เกิดขึ้น วินาทีแรกความรู้สึกไหนแวบขึ้นมาในใจมากที่สุด?`;
+    }
+  }
+
+  res.write(
+    `event: chunk\ndata: ${JSON.stringify({
+      text: dynamicReply,
+      options: quickOptions,
+      checkinData: updatedCheckin,
+    })}\n\n`
+  );
+  res.write(
+    `event: done\ndata: ${JSON.stringify({
+      fullText: dynamicReply,
+      options: quickOptions,
+      checkinData: updatedCheckin,
+    })}\n\n`
+  );
+  res.end();
 }

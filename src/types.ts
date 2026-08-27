@@ -2,6 +2,8 @@ export type TabType = 'today' | 'chat' | 'loops' | 'exercises' | 'services';
 
 export type SafetyMode = 'normal' | 'explore' | 'protect';
 
+export * from './shared/chat-protocol/index.ts';
+
 export interface FactStoryData {
   fact: string;
   story: string;
@@ -39,66 +41,13 @@ export interface CrisisContact {
   availability: string;
 }
 
-export type EmotionalCheckinStep =
-  | 'idle'
-  | 'offered'
-  | 'step1_body'
-  | 'step2_texture'
-  | 'step3_trigger'
-  | 'step4_naming'
-  | 'step5_fact_feeling'
-  | 'step6_exercise'
-  | 'completed'
-  | 'declined';
-
-export interface EmotionalCheckinData {
-  step: EmotionalCheckinStep;
-  bodyPart?: string;
-  texture?: string;
-  triggerEvent?: string;
-  emotionName?: string;
-  fact?: string;
-  feelingOrStory?: string;
-  exerciseType?: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'ai';
-  text: string;
-  isStreaming?: boolean;
-  specialType?: 'fact_story' | 'choice' | 'loop_offer' | 'crisis_protect' | 'grounding' | 'checkin';
-  options?: string[];
-  checkinData?: EmotionalCheckinData;
-  exerciseCard?: {
-    title: string;
-    description: string;
-    steps: string[];
-    duration: string;
-  };
-  factStory?: FactStoryData;
-  choiceData?: ChoiceData;
-  loopData?: LoopMapData;
-  crisisContacts?: CrisisContact[];
-  timestamp?: string;
-}
-
-export interface SafetyClassificationResult {
-  mode: SafetyMode;
-  risk_type: string[];
-  reason: string;
-  confidence: number;
-  recent_harm_occurred?: boolean;
-  medical_emergency?: boolean;
-}
-
 export interface ScenarioDefinition {
   id: string;
   title: string;
   badge: string;
   mode: SafetyMode;
   initialUserMessage: string;
-  messages: ChatMessage[];
+  messages: any[];
 }
 
 export type MoodWeather = 'sunny' | 'partly_cloudy' | 'rainy' | 'stormy';
@@ -125,5 +74,3 @@ export interface UserAccount {
   lastLoginAt?: string;
   avatarUrl?: string;
 }
-
-
