@@ -13,16 +13,15 @@ import {
   Wind,
   Shield,
   HeartHandshake,
-  Crown,
-  User,
+  Menu,
 } from 'lucide-react';
 import { EmergencyModal } from './components/EmergencyModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
-import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { SideMenuDrawer } from './components/SideMenuDrawer';
 
 const INITIAL_SAMPLE_LOOPS: LoopMapData[] = [
   {
@@ -49,6 +48,7 @@ const AppInner: React.FC = () => {
   const [showSubModal, setShowSubModal] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+  const [showSideDrawer, setShowSideDrawer] = useState<boolean>(false);
   const [savedLoops, setSavedLoops] = useState<LoopMapData[]>(INITIAL_SAMPLE_LOOPS);
 
   const handleStartChat = (topic?: string) => {
@@ -85,57 +85,20 @@ const AppInner: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Top Header */}
+      {/* Top Header - Ultra Clean & Minimal */}
       <header className="app-header">
         <div className="brand-title">
           <span className="brand-dot" />
           <span>{t('brandTitle')}</span>
+          {isPrivateSession && (
+            <span className="header-private-pill" onClick={() => setShowSideDrawer(true)}>
+              <Shield size={11} />
+              <span>โหมดส่วนตัว</span>
+            </span>
+          )}
         </div>
 
         <div className="header-actions">
-          {/* Multi-Language Switcher (TH | EN | 中文 | 日本語) */}
-          <LanguageSwitcher />
-
-          {/* User Account Login / Profile Button */}
-          {isLoggedIn && currentUser ? (
-            <button
-              type="button"
-              className="auth-profile-header-btn"
-              onClick={() => setShowProfileModal(true)}
-              title={`เข้าสู่ระบบในชื่อ: ${currentUser.name}`}
-            >
-              <div className="auth-profile-avatar">
-                <span>{currentUser.name.charAt(0).toUpperCase()}</span>
-              </div>
-              <span className="auth-profile-name">{currentUser.name}</span>
-              {isPlus && <Crown size={12} className="text-amber-500" />}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="auth-login-header-btn"
-              onClick={() => setShowAuthModal(true)}
-              title="เข้าสู่ระบบ / สมัครสมาชิก"
-            >
-              <User size={13} />
-              <span>เข้าสู่ระบบ</span>
-            </button>
-          )}
-
-          {/* Deung Sati Plus Subscription Button */}
-          <button
-            className={`plus-header-btn ${isPlus ? 'is-plus' : ''}`}
-            onClick={() => setShowSubModal(true)}
-            title={
-              isPlus
-                ? 'คุณเป็นสมาชิก ดึงสติ พลัส แล้ว'
-                : 'อัปเกรดเป็น ดึงสติ พลัส (Deung Sati Plus)'
-            }
-          >
-            <Crown size={14} className={isPlus ? 'text-amber-500' : 'text-amber-600'} />
-            <span>{isPlus ? t('plusMember') : t('plusBtn')}</span>
-          </button>
-
           {/* Red Emergency Warning Beacon Button */}
           <button
             className="emergency-beacon-header-btn"
@@ -151,13 +114,20 @@ const AppInner: React.FC = () => {
             <span className="emergency-beacon-label">{t('emergencyBtn')}</span>
           </button>
 
+          {/* Hamburger / Side Menu Drawer Button */}
           <button
-            className={`private-toggle-btn ${isPrivateSession ? 'active' : ''}`}
-            onClick={() => setShowPrivateModal(true)}
-            title="ตั้งค่าโหมดความเป็นส่วนตัว"
+            type="button"
+            className="menu-drawer-toggle-btn"
+            onClick={() => setShowSideDrawer(true)}
+            aria-label="เปิดเมนูและการตั้งค่า"
+            title="เมนูและการตั้งค่า"
           >
-            <Shield size={14} />
-            <span>{isPrivateSession ? t('privateModeActive') : t('privateMode')}</span>
+            <Menu size={20} />
+            {isLoggedIn && currentUser && (
+              <div className="menu-btn-avatar-badge">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+            )}
           </button>
         </div>
       </header>
@@ -298,13 +268,24 @@ const AppInner: React.FC = () => {
         <EmergencyModal onClose={() => setShowEmergencyModal(false)} />
       )}
 
-      {/* Deung Sati Plus Payment & Upgrade Modal */}
+      {/* Deung Sati Plus Subscription Modal */}
       <SubscriptionModal
         isOpen={showSubModal}
         onClose={() => setShowSubModal(false)}
         onUpgradeSuccess={handleUpgradeSuccess}
         isAlreadyPlus={isPlus}
         onOpenAuth={() => setShowAuthModal(true)}
+      />
+
+      {/* Side Menu Drawer (Slide Tab from Right) */}
+      <SideMenuDrawer
+        isOpen={showSideDrawer}
+        onClose={() => setShowSideDrawer(false)}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onOpenProfile={() => setShowProfileModal(true)}
+        onOpenSubscribe={() => setShowSubModal(true)}
+        isPrivateSession={isPrivateSession}
+        onTogglePrivateSession={() => setIsPrivateSession((prev) => !prev)}
       />
     </div>
   );
