@@ -59,6 +59,14 @@ function sanitizeResponse(raw: string): {
     assistantMsg = 'เรารับรู้และเข้าใจในสิ่งที่เธอเล่ามานะ... ลองบอกเพิ่มอีกนิดได้ไหมว่าจุดไหนที่ทำให้รู้สึกอึดอัดที่สุด?';
   }
 
+  // Lightweight Thai spelling & spacing cleanup
+  assistantMsg = assistantMsg
+    .replace(/มีเซง\b|มีเซนส์\b/g, 'จับจังหวะได้')
+    .replace(/\bเซง\b/g, 'เซ็ง')
+    .replace(/(\S+)\s+\1/g, (_m, word) => (['มาก', 'จริง', 'บ่อย', 'ค่อย'].includes(word) ? `${word}ๆ` : word))
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
   const quickReplies =
     Array.isArray(parsed?.quickReplies) && parsed.quickReplies.length > 0
       ? parsed.quickReplies

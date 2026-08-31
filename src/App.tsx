@@ -395,7 +395,7 @@ export default function App() {
     const cleanHistory = chatMessages.filter((m) => m.text && m.text.trim());
     const newHistory = [...cleanHistory, userMsg];
     setChatMessages(newHistory);
-    triggerAiStream(newHistory, reqId, globalRequestId, setChatMessages, setDebugInfo);
+    triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo);
   };
 
   return (
@@ -512,7 +512,7 @@ export default function App() {
               setScreen("chat");
 
               // Trigger AI continuation on the natural user result
-              triggerAiStream(newHistory, reqId, globalRequestId, setChatMessages, setDebugInfo);
+              triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo);
             }}
           />
         )}
@@ -524,28 +524,35 @@ export default function App() {
 // Sanitizer helper ensuring assistant_message is always pure natural human text and never raw JSON
 function cleanAssistantText(rawText: string): string {
   if (!rawText) return "";
-  const trimmed = rawText.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("```")) {
+  let result = rawText.trim();
+  if (result.startsWith("{") || result.startsWith("```")) {
     try {
-      let clean = trimmed;
+      let clean = result;
       if (clean.startsWith("```json")) clean = clean.replace(/^```json\s*/, "").replace(/\s*```$/, "");
       else if (clean.startsWith("```")) clean = clean.replace(/^```\s*/, "").replace(/\s*```$/, "");
       const parsed = JSON.parse(clean);
       if (parsed && typeof parsed.assistant_message === "string") {
-        return parsed.assistant_message.trim();
+        result = parsed.assistant_message.trim();
       }
     } catch {
-      const match = trimmed.match(/"assistant_message"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+      const match = result.match(/"assistant_message"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
       if (match && match[1]) {
         try {
-          return JSON.parse(`"${match[1]}"`).trim();
+          result = JSON.parse(`"${match[1]}"`).trim();
         } catch {
-          return match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').trim();
+          result = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').trim();
         }
       }
     }
   }
-  return rawText;
+
+  // Lightweight Thai spelling & spacing cleanup
+  return result
+    .replace(/มีเซง\b|มีเซนส์\b/g, "จับจังหวะได้")
+    .replace(/\bเซง\b/g, "เซ็ง")
+    .replace(/(\S+)\s+\1/g, (_m, word) => (["มาก", "จริง", "บ่อย", "ค่อย"].includes(word) ? `${word}ๆ` : word))
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 // Helper to stream chat responses from the real /api/chat/stream endpoint
@@ -553,10 +560,13 @@ async function triggerAiStream(
   history: ChatMessage[],
   requestId: number,
   activeRequestIdRef: React.MutableRefObject<number>,
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
+  isSendingRef?: React.MutableRefObject<boolean>,
+  setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setDebugInfo?: React.Dispatch<React.SetStateAction<ChatDebugInfo>>
 ) {
   const aiMsgId = `ai-${requestId}-${Date.now()}`;
+  console.log(`[ASSISTANT_MESSAGE_CREATE] assistantMessageId=${aiMsgId} requestId=${requestId}`);
+
   const initialAiMsg: ChatMessage = {
     id: aiMsgId,
     role: "ai",
@@ -565,7 +575,9 @@ async function triggerAiStream(
     isStreaming: true,
   };
 
-  setMessages((prev) => [...prev, initialAiMsg]);
+  if (setMessages) {
+    setMessages((prev) => [...prev, initialAiMsg]);
+  }
 
   if (setDebugInfo) {
     setDebugInfo((prev) => ({
@@ -640,29 +652,35 @@ async function triggerAiStream(
             const data = JSON.parse(line.slice(6));
 
             if (data.text && requestId === activeRequestIdRef.current) {
+              console.log(`[STREAM_CHUNK] assistantMessageId=${aiMsgId}`);
               const sanitizedText = cleanAssistantText(data.text);
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === aiMsgId ? { ...m, text: sanitizedText } : m
-                )
-              );
+              if (setMessages) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === aiMsgId ? { ...m, text: sanitizedText } : m
+                  )
+                );
+              }
             }
 
             if (data.structuredTurn && requestId === activeRequestIdRef.current) {
+              console.log(`[ASSISTANT_MESSAGE_FINALIZE] assistantMessageId=${aiMsgId}`);
               const finalText = cleanAssistantText(data.fullText || data.structuredTurn.assistant_message);
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === aiMsgId
-                    ? {
-                        ...m,
-                        text: finalText || m.text,
-                        structuredTurn: data.structuredTurn,
-                        options: data.options || data.structuredTurn.quick_replies,
-                        isStreaming: false,
-                      }
-                    : m
-                )
-              );
+              if (setMessages) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === aiMsgId
+                      ? {
+                          ...m,
+                          text: finalText || m.text,
+                          structuredTurn: data.structuredTurn,
+                          options: data.options || data.structuredTurn.quick_replies,
+                          isStreaming: false,
+                        }
+                      : m
+                  )
+                );
+              }
               if (setDebugInfo) {
                 setDebugInfo((prev) => ({
                   ...prev,
@@ -698,18 +716,24 @@ async function triggerAiStream(
         lastError: errorMsg,
       }));
     }
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === aiMsgId
-          ? {
-              ...m,
-              text: "เมื่อกี้ระบบสะดุดนิดนึง ลองส่งอีกครั้งได้เลยนะ 🌱",
-              isStreaming: false,
-              hasError: true,
-            }
-          : m
-      )
-    );
+    if (setMessages) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMsgId
+            ? {
+                ...m,
+                text: "เมื่อกี้ระบบสะดุดนิดนึง ลองส่งอีกครั้งได้เลยนะ 🌱",
+                isStreaming: false,
+                hasError: true,
+              }
+            : m
+        )
+      );
+    }
+  } finally {
+    if (isSendingRef) {
+      isSendingRef.current = false;
+    }
   }
 }
 
@@ -804,10 +828,11 @@ function PauseScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     { label: "หยุดพัก", prompt: "อยู่กับปัจจุบัน... สบายใจ..." },
   ];
 
-  const bowlFrequencies = [216, 174, 288, 256];
+  // Mind-calming harmonious frequencies (432 Hz Peace, 136.1 Hz Heart Om, 174 Hz Tension Release, 528 Hz Transformation)
+  const bowlFrequencies = [432.0, 136.1, 174.0, 528.0];
   const strikeCount = useRef(0);
 
-  const triggerBowl = (freq?: number) => {
+  const triggerBowl = (freq?: number, isInitial = false) => {
     setBowlRinging(true);
     if (soundEnabled) {
       const targetFreq =
@@ -816,8 +841,9 @@ function PauseScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       strikeCount.current++;
       playDeepTibetanSingingBowl({
         baseFreq: targetFreq,
-        volume: 0.75,
-        decayTime: 14.0,
+        volume: isInitial ? 0.38 : 0.45, // Feather-soft, peaceful volume
+        decayTime: 18.0,
+        attackTime: isInitial ? 0.80 : 0.65, // Gentle swelling bloom (zero startle)
       });
     }
     setTimeout(() => setBowlRinging(false), 2600);
@@ -827,7 +853,7 @@ function PauseScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      triggerBowl();
+      triggerBowl(432.0, true);
     }
   }, []);
 
@@ -986,6 +1012,7 @@ function ChatScreen({
   const [activeInlineExercise, setActiveInlineExercise] = useState<{ msgId: string; exerciseId: string } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const activeRequestId = useRef(0);
+  const isSendingRef = useRef(false);
   const isComposingRef = useRef(false);
 
   useEffect(() => {
@@ -998,11 +1025,23 @@ function ChatScreen({
     const trimmed = textToSend.trim();
     if (!trimmed) return;
 
-    // Check if user clicked quick reply asking for exercise
+    if (isSendingRef.current) {
+      console.log(`[Chat Client] Ignored send because previous request is in flight.`);
+      return;
+    }
+    isSendingRef.current = true;
+
+    // Check if user clicked quick reply or typed natural consent to try exercise
     const exerciseKeywords = [
       "ลองดู",
       "ลองดู (1 นาที)",
       "ลองดู (1–2 นาที)",
+      "ลองทำ",
+      "ลองคลายตรงนี้",
+      "พักหายใจ 1 นาที",
+      "ลองเลย",
+      "โอเค",
+      "พร้อม",
       "ลองส่องดูลูป",
       "เกลาข้อความก่อน",
       "มองอีกมุม",
@@ -1019,6 +1058,7 @@ function ChatScreen({
           msgId: lastAiMsg.id,
           exerciseId: lastAiMsg.structuredTurn.recommended_exercise.id,
         });
+        isSendingRef.current = false;
         return;
       }
     }
@@ -1031,15 +1071,19 @@ function ChatScreen({
       createdAt: Date.now(),
     };
 
+    console.log(`[CHAT_SEND] userMessageId=${userMessage.id} requestId=${reqId}`);
+
     setInputText("");
 
-    setMessages((prev) => {
-      // Filter out any stale/empty in-flight placeholder bubbles
-      const cleanPrev = prev.filter((m) => m.text && m.text.trim().length > 0);
-      const nextHistory = [...cleanPrev, userMessage];
-      triggerAiStream(nextHistory, reqId, activeRequestId, setMessages, setDebugInfo);
-      return nextHistory;
-    });
+    // Clean previous history
+    const cleanPrev = messages.filter((m) => m.text && m.text.trim().length > 0);
+    const nextHistory = [...cleanPrev, userMessage];
+
+    // Set messages state directly
+    setMessages(nextHistory);
+
+    // Call triggerAiStream cleanly outside setState updater callback
+    triggerAiStream(nextHistory, reqId, activeRequestId, isSendingRef, setMessages, setDebugInfo);
   };
 
   useEffect(() => {
@@ -1125,6 +1169,7 @@ function ChatScreen({
                             cleanHistory,
                             reqId,
                             activeRequestId,
+                            isSendingRef,
                             setMessages,
                             setDebugInfo
                           );

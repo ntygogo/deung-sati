@@ -80,6 +80,14 @@ export function sanitizeDeungSatiResponse(raw: string): {
     assistantMsg = 'เรารับรู้และเข้าใจในสิ่งที่เธอเล่ามานะ... ลองบอกเพิ่มอีกนิดได้ไหมว่าจุดไหนที่ทำให้รู้สึกอึดอัดที่สุด?';
   }
 
+  // Lightweight Thai spelling & spacing cleanup
+  assistantMsg = assistantMsg
+    .replace(/มีเซง\b|มีเซนส์\b/g, 'จับจังหวะได้')
+    .replace(/\bเซง\b/g, 'เซ็ง')
+    .replace(/(\S+)\s+\1/g, (_m, word) => (['มาก', 'จริง', 'บ่อย', 'ค่อย'].includes(word) ? `${word}ๆ` : word))
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
   const quickReplies =
     Array.isArray(parsed?.quickReplies) && parsed.quickReplies.length > 0
       ? parsed.quickReplies
@@ -136,6 +144,8 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
     const isKeyPresent = Boolean(apiKey.trim().length > 0);
     const primaryModel = config.aiModel || 'gemini-3.5-flash';
 
+    console.log(`[API_RECEIVED] requestId=${requestId ?? '1'}`);
+
     // Priority 0: Crisis Triage Gate (Immediate safety response)
     if (safety.mode === 'protect' || isCrisisMessage(latestUserMsg)) {
       const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
@@ -189,9 +199,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
     for (const modelCandidate of uniqueCandidates) {
       try {
-        console.log(
-          `[Trace] reqId=${requestId ?? '1'} count=${messages.length} lastRole=${lastMsg?.role} preview="${latestUserMsg.slice(0, 50)}" model=${modelCandidate} starting...`
-        );
+        console.log(`[AI_CALL_START] requestId=${requestId ?? '1'} model=${modelCandidate}`);
         const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
         const response = await ai.models.generateContent({
           model: modelCandidate,
@@ -209,11 +217,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           const { assistant_message, turn } = sanitizeDeungSatiResponse(rawText);
           const latencyMs = Date.now() - startTime;
 
-          console.log(
-            `[Trace] reqId=${requestId ?? '1'} model=${modelCandidate} status=200 parseSuccess=true assistantPresent=${Boolean(
-              assistant_message
-            )} latency=${latencyMs}ms`
-          );
+          console.log(`[AI_CALL_END] requestId=${requestId ?? '1'} model=${modelCandidate} status=200 latency=${latencyMs}ms`);
 
           // Stream natural token for the user bubble
           onAssistantToken(assistant_message);
