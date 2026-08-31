@@ -1,3 +1,3 @@
-import { apiApp } from '../server/apiRouter.ts';
+import { apiApp } from '../server/apiRouter';
 
 export default apiApp;

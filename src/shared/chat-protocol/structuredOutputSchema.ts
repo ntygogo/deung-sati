@@ -2,13 +2,13 @@
  * Structured AI Output Contract for Deung Sati V1 (Authoritative SSOT)
  */
 
-import type { SafetyState, CbtConversationStage } from './conversationTypes.ts';
-import type { UserCognitiveCapacity } from './capacityRules.ts';
-import type { ConversationMode } from './modeRules.ts';
-import type { UserConversationIntent } from './conversationIntents.ts';
-import type { KnownFieldDimension } from './knownFields.ts';
-import type { SuggestedIntervention } from './interventionRules.ts';
-import type { ReadinessLevel, RecommendedExercise, CandidateLoop, EvidenceCandidate } from './conversationTypes.ts';
+import type { SafetyState, CbtConversationStage } from './conversationTypes';
+import type { UserCognitiveCapacity } from './capacityRules';
+import type { ConversationMode } from './modeRules';
+import type { UserConversationIntent } from './conversationIntents';
+import type { KnownFieldDimension } from './knownFields';
+import type { SuggestedIntervention } from './interventionRules';
+import type { ReadinessLevel, RecommendedExercise, CandidateLoop, EvidenceCandidate } from './conversationTypes';
 
 export type CheckinConsentState =
   | 'idle'

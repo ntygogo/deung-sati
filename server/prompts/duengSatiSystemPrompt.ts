@@ -1,4 +1,4 @@
 /**
  * Re-export Master System Prompt for backward compatibility on server
  */
-export { DUENG_SATI_MASTER_PROMPT } from './duengSatiMasterPrompt.ts';
+export { DUENG_SATI_MASTER_PROMPT } from './duengSatiMasterPrompt';

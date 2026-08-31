@@ -1,4 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+type VercelRequest = any;
+type VercelResponse = any;
 import { GoogleGenAI } from '@google/genai';
 import {
   DUENG_SATI_UNIFIED_MASTER_PROMPT,
@@ -13,7 +14,7 @@ import {
   type CheckinConsentState,
   type SuggestedIntervention,
   type CbtConversationStage,
-} from '../../src/shared/chat-protocol/index.ts';
+} from '../../src/shared/chat-protocol';
 
 function sanitizeResponse(raw: string): {
   assistant_message: string;

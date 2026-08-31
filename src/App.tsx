@@ -6,14 +6,14 @@ import {
   type ExerciseId,
   type ExerciseResultPayload,
   EXERCISE_REGISTRY,
-} from "./shared/chat-protocol/index.ts";
-import { InteractiveExerciseModal } from "./components/InteractiveExerciseModal.tsx";
-import { GuidedExerciseCard } from "./components/GuidedExerciseCard.tsx";
+} from "./shared/chat-protocol";
+import { InteractiveExerciseModal } from "./components/InteractiveExerciseModal";
+import { GuidedExerciseCard } from "./components/GuidedExerciseCard";
 import {
   AppHeader,
   AppDrawer,
   type DrawerMenuItemId,
-} from "./components/Navigation.tsx";
+} from "./components/Navigation";
 import {
   NibbanaWorld,
   QuickChatCard,
@@ -21,8 +21,8 @@ import {
   QuickToolCard,
   FutureSelfCard,
   GrowthReflectionCard,
-} from "./components/HomeComponents.tsx";
-import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio.ts";
+} from "./components/HomeComponents";
+import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio";
 
 const SvgIcon = ({
   name,

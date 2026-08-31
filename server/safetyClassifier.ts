@@ -1,4 +1,4 @@
-import { isCrisisMessage } from '../src/shared/chat-protocol/safetyRules.ts';
+import { isCrisisMessage } from '../src/shared/chat-protocol';
 
 export interface SafetyClassification {
   mode: 'normal' | 'explore' | 'protect';

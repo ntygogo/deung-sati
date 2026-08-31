@@ -153,7 +153,6 @@ async function runMasterAcceptanceSuite() {
   ];
   const t7 = await postChat(historyT7, 7);
   const t7Done = t7.parsedEvents.find(e => e.event === 'done');
-  const t7Meta = t7.parsedEvents.find(e => e.event === 'assistant_meta');
   const t7Msg = t7Done?.data?.fullText || '';
   const t7Passed = t7Msg.length > 0 && !t7Msg.includes('{');
   testResults.push({

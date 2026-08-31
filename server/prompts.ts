@@ -1,4 +1,4 @@
-export { DUENG_SATI_MASTER_PROMPT, DUENG_SATI_MASTER_PROMPT as DEUNG_SATI_SYSTEM_PROMPT } from './prompts/duengSatiSystemPrompt.ts';
+export { DUENG_SATI_MASTER_PROMPT, DUENG_SATI_MASTER_PROMPT as DEUNG_SATI_SYSTEM_PROMPT } from './prompts/duengSatiSystemPrompt';
 
 export const SAFETY_CLASSIFIER_PROMPT = `
 You are an expert Safety Classifier for an emotionally supportive Thai application.

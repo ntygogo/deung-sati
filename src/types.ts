@@ -2,7 +2,7 @@ export type TabType = 'today' | 'chat' | 'loops' | 'exercises' | 'services';
 
 export type SafetyMode = 'normal' | 'explore' | 'protect';
 
-export * from './shared/chat-protocol/index.ts';
+export * from './shared/chat-protocol';
 
 export interface FactStoryData {
   fact: string;

@@ -3,8 +3,8 @@ import {
   EXERCISE_REGISTRY,
   type ExerciseId,
   type ExerciseResultPayload,
-} from '../shared/chat-protocol/index.ts';
-import { playDeepTibetanSingingBowl } from '../utils/tibetanBowlAudio.ts';
+} from '../shared/chat-protocol';
+import { playDeepTibetanSingingBowl } from '../utils/tibetanBowlAudio';
 
 interface InteractiveExerciseModalProps {
   exerciseId: ExerciseId;

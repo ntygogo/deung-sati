@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getGuidedExercise, type GuidedExerciseDefinition } from '../shared/chat-protocol/exerciseCatalog.ts';
+import { getGuidedExercise, type GuidedExerciseDefinition } from '../shared/chat-protocol';
 
 export interface ExerciseResultPayload {
   exerciseId: string;

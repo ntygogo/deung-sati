@@ -1,4 +1,4 @@
-import type { ExerciseId } from './conversationTypes.ts';
+import type { ExerciseId } from './conversationTypes';
 
 export interface ExerciseDefinition {
   id: ExerciseId;

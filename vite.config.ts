@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { apiApp } from './server/apiRouter.ts'
+import { apiApp } from './server/apiRouter'
 
 function apiPlugin(): Plugin {
   return {

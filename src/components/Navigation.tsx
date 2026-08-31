@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { bookConfig } from '../config/bookConfig.ts';
+import { bookConfig } from '../config/bookConfig';
 
 export type DrawerMenuItemId =
   | 'account'
