@@ -1,27 +1,70 @@
 import { config } from './config.ts';
 import { GoogleGenAI } from '@google/genai';
 
-export interface CommunicationFilterResponse {
-  coreNeed: string;
-  emotionalTrigger: string;
-  refinedAlternative: string;
+export interface AlternativeOption {
+  type: 'direct' | 'gentle' | 'boundary' | 'hold';
+  label: string;
+  text: string;
   rationale: string;
 }
 
-const FILTER_PROMPT = `คุณคือนักจิตวิทยาการสื่อสารและผู้เชี่ยวชาญการสื่อสารอย่างสันติ (Nonviolent Communication - NVC) ของแอป "ดึงสติ (Deung Sati)"
-ผู้ใช้กำลังพิมพ์ข้อความที่เต็มไปด้วยอารมณ์โกรธ, ประชด, ตัดพ้อ, วิตกกังวล หรือคำพูดรุนแรงที่อยากส่งไปหาคู่สนทนา (เช่น แฟน, เพื่อนร่วมงาน, หัวหน้า, คนในครอบครัว)
-หน้าที่ของคุณคือ "กลั่นกรองข้อความนี้ในทันที" โดย:
-1. สกัด "ความต้องการที่แท้จริง (Core Need)" ที่ซ่อนอยู่ใต้ความโกรธ/คำประชด
-2. ชี้ให้เห็น "จุดสะกิดอารมณ์ (Emotional Trigger)" ในข้อความเดิมที่อาจทำให้อีกฝ่ายตั้งการ์ดหรือทะเลาะหนักกว่าเดิม
-3. ปรับเป็น "ประโยคใหม่ที่สง่างามและได้ผล (Refined Alternative)" โดยใช้หลัก NVC (ข้อเท็จจริง + ความรู้สึก + ความต้องการ + คำร้องขอที่ชัดเจน)
-4. อธิบาย "เหตุผลทางจิตวิทยา (Rationale)" สั้นๆ ว่าทำไมประโยคใหม่นี้ถึงช่วยรักษาความสัมพันธ์และทำให้ได้ผลลัพธ์ที่ดีกว่า
+export interface CommunicationFilterResponse {
+  whatHappened: string;
+  feeling: string;
+  coreNeed: string;
+  emotionalTrigger: string;
+  request: string;
+  refinedAlternative: string;
+  rationale: string;
+  alternatives: AlternativeOption[];
+}
 
-จงตอบเป็น JSON object ที่ถูกต้องตามโครงสร้างนี้เท่านั้น (ห้ามใส่ markdown อื่นนอกเหนือจาก JSON):
+const FILTER_PROMPT = `คุณคือผู้เชี่ยวชาญการสื่อสารอย่างมีสติและสันติ (Nonviolent Communication) ของแอป "ดึงสติ (Deung Sati)"
+ผู้ใช้กำลังพิมพ์ข้อความดิบที่มีอารมณ์โกรธ, ประชด, ตัดพ้อ, วิตกกังวล หรือคำพูดรุนแรงที่อยากส่งไปหาคนอื่น
+
+หน้าที่ของคุณคือ:
+1. แยกแยะสิ่งที่เกิดขึ้น (whatHappened), ความรู้สึก (feeling), ความต้องการที่แท้จริง (coreNeed), จุดสะกิดอารมณ์เดิม (emotionalTrigger), และคำร้องขอที่ชัดเจน (request)
+2. เสนอทางเลือกการสื่อสาร 4 สไตล์ที่ไม่ลบล้างตัวตนของผู้ใช้ และไม่สุภาพเกินจริงจนดูประดิษฐ์:
+   - "พูดตรงขึ้น" (direct): ชัดเจน ตรงไปตรงมา กระชับ แต่ไม่ทำร้าย
+   - "อ่อนลง" (gentle): นุ่มนวล คลายความตึงเครียด
+   - "ตั้งขอบเขต" (boundary): ชัดเจนในจุดยืน ไม่ยอมให้ล้ำเส้นอย่างมีวุฒิภาวะ
+   - "ยังไม่ส่งตอนนี้" (hold): คำแนะนำสั้นๆ ให้พักตั้งหลักก่อนพิมพ์
+
+ตอบกลับเป็น JSON Object เท่านั้น:
 {
-  "coreNeed": "ความต้องการที่แท้จริงของคุณ (สกัดออกมาให้ตรงใจและลึกซึ้ง)",
-  "emotionalTrigger": "จุดสะกิดอารมณ์ในข้อความเดิมที่อาจทำให้เกิดปัญหา (อธิบายคำหรือน้ำเสียง)",
-  "refinedAlternative": "ประโยคข้อความใหม่ที่เรียบเรียงอย่างสันติและมีวุฒิภาวะ (พร้อมนำไปก๊อปปี้ส่งได้ทันที)",
-  "rationale": "เหตุผลทางจิตวิทยาว่าทำไมประโยคนี้ถึงได้ผลลัพธ์ที่ดีกว่า"
+  "whatHappened": "ข้อเท็จจริงที่เกิดขึ้น",
+  "feeling": "ความรู้สึกข้างใน",
+  "coreNeed": "ความต้องการที่แท้จริง",
+  "emotionalTrigger": "จุดสะกิดในข้อความเดิมที่อาจทำให้อีกฝ่ายตั้งการ์ด",
+  "request": "คำร้องขอที่ชัดเจนและทำได้จริง",
+  "refinedAlternative": "ประโยคหลักที่แนะนำ (พร้อมส่ง)",
+  "rationale": "ทำไมประโยคนี้ถึงได้ผลดีกว่า",
+  "alternatives": [
+    {
+      "type": "direct",
+      "label": "พูดตรงขึ้น",
+      "text": "ข้อความแบบพูดตรงขึ้น",
+      "rationale": "ชัดเจน กระชับ ไม่ประชด"
+    },
+    {
+      "type": "gentle",
+      "label": "อ่อนลง",
+      "text": "ข้อความแบบนุ่มนวล",
+      "rationale": "ลดแรงปะทะ เชื่อมโยงความเข้าใจ"
+    },
+    {
+      "type": "boundary",
+      "label": "ตั้งขอบเขต",
+      "text": "ข้อความแบบตั้งขอบเขตชัดเจน",
+      "rationale": "รักษาสิทธิและพื้นที่ของตนเองอย่างมั่นคง"
+    },
+    {
+      "type": "hold",
+      "label": "ยังไม่ส่งตอนนี้",
+      "text": "ยังไม่ต้องส่งอะไร วางมือถือ 15 นาที แล้วค่อยตัดสินใจใหม่",
+      "rationale": "ตอนนี้อารมณ์ยังนำ สติยังไม่พร้อมส่ง"
+    }
+  ]
 }`;
 
 export async function filterCommunicationMessage(
@@ -33,10 +76,9 @@ export async function filterCommunicationMessage(
   if (config.geminiApiKey) {
     try {
       const candidateModels = [
-        config.aiModel || 'gemini-3.7-flash',
-        'gemini-3.1-flash-lite',
+        config.aiModel || 'gemini-3.6-flash',
+        'gemini-3.6-flash',
         'gemini-flash-latest',
-        'gemini-3.5-flash',
       ];
 
       const ai = new GoogleGenAI({ apiKey: config.geminiApiKey.trim() });
@@ -64,11 +106,10 @@ export async function filterCommunicationMessage(
           const jsonStr = response.text || '{}';
           const parsed = JSON.parse(jsonStr) as CommunicationFilterResponse;
           if (parsed.coreNeed && parsed.refinedAlternative) {
-            console.log(`[Communication Filter] Filtered dynamically via Gemini (${model}) for: "${trimmed.slice(0, 30)}..."`);
             return parsed;
           }
         } catch (err: any) {
-          console.warn(`[Communication Filter] Model ${model} failed, trying next...`, err?.message?.slice(0, 80));
+          console.warn(`[Communication Filter] Model ${model} failed:`, err?.message?.slice(0, 80));
         }
       }
     } catch (err) {
@@ -78,9 +119,38 @@ export async function filterCommunicationMessage(
 
   // 2. Intelligent Context-Aware Fallback
   return {
-    coreNeed: 'ต้องการให้คู่สนทนารับฟังความรู้สึกและให้ความสำคัญกับสิ่งที่เรากำลังเผชิญอยู่',
-    emotionalTrigger: `น้ำเสียงและคำพูดที่มีความประชดหรือตัดพ้อในข้อความ ("${trimmed.slice(0, 30)}...") ซึ่งอาจทำให้อีกฝ่ายรู้สึกถูกโจมตีและตั้งการ์ดใส่`,
-    refinedAlternative: `ตอนนี้เรารู้สึกอึดอัดและไม่สบายใจกับเรื่องที่เกิดขึ้น อยากขอเวลาคุยกันตรงๆ ด้วยเหตุผลเพื่อหาทางออกร่วมกันครับ/ค่ะ`,
-    rationale: 'การสื่อสารด้วยการระบุความรู้สึกและข้อเท็จจริง จะลดแรงต้านและทำให้อีกฝ่ายเปิดใจรับฟังได้มากกว่าการใช้อารมณ์ปะทะ',
+    whatHappened: 'มีพฤติกรรมหรือสถานการณ์ที่ทำให้รู้สึกไม่ได้รับความใส่ใจ',
+    feeling: 'อึดอัด กังวลใจ และน้อยใจ',
+    coreNeed: 'ต้องการให้คู่สนทนารับฟังความรู้สึกและให้ความสำคัญกับความสัมพันธ์',
+    emotionalTrigger: `น้ำเสียงและคำพูดที่มีความประชดหรือตัดพ้อในข้อความ ("${trimmed.slice(0, 30)}...")`,
+    request: 'ขอเวลาคุยกันตรงๆ เพื่อความชัดเจน',
+    refinedAlternative: 'ช่วงนี้เรารู้สึกกังวลใจและต้องการความชัดเจน ถ้าสะดวกช่วยตอบกลับเราหน่อยนะ',
+    rationale: 'การสื่อสารด้วยการระบุความต้องการตรงๆ ช่วยลดกำแพงและทำให้อีกฝ่ายเปิดใจรับฟัง',
+    alternatives: [
+      {
+        type: 'direct',
+        label: 'พูดตรงขึ้น',
+        text: 'เราต้องการความชัดเจนเรื่องนี้ ถ้าสะดวกช่วยตอบกลับหน่อยนะ',
+        rationale: 'ตรงประเด็น ไม่ประชด',
+      },
+      {
+        type: 'gentle',
+        label: 'อ่อนลง',
+        text: 'ถ้าเธอติดธุระอยู่ไม่เป็นไรนะ สะดวกเมื่อไหร่ค่อยทักหาเราก็ได้ แค่อยากรู้ว่าเป็นยังไงบ้าง',
+        rationale: 'ให้พื้นที่และคลายความกดดัน',
+      },
+      {
+        type: 'boundary',
+        label: 'ตั้งขอบเขต',
+        text: 'ถ้ายังไม่สะดวกคุยตอนนี้ ช่วยบอกเราสั้นๆ ได้ไหม เราจะได้ไม่ต้องนั่งรอและกังวลใจ',
+        rationale: 'ดูแลความรู้สึกตัวเองอย่างมั่นคง',
+      },
+      {
+        type: 'hold',
+        label: 'ยังไม่ส่งตอนนี้',
+        text: 'วางโทรศัพท์ลงก่อน 20 นาที หายใจลึกๆ 3 ครั้ง แล้วค่อยกลับมาดูใหม่',
+        rationale: 'หยุดอารมณ์ชั่ววูบก่อนเผลอทำลายความสัมพันธ์',
+      },
+    ],
   };
 }

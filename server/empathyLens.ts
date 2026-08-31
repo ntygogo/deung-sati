@@ -15,66 +15,71 @@ export interface SmartScript {
 
 export interface EmpathyLensResponse {
   relationshipType: string;
+  knownFact: string;
+  myInterpretation: string;
   otherPerspectives: EmpathyPerspective[];
   mirrorToSelf: {
     triggeredCoreEmotion: string;
     underlyingNeed: string;
     cautionTrap: string;
   };
+  myChoices: string[];
   smartScripts: SmartScript[];
   deungSatiAdvice: string;
 }
 
-const EMPATHY_LENS_PROMPT = `คุณคือนักจิตวิทยาความสัมพันธ์และผู้เชี่ยวชาญด้านการสื่อสารอย่างสันติ (Nonviolent Communication) ของแอป "ดึงสติ (Deung Sati)"
-หน้าที่ของคุณคือช่วยผู้ใช้ "ถอดรหัสจิตวิทยาของอีกฝ่าย (Reverse Empathy)" ที่ทำพฤติกรรมบางอย่างให้ผู้ใช้เจ็บใจ โกรธ หรือสับสน
-โดยมีเป้าหมายเพื่อ:
-1. ฉายภาพ 3 ความเป็นไปได้ทางจิตวิทยาของอีกฝ่าย (โดยไม่เข้าข้างและไม่ตัดสินว่าเขาดีหรือชั่ว 100%)
-2. ส่องกระจกสะท้อนกลับมาที่ใจของผู้ใช้ ว่าแท้จริงแล้วกำลังเจ็บ/กลัว/ต้องการอะไร
-3. มอบ 3 ทางเลือกคำพูดสื่อสารอย่างฉลาดและมีสติ (Smart Scripts) ที่ช่วยให้ผู้ใช้ถือไพ่เหนือกว่า ไม่ตกเป็นทาสอารมณ์
+const EMPATHY_LENS_PROMPT = `คุณคือผู้เชี่ยวชาญด้านการฝึกมุมมองและการรู้เท่าทันความคิดของแอป "ดึงสติ (Deung Sati)"
+หน้าที่ของคุณคือช่วยผู้ใช้ "มองอีกมุม" โดยแยกแยะ 4 มิติอย่างชัดเจน:
+1. สิ่งที่เรารู้จริง (knownFact): พฤติกรรมภายนอกที่เกิดขึ้นจริง
+2. สิ่งที่เรากำลังแอบตีความ (myInterpretation): สิ่งที่สมองกำลังปรุงแต่งหรือคิดกลัวไปเอง
+3. สิ่งที่อาจเป็นไปได้อื่น (otherPerspectives): ความเป็นไปได้ที่เป็นกลาง ไม่ด่วนตัดสิน ไม่ทึกทักอ่านใจใครเป็นความจริง
+4. สิ่งที่ฉันต้องการและเลือกได้ (myChoices): ทางเลือกของตัวผู้ใช้เองที่ให้เกียรติตนเองและอีกฝ่าย
 
-จงตอบเป็น JSON object ที่ถูกต้องตามโครงสร้างนี้เท่านั้น (ห้ามใส่ markdown อื่นนอกเหนือจาก JSON):
+ตอบกลับเป็น JSON Object เท่านั้น:
 {
-  "relationshipType": "ประเภทความสัมพันธ์ที่ระบุ",
+  "relationshipType": "ประเภทความสัมพันธ์",
+  "knownFact": "พฤติกรรมจริงที่เกิดขึ้นภายนอก",
+  "myInterpretation": "สิ่งที่ใจมักจะแอบกังวลหรือตีความไปเอง",
   "otherPerspectives": [
     {
-      "title": "ความเป็นไปได้ที่ 1 (เช่น แบตเตอรี่พลังงานหมดเกลี้ยง / Overwhelmed)",
-      "explanation": "อธิบายพฤติกรรมนี้ในมุมของเขาอย่างเป็นกลางและเข้าใจมนุษย์",
-      "psychologicalReason": "กลไกทางจิตวิทยาที่อยู่เบื้องหลัง (เช่น ภาวะ Fight/Flight, Avoidant Coping)"
+      "title": "ความเป็นไปได้ที่ 1 (เช่น กำลังติดธุระเร่งด่วน / เหนื่อยล้าสะสม)",
+      "explanation": "อธิบายมุมมองในบริบทของมนุษย์คนหนึ่งอย่างเข้าใจ",
+      "psychologicalReason": "เหตุผลความเป็นไปได้"
     },
     {
-      "title": "ความเป็นไปได้ที่ 2 (เช่น กำลังตั้งการ์ดป้องกันตัวเอง / Defensive Insecurity)",
+      "title": "ความเป็นไปได้ที่ 2 (เช่น กำลังคิดหาคำตอบที่เหมาะสม)",
       "explanation": "อธิบายมุมมองที่สอง",
-      "psychologicalReason": "กลไกทางจิตวิทยา"
+      "psychologicalReason": "เหตุผลความเป็นไปได้"
     },
     {
-      "title": "ความเป็นไปได้ที่ 3 (เช่น การสื่อสารบกพร่อง / Poor Emotional Literacy)",
+      "title": "ความเป็นไปได้ที่ 3 (เช่น การสื่อสารที่ไม่ตรงกัน)",
       "explanation": "อธิบายมุมมองที่สาม",
-      "psychologicalReason": "กลไกทางจิตวิทยา"
+      "psychologicalReason": "เหตุผลความเป็นไปได้"
     }
   ],
   "mirrorToSelf": {
-    "triggeredCoreEmotion": "อารมณ์ลึกๆ ของผู้ใช้ที่ถูกสะกิด (เช่น ความกลัวว่าจะไม่ได้รับความเคารพ / ความน้อยใจที่ถูกทอดทิ้ง)",
-    "underlyingNeed": "ความต้องการที่แท้จริงของผู้ใช้ (เช่น ต้องการความชัดเจน, ต้องการพื้นที่ปลอดภัย)",
-    "cautionTrap": "หลุมพรางอารมณ์ที่ห้ามทำเด็ดขาดในตอนนี้ (เช่น การประชด การตัดพ้อที่จะทำให้สถานการณ์แย่ลง)"
+    "triggeredCoreEmotion": "อารมณ์ลึกๆ ของเราที่ถูกสะกิด",
+    "underlyingNeed": "ความต้องการที่แท้จริงของเรา",
+    "cautionTrap": "หลุมพรางความคิดที่ควรหลีกเลี่ยง"
   },
+  "myChoices": [
+    "พักวางมือถือก่อน 30 นาที ให้ใจนิ่ง",
+    "ถามไถ่ด้วยความห่วงใยแทนการประชด",
+    "ตั้งขอบเขตอย่างสุภาพถ้าเรื่องนี้สำคัญจริง"
+  ],
   "smartScripts": [
     {
-      "label": "🟢 ทางเลือกที่ 1: แบบนิ่งสงบและให้เกียรติ (Calm & Dignified)",
-      "scriptText": "ประโยคข้อความตัวอย่างที่นำไปก๊อปปี้ส่งได้จริง",
-      "whyItWorks": "ทำไมประโยคนี้ถึงได้ผลและไม่ทำให้เราเสียฟอร์ม"
+      "label": "🟢 ทางเลือกแบบนิ่งสงบ",
+      "scriptText": "ประโยคตัวอย่างพร้อมส่ง",
+      "whyItWorks": "ข้อดีของประโยคนี้"
     },
     {
-      "label": "🟡 ทางเลือกที่ 2: แบบถามไถ่เปิดพื้นที่ (Curious & Open)",
-      "scriptText": "ประโยคข้อความตัวอย่างที่นำไปก๊อปปี้ส่งได้จริง",
-      "whyItWorks": "ทำไมประโยคนี้ถึงช่วยลดกำแพงในใจเขา"
-    },
-    {
-      "label": "🟣 ทางเลือกที่ 3: แบบตั้งขอบเขตชัดเจน (Firm & Respectful Boundary)",
-      "scriptText": "ประโยคข้อความตัวอย่างที่นำไปก๊อปปี้ส่งได้จริง",
-      "whyItWorks": "ทำไมประโยคนี้ถึงปกป้องศักดิ์ศรีและความรู้สึกของเรา"
+      "label": "🟡 ทางเลือกแบบถามไถ่เปิดพื้นที่",
+      "scriptText": "ประโยคตัวอย่างพร้อมส่ง",
+      "whyItWorks": "ข้อดีของประโยคนี้"
     }
   ],
-  "deungSatiAdvice": "ประโยคดึงสติสั้นๆ อบอุ่น เพื่อให้ผู้ใช้วางมือถือ พักหายใจ 30 วินาทีก่อนตัดสินใจส่ง"
+  "deungSatiAdvice": "คำเตือนใจสั้นๆ 1 ประโยค"
 }`;
 
 export async function analyzeEmpathyLens(params: {
@@ -89,24 +94,25 @@ export async function analyzeEmpathyLens(params: {
   if (config.geminiApiKey) {
     try {
       const candidateModels = [
-        config.aiModel || 'gemini-3.7-flash',
-        'gemini-3.1-flash-lite',
+        config.aiModel || 'gemini-3.6-flash',
+        'gemini-3.6-flash',
         'gemini-flash-latest',
-        'gemini-3.5-flash',
       ];
 
       const ai = new GoogleGenAI({ apiKey: config.geminiApiKey.trim() });
 
       for (const model of candidateModels) {
         try {
-          const promptInput = `${EMPATHY_LENS_PROMPT}\n\n[ข้อมูลสถานการณ์]\n- ความสัมพันธ์: ${relationshipType}\n- สิ่งที่อีกฝ่ายทำหรือพูด: "${trimmedSituation}"\n- ความรู้สึก/สิ่งที่ผู้ใช้อยากทำตอนนี้: "${userReaction.trim() || 'รู้สึกโกรธ/สับสน/อยากตอบโต้'}"`;
-
           const response = await ai.models.generateContent({
             model,
             contents: [
               {
                 role: 'user',
-                parts: [{ text: promptInput }],
+                parts: [
+                  {
+                    text: `${EMPATHY_LENS_PROMPT}\n\n[สถานการณ์ที่ระบุ]: "${trimmedSituation}"\n[ความสัมพันธ์]: ${relationshipType}\n[ความรู้สึกผู้ใช้]: ${userReaction}`,
+                  },
+                ],
               },
             ],
             config: {
@@ -117,12 +123,11 @@ export async function analyzeEmpathyLens(params: {
 
           const jsonStr = response.text || '{}';
           const parsed = JSON.parse(jsonStr) as EmpathyLensResponse;
-          if (parsed.otherPerspectives && parsed.smartScripts) {
-            console.log(`[Empathy Lens] Generated successfully via Gemini (${model}) for: "${trimmedSituation.slice(0, 40)}..."`);
+          if (parsed.otherPerspectives && parsed.otherPerspectives.length > 0) {
             return parsed;
           }
         } catch (err: any) {
-          console.warn(`[Empathy Lens] Model ${model} failed, trying next...`, err?.message?.slice(0, 80));
+          console.warn(`[Empathy Lens] Model ${model} failed:`, err?.message?.slice(0, 80));
         }
       }
     } catch (err) {
@@ -131,104 +136,49 @@ export async function analyzeEmpathyLens(params: {
   }
 
   // 2. Intelligent Context-Aware Fallback
-  return generateFallbackEmpathyResponse(relationshipType, trimmedSituation, userReaction);
-}
-
-function generateFallbackEmpathyResponse(
-  relationshipType: string,
-  situation: string,
-  _userReaction: string
-): EmpathyLensResponse {
-  const lower = situation.toLowerCase();
-
-  if (lower.includes('อ่านไม่ตอบ') || lower.includes('ตอบช้า') || lower.includes('อืม') || lower.includes('ห้วน')) {
-    return {
-      relationshipType,
-      otherPerspectives: [
-        {
-          title: 'ภาวะแบตเตอรี่หมดเกลี้ยง (Social & Cognitive Exhaustion)',
-          explanation: 'เขาอาจกำลังเผชิญกับเรื่องเครียดเฉพาะหน้าจนไม่มีพลังงานเหลือพอจะประมวลผลบทสนทนาลึกซึ้ง การตอบสั้นๆ จึงเป็นวิธีประหยัดพลังงาน ไม่ได้แปลว่าเขาเกลียดเรา',
-          psychologicalReason: 'Cognitive Overload (สมองล้าเกินกว่าจะสื่อสารอย่างอ่อนโยน)',
-        },
-        {
-          title: 'สไตล์การหลบเลี่ยงความกดดัน (Avoidant Coping Style)',
-          explanation: 'บางคนเมื่อรู้สึกว่ากำลังถูกจับผิดหรือถูกคาดหวัง จะสัญชาตญาณดึงตัวเองถอยห่างเพื่อหาพื้นที่ปลอดภัยชั่วคราว',
-          psychologicalReason: 'Emotional Withdrawal (การล่าถอยทางอารมณ์)',
-        },
-        {
-          title: 'กำลังมีเรื่องค้างคาใจแต่ไม่รู้วิธีพูด (Passive-Aggressive)',
-          explanation: 'เขาอาจมีเรื่องขุ่นเคืองบางอย่างอยู่ แต่ขาดทักษะในการเปิดอกคุยตรงๆ จึงแสดงออกผ่านความเงียบหรือคำห้วนๆ',
-          psychologicalReason: 'Suppressed Frustration (ความอึดอัดที่ถูกเก็บกด)',
-        },
-      ],
-      mirrorToSelf: {
-        triggeredCoreEmotion: 'ความน้อยใจและความกลัวว่าจะกลายเป็นคนไม่สำคัญในสายตาเขา',
-        underlyingNeed: 'ต้องการการยืนยัน (Reassurance) และความใส่ใจที่สม่ำเสมอ',
-        cautionTrap: 'การพิมพ์ด่าประชดหรือส่งข้อความรัวๆ จะยิ่งผลักให้เขาปิดประตูใส่และหลบหนีไปไกลกว่าเดิม',
-      },
-      smartScripts: [
-        {
-          label: '🟢 ทางเลือกที่ 1: แบบนิ่งสงบและให้เกียรติ (Calm & Dignified)',
-          scriptText: 'เห็นตอบสั้นๆ วันนี้มีเรื่องเหนื่อยๆ ไหม? ถ้าพร้อมคุยเมื่อไหร่ค่อยบอกเรานะ',
-          whyItWorks: 'แสดงถึงวุฒิภาวะ ไม่เต้นตามเกมอารมณ์ และคืนพื้นที่ให้อีกฝ่ายตัดสินใจ',
-        },
-        {
-          label: '🟡 ทางเลือกที่ 2: แบบปล่อยวางและโฟกัสตัวเอง (Self-Prioritizing)',
-          scriptText: 'โอเคจ้า งั้นเราขอไปทำธุระ/พักผ่อนก่อนนะ ค่อยคุยกัน',
-          whyItWorks: 'ส่งสัญญาณว่าชีวิตเราไม่ได้ขึ้นอยู่กับความเร็วในการตอบของเขา ทำให้เราถือไพ่เหนือกว่า',
-        },
-        {
-          label: '🟣 ทางเลือกที่ 3: แบบตั้งขอบเขตความสัมพันธ์ (Clear Boundary)',
-          scriptText: 'ถ้ามีเรื่องอะไรไม่สบายใจ อยากให้บอกกันตรงๆ นะ การเงียบใส่กันมันทำให้เราไม่เข้าใจกันเปล่าๆ',
-          whyItWorks: 'สื่อสารข้อเท็จจริงอย่างสุภาพโดยไม่ใช้อารมณ์วีน',
-        },
-      ],
-      deungSatiAdvice: 'วางมือถือลง ดื่มน้ำเย็น 1 แก้ว อย่าเพิ่งส่งอะไรตอนนี้ ปล่อยให้เวลาทำงานสัก 1 ชั่วโมงครับ',
-    };
-  }
-
-  // Generic Empathy Analysis Fallback
   return {
     relationshipType,
+    knownFact: trimmedSituation || 'เกิดสถานการณ์ที่ทำให้เกิดความค้างคาใจ',
+    myInterpretation: 'เขาคงไม่สนใจหรือไม่เห็นความสำคัญของเราแล้ว',
     otherPerspectives: [
       {
-        title: 'การป้องกันตัวเองจากความไม่มั่นคง (Defensive Mechanism)',
-        explanation: 'พฤติกรรมที่เขาทำอาจไม่ได้ตั้งใจมาทำร้ายคุณโดยตรง แต่เกิดจากความไม่มั่นคงในใจหรือความกลัวเสียหน้าที่เขากำลังปกปิดอยู่',
-        psychologicalReason: 'Ego Defense Mechanism (การปกป้องศักดิ์ศรีตัวเอง)',
+        title: 'กำลังติดงานด่วน หรือมีธุระที่ไม่สะดวกพิมพ์',
+        explanation: 'ในชีวิตจริง แต่ละคนมีภาระและจังหวะเวลาที่แตกต่างกัน การยังไม่ตอบอาจไม่ได้เกี่ยวกับเราโดยตรง',
+        psychologicalReason: 'Cognitive Bandwidth & Overload',
       },
       {
-        title: 'มุมมองและกรอบประสบการณ์ที่ต่างกัน (Cognitive Gap)',
-        explanation: 'สิ่งที่เรารู้สึกว่าร้ายแรง เขาอาจจะมองว่าเป็นเรื่องปกติเพราะเติบโตมาในสภาพแวดล้อมและวิธีคิดคนละแบบ',
-        psychologicalReason: 'Fundamental Attribution Error (การตีความจากมุมมองตนเอง)',
+        title: 'กำลังคิดหาคำตอบที่เหมาะสม',
+        explanation: 'บางครั้งอีกฝ่ายต้องการเวลาคิดทบทวนก่อนตอบ เพื่อไม่ให้ใช้อารมณ์หรือคำพูดที่ผิดพลาด',
+        psychologicalReason: 'Processing Time',
       },
       {
-        title: 'ความเครียดสะสมจากเรื่องอื่น (Displaced Stress)',
-        explanation: 'เขาอาจจะกำลังเผชิญแรงกดดันจากจุดอื่นในชีวิต แล้วเผลอเอาอารมณ์มาปล่อยลงในบทสนทนานี้',
-        psychologicalReason: 'Displacement (การระบายอารมณ์ใส่คนใกล้ตัว)',
+        title: 'พลังงานหมดชั่วคราว (Social Battery Low)',
+        explanation: 'อาจกำลังเหนื่อยล้าจนยังไม่มีพลังสื่อสารกับใครในขณะนี้',
+        psychologicalReason: 'Emotional Fatigue',
       },
     ],
     mirrorToSelf: {
-      triggeredCoreEmotion: 'ความโกรธที่รู้สึกว่าตัวเองไม่ได้รับความเป็นธรรมหรือไม่ได้รับความเคารพ',
-      underlyingNeed: 'ต้องการให้เขาตระหนักถึงสิ่งที่เราเจอ และต้องการความจริงใจในการสื่อสาร',
-      cautionTrap: 'การใช้อารมณ์ตอกกลับทันทีจะทำให้เรากลายเป็นฝ่ายผิดในสายตาคนอื่น และทำให้เรื่องบานปลาย',
+      triggeredCoreEmotion: 'ความไม่มั่นคงและความกลัวการถูกปฏิเสธ',
+      underlyingNeed: 'ต้องการความชัดเจนและความรู้สึกปลอดภัยในความสัมพันธ์',
+      cautionTrap: 'การด่วนสรุปว่าเขาคิดร้าย แล้วส่งข้อความประชดใส่',
     },
+    myChoices: [
+      'พักวางมือถือ 30 นาที แล้วไปทำกิจกรรมอื่นให้ใจสบาย',
+      'รอให้อีกฝ่ายสะดวก แล้วค่อยทักถามอย่างสุภาพ',
+      'สื่อสารความต้องการของตนเองอย่างตรงไปตรงมา',
+    ],
     smartScripts: [
       {
-        label: '🟢 ทางเลือกที่ 1: แบบนิ่งสงบและยึดข้อเท็จจริง (Dignified Facts)',
-        scriptText: 'เราเข้าใจในมุมคุณนะ แต่เรื่องนี้เราอยากขอคุยกันด้วยเหตุผลเมื่อทั้งคู่พร้อม',
-        whyItWorks: 'ตัดการปะทะด้วยอารมณ์ และดึงบทสนทนากลับสู่จุดที่มีวุฒิภาวะ',
+        label: '🟢 แบบนิ่งสงบและให้เกียรติ',
+        scriptText: 'ถ้าสะดวกเมื่อไหร่ ช่วยตอบกลับหน่อยนะ แค่อยากรู้ว่าเป็นยังไงบ้าง',
+        whyItWorks: 'ไม่กดดัน และแสดงความใส่ใจโดยไม่สูญเสียความมั่นคงในตนเอง',
       },
       {
-        label: '🟡 ทางเลือกที่ 2: แบบสะท้อนความรู้สึกอย่างสันติ (NVC Script)',
-        scriptText: 'พอได้ยินแบบนี้ เรายอมรับว่ารู้สึกอึดอัดมาก เพราะเราให้เกียรติคุณเสมอ ครั้งหน้าช่วยปรับคำพูดหน่อยได้ไหม',
-        whyItWorks: 'พูดความรู้สึกจริงโดยไม่กล่าวหาด่าทอ อีกฝ่ายจะปฏิเสธได้ยาก',
-      },
-      {
-        label: '🟣 ทางเลือกที่ 3: แบบถอยออกมาเป็นผู้สังเกตการณ์ (Grey Rock)',
-        scriptText: 'รับทราบครับ/ค่ะ เดี๋ยวขอเวลาพิจารณาตามความเหมาะสม',
-        whyItWorks: 'หยุดให้ค่ากับคำพูดยั่วยุ ไม่ให้อีกฝ่ายได้ความสะใจจากการเห็นเราหัวร้อน',
+        label: '🟡 แบบถามไถ่เปิดพื้นที่',
+        scriptText: 'วันนี้ดูยุ่งๆ ไหม เป็นกำลังใจให้นะ ไว้ว่างค่อยคุยกัน',
+        whyItWorks: 'สร้างความรู้สึกอบอุ่นและลดกำแพงการตั้งการ์ด',
       },
     ],
-    deungSatiAdvice: 'หายใจเข้าลึกๆ 3 ครั้ง จำไว้ว่าเราควบคุมพฤติกรรมใครไม่ได้ แต่เราควบคุมความสงบในใจเราได้ 100% ครับ',
+    deungSatiAdvice: 'เมื่อมองได้กว้าง ไม่ด่วนเดาใจใครเป็นความจริง ใจก็จะคุยกับตัวเองนุ่มนวลขึ้น 🌱',
   };
 }

@@ -1,144 +1,227 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { DUENG_SATI_MASTER_PROMPT } from '../../server/prompts/duengSatiMasterPrompt';
 import {
-  evaluateCheckinConsent,
+  DUENG_SATI_UNIFIED_MASTER_PROMPT,
   isCrisisMessage,
-  classifyConversationIntent,
-  isExplicitTopicShift,
-  CHIP_LABELS,
-  type EmotionalCheckinData,
-  type SessionStatePayload,
-} from '../../src/shared/chat-protocol';
+  type ChatEngineTurnResponse,
+  type SafetyState,
+  type ConversationMode,
+  type UserCognitiveCapacity,
+  type UserConversationIntent,
+  type ReadinessLevel,
+  type KnownFieldDimension,
+  type CheckinConsentState,
+  type SuggestedIntervention,
+  type CbtConversationStage,
+} from '../../src/shared/chat-protocol/index.ts';
+
+function sanitizeResponse(raw: string): {
+  assistant_message: string;
+  turn: ChatEngineTurnResponse;
+} {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const match =
+      cleaned.match(/"assistantMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/s) ||
+      cleaned.match(/"assistant_message"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    if (match && match[1]) {
+      try {
+        parsed = { assistantMessage: JSON.parse(`"${match[1]}"`) };
+      } catch {
+        parsed = { assistantMessage: match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') };
+      }
+    }
+  }
+
+  let assistantMsg = '';
+  const rawMsg = parsed?.assistantMessage || parsed?.assistant_message;
+  if (typeof rawMsg === 'string' && rawMsg.trim()) {
+    assistantMsg = rawMsg.trim();
+    if (assistantMsg.startsWith('{') && (assistantMsg.includes('"assistantMessage"') || assistantMsg.includes('"assistant_message"'))) {
+      try {
+        const inner = JSON.parse(assistantMsg);
+        const innerMsg = inner.assistantMessage || inner.assistant_message;
+        if (typeof innerMsg === 'string' && innerMsg.trim()) {
+          assistantMsg = innerMsg.trim();
+        }
+      } catch {}
+    }
+  } else {
+    assistantMsg = 'เรารับรู้และเข้าใจในสิ่งที่เธอเล่ามานะ... ลองบอกเพิ่มอีกนิดได้ไหมว่าจุดไหนที่ทำให้รู้สึกอึดอัดที่สุด?';
+  }
+
+  const quickReplies =
+    Array.isArray(parsed?.quickReplies) && parsed.quickReplies.length > 0
+      ? parsed.quickReplies
+      : Array.isArray(parsed?.quick_replies) && parsed.quick_replies.length > 0
+      ? parsed.quick_replies
+      : ['เล่าต่อ', 'ยังไม่แน่ใจ', 'ขอเวลาคิดแป๊บนะ'];
+
+  const candidatePattern = parsed?.candidatePattern || parsed?.candidate_loop || null;
+
+  let normalizedIntent: UserConversationIntent = 'vent';
+  const rawIntent = parsed?.intent || parsed?.user_intent;
+  if (rawIntent === 'understand' || rawIntent === 'understand_self' || rawIntent === 'understand_other') {
+    normalizedIntent = 'understand';
+  } else if (rawIntent === 'decide' || rawIntent === 'pause') {
+    normalizedIntent = 'decide';
+  } else if (rawIntent === 'change' || rawIntent === 'practice') {
+    normalizedIntent = 'change';
+  } else if (rawIntent === 'vent') {
+    normalizedIntent = 'vent';
+  } else {
+    normalizedIntent = 'unknown';
+  }
+
+  const structuredTurn: ChatEngineTurnResponse = {
+    assistant_message: assistantMsg,
+    safety_state: (parsed?.safety || parsed?.safety_state || 'normal') as SafetyState,
+    mode: (parsed?.mode || 'HOLD') as ConversationMode,
+    capacity: (parsed?.capacity || 'medium') as UserCognitiveCapacity,
+    user_intent: normalizedIntent,
+    stage: (typeof parsed?.stage === 'number' ? parsed.stage : 1) as CbtConversationStage,
+    intensity: typeof parsed?.intensity === 'number' ? parsed.intensity : 5,
+    readiness: (parsed?.readiness || 'story') as ReadinessLevel,
+    recommended_exercise: parsed?.recommendedExercise || parsed?.recommended_exercise || null,
+    quick_replies: quickReplies,
+    candidate_loop: candidatePattern,
+    evidence_candidate: parsed?.evidenceCandidate || parsed?.evidence_candidate || null,
+    known_fields: (parsed?.knownFields || parsed?.known_fields || []) as KnownFieldDimension[],
+    checkin_consent: (parsed?.checkinConsent || parsed?.checkin_consent || 'idle') as CheckinConsentState,
+    suggested_intervention: (parsed?.suggestedIntervention || parsed?.suggested_intervention || 'reflection') as SuggestedIntervention,
+  };
+
+  return { assistant_message: assistantMsg, turn: structuredTurn };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, sessionState } = req.body || {};
+  const { messages, requestId } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
 
-  const checkinState: EmotionalCheckinData =
-    sessionState?.checkinState || req.body.checkinState || { step: 'idle' };
-
   const apiKey = process.env.GEMINI_API_KEY || '';
 
-  // Set SSE Headers
+  // Setup Server-Sent Events headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
 
   const userMsgs = messages.filter((m: any) => m.role === 'user');
   const latestUser = (userMsgs[userMsgs.length - 1]?.content || userMsgs[userMsgs.length - 1]?.text || '').trim();
 
-  // Priority 0: Crisis Safety Gate
+  // Priority 0: Safety & Crisis Gate
   if (isCrisisMessage(latestUser)) {
-    const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ... ขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+    const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารม้นท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+    const crisisTurn: ChatEngineTurnResponse = {
+      assistant_message: crisisText,
+      safety_state: 'crisis',
+      mode: 'HOLD',
+      capacity: 'low',
+      user_intent: 'vent',
+      stage: 1,
+      intensity: 10,
+      readiness: 'story',
+      recommended_exercise: null,
+      quick_replies: ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
+      suggested_intervention: 'ground',
+    };
+
     res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: ['crisis'] })}\n\n`);
-    res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText })}\n\n`);
-    res.write(`event: done\ndata: ${JSON.stringify({ fullText: crisisText, safetyMode: 'protect' })}\n\n`);
+    res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
+    res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
+    res.write(`event: assistant_meta\ndata: ${JSON.stringify(crisisTurn)}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ fullText: crisisText, source: 'gemini', structuredTurn: crisisTurn, options: crisisTurn.quick_replies })}\n\n`);
     return res.end();
   }
 
-  // 1. Primary: Gemini API Streaming
+  // Primary: Live Gemini API Call with Candidate Fallbacks
   if (apiKey && apiKey.trim()) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    const modelCandidates = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite-preview'];
+    const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
+    const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
+    const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
 
-      const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
-      const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
-      const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
+    const contents = sliced.map((m: any) => ({
+      role: m.role === 'assistant' || m.role === 'model' || m.role === 'ai' ? 'model' : 'user',
+      parts: [{ text: m.content || m.text || '' }],
+    }));
 
-      const contents = sliced.map((m: any) => ({
-        role: m.role === 'assistant' || m.role === 'model' || m.role === 'ai' ? 'model' : 'user',
-        parts: [{ text: m.content || m.text || '' }],
-      }));
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
 
-      const stream = await ai.models.generateContentStream({
-        model: 'gemini-3.6-flash',
-        contents,
-        config: {
-          systemInstruction: DUENG_SATI_MASTER_PROMPT,
-          temperature: 0.75,
-          maxOutputTokens: 1000,
-        },
-      });
+    for (const modelCandidate of modelCandidates) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelCandidate,
+          contents,
+          config: {
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
+            temperature: 0.5,
+            maxOutputTokens: 1000,
+            responseMimeType: 'application/json',
+          },
+        });
 
-      let fullText = '';
-      for await (const chunk of stream) {
-        const textChunk = chunk.text || '';
-        if (textChunk) {
-          fullText += textChunk;
-          res.write(`event: chunk\ndata: ${JSON.stringify({ text: textChunk })}\n\n`);
+        const rawText = response.text || '';
+        if (rawText.trim()) {
+          const { assistant_message, turn } = sanitizeResponse(rawText);
+
+          res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'normal' })}\n\n`);
+          res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
+          res.write(`event: chunk\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
+          res.write(`event: assistant_meta\ndata: ${JSON.stringify(turn)}\n\n`);
+          res.write(
+            `event: done\ndata: ${JSON.stringify({
+              requestId,
+              fullText: assistant_message,
+              source: 'gemini',
+              structuredTurn: turn,
+              options: turn.quick_replies,
+            })}\n\n`
+          );
+          return res.end();
         }
+      } catch (err: any) {
+        console.warn(`[Vercel Serverless Stream]: Model ${modelCandidate} failed (${err?.status || err?.message}). Trying next...`);
       }
-
-      res.write(`event: done\ndata: ${JSON.stringify({ fullText })}\n\n`);
-      return res.end();
-    } catch (err: any) {
-      console.warn('[Vercel Serverless Stream Warning]: Gemini API stream failed, switching to deterministic serverless fallback:', err?.message || err);
     }
   }
 
-  // 2. Deterministic Context-Aware Serverless Fallback
-  let dynamicReply = '';
-  let quickOptions: string[] | undefined = undefined;
-  let updatedCheckin: EmotionalCheckinData = { ...checkinState };
+  // Honest Error State - NO Fake Local Dialogue
+  const errorText = 'เมื่อกี้การเชื่อมต่อกับ AI ขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะเธอ 🌱';
+  const errorTurn: ChatEngineTurnResponse = {
+    assistant_message: errorText,
+    safety_state: 'normal',
+    mode: 'HOLD',
+    capacity: 'medium',
+    user_intent: 'vent',
+    stage: 1,
+    intensity: 5,
+    readiness: 'story',
+    recommended_exercise: null,
+    quick_replies: ['ลองส่งใหม่อีกครั้ง'],
+    suggested_intervention: 'none',
+  };
 
-  // Explicit Topic Change
-  if (isExplicitTopicShift(latestUser)) {
-    dynamicReply = `ได้เลย งั้นเราพักเรื่องนั้นไว้ก่อนนะ... ตอนนี้มีเรื่องไหนที่เธออยากเล่าต่อ เล่าให้เราฟังได้เลย`;
-    updatedCheckin = { step: 'idle' };
-  }
-  // Check-in Offered State with Strict Consent Evaluation
-  else if (checkinState.step === 'offered' || checkinState.step === 'awaiting_consent') {
-    const consent = evaluateCheckinConsent(latestUser);
-    if (consent === 'affirmative') {
-      dynamicReply = `ถ้ายังไม่ต้องตั้งชื่ออารมณ์ ตอนนี้ร่างกายตรงไหนรู้สึกชัดที่สุด?`;
-      quickOptions = [...CHIP_LABELS.STEP1_BODY];
-      updatedCheckin = { step: 'step1_body' };
-    } else if (consent === 'declined') {
-      dynamicReply = `ได้เลย ไม่เป็นไรเลยนะ... งั้นเราคุยกันต่อตามปกติ เธออยากเล่าหรือระบายเรื่องไหนต่อ เล่าได้เลยนะ`;
-      updatedCheckin = { step: 'declined' };
-    } else {
-      dynamicReply = `ไม่เป็นไรเลยนะ เธอยังไม่ต้องรีบตัดสินใจก็ได้ ตอนนี้อยากให้เราอยู่ฟังเธอเล่าต่อ หรืออยากลองสังเกตร่างกายด้วยกันแค่หนึ่งคำถามดี?`;
-      quickOptions = [...CHIP_LABELS.CONSENT_AMBIGUOUS];
-      updatedCheckin = { step: 'awaiting_consent' };
-    }
-  }
-  // Standard Exploration & Check-in Trigger Check
-  else {
-    const intent = classifyConversationIntent(latestUser, messages);
-
-    if (intent === 'exploring' && checkinState.step !== 'declined' && checkinState.step !== 'completed') {
-      dynamicReply = `เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม\n\nอยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?`;
-      quickOptions = [...CHIP_LABELS.CONSENT_OFFER];
-      updatedCheckin = { step: 'offered' };
-    } else if (intent === 'pausing') {
-      dynamicReply = `เข้าใจเลยว่าตอนนั้นมันโกรธจนอยากระเบิดออกมาเดี๋ยวนี้...\n\nแต่ลองหยุดหายใจลึกๆ 10 วินาที... ถ้าทำไปตอนนี้ ความสะใจอยู่กับเราแป๊บเดียว แล้วผลแย่ที่สุดที่จะตามมาหลังจากนั้น เธอพร้อมรับมือกับมันจริงๆ หรือเปล่า?`;
-    } else {
-      dynamicReply = `รับฟังอยู่นะ... เรื่องนี้คงกวนใจเธอมาสักพักแล้วใช่ไหม\n\nตอนที่เรื่องนี้เกิดขึ้น วินาทีแรกความรู้สึกไหนแวบขึ้นมาในใจมากที่สุด?`;
-    }
-  }
-
-  res.write(
-    `event: chunk\ndata: ${JSON.stringify({
-      text: dynamicReply,
-      options: quickOptions,
-      checkinData: updatedCheckin,
-    })}\n\n`
-  );
-  res.write(
-    `event: done\ndata: ${JSON.stringify({
-      fullText: dynamicReply,
-      options: quickOptions,
-      checkinData: updatedCheckin,
-    })}\n\n`
-  );
+  res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: errorText, requestId })}\n\n`);
+  res.write(`event: chunk\ndata: ${JSON.stringify({ text: errorText, requestId })}\n\n`);
+  res.write(`event: assistant_meta\ndata: ${JSON.stringify(errorTurn)}\n\n`);
+  res.write(`event: done\ndata: ${JSON.stringify({ requestId, fullText: errorText, source: 'error', structuredTurn: errorTurn, options: errorTurn.quick_replies })}\n\n`);
   res.end();
 }

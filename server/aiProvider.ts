@@ -1,154 +1,256 @@
 import { config } from './config.ts';
-import { DUENG_SATI_MASTER_PROMPT } from './prompts/duengSatiMasterPrompt.ts';
-import type { SafetyClassification } from './safetyClassifier.ts';
 import { GoogleGenAI } from '@google/genai';
-import { isCrisisMessage } from '../src/shared/chat-protocol/index.ts';
-import { generateDynamicCBTResponse } from '../src/utils/aiClientEngine.ts';
-import type {
-  ChatMessage,
-  EmotionalCheckinData,
-  CbtConversationStage,
+import {
+  DUENG_SATI_UNIFIED_MASTER_PROMPT,
+  isCrisisMessage,
+  type ChatEngineTurnResponse,
+  type SafetyState,
+  type ConversationMode,
+  type UserCognitiveCapacity,
+  type UserConversationIntent,
+  type ReadinessLevel,
+  type KnownFieldDimension,
+  type CheckinConsentState,
+  type SuggestedIntervention,
+  type CbtConversationStage,
 } from '../src/shared/chat-protocol/index.ts';
+import type { SafetyClassification } from './safetyClassifier.ts';
 
-export interface StreamChatParams {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+export interface StreamChatResponseParams {
+  messages: Array<{ role: string; content: string }>;
   safety: SafetyClassification;
-  sessionState?: {
-    cbtStage?: CbtConversationStage;
-    checkinState?: EmotionalCheckinData;
-  };
-  onChunk: (text: string) => void;
+  sessionState?: any;
+  requestId?: number;
+  onAssistantToken: (token: string) => void;
+  onAssistantMeta: (meta: ChatEngineTurnResponse) => void;
   onDone: (
     fullText: string,
-    source: 'gemini' | 'fallback',
-    options?: string[],
-    checkinData?: EmotionalCheckinData,
-    exerciseCard?: any
+    source: 'gemini' | 'error',
+    structuredTurn: ChatEngineTurnResponse
   ) => void;
-  onError: (err: Error) => void;
+  onError?: (err: Error) => void;
 }
 
 /**
- * Primary Conversational Brain: External Gemini Multi-Turn Streaming
- * with Seamless Shared Protocol Fallback
+ * Robust Sanitizer & Parser for Deung Sati AI Responses (V1 SSOT Architecture).
+ * Guarantees that assistant_message is ALWAYS pure natural human text and NEVER raw JSON.
  */
-export async function streamChatResponse({
-  messages,
-  safety,
-  sessionState,
-  onChunk,
-  onDone,
-  onError,
-}: StreamChatParams) {
-  const apiKey = config.geminiApiKey;
-  const isKeyPresent = Boolean(apiKey);
-  const primaryModel = config.aiModel || 'gemini-3.6-flash';
-
-  const userMessages = messages.filter((m) => m.role === 'user');
-  const latestUserMsg = userMessages[userMessages.length - 1]?.content || '';
-
-  // 0. Priority 0: Crisis Safety Gate
-  if (isCrisisMessage(latestUserMsg) || safety.mode === 'protect') {
-    const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
-    let currentIdx = 0;
-    const interval = setInterval(() => {
-      if (currentIdx < crisisText.length) {
-        onChunk(crisisText.slice(currentIdx, currentIdx + 4));
-        currentIdx += 4;
-      } else {
-        clearInterval(interval);
-        onDone(crisisText, 'fallback');
-      }
-    }, 12);
-    return;
+export function sanitizeDeungSatiResponse(raw: string): {
+  assistant_message: string;
+  turn: ChatEngineTurnResponse;
+} {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
   }
 
-  // 1. Attempt Gemini Streaming if API key is present
-  if (isKeyPresent) {
-    const modelCandidates = [
-      primaryModel,
-      'gemini-3.6-flash',
-      'gemini-2.5-flash',
-      'gemini-1.5-flash',
-    ];
-    const uniqueCandidates = Array.from(new Set(modelCandidates));
-
-    for (const modelCandidate of uniqueCandidates) {
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    // Regex extraction fallback for assistantMessage / assistant_message
+    const match =
+      cleaned.match(/"assistantMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/s) ||
+      cleaned.match(/"assistant_message"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    if (match && match[1]) {
       try {
-        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-        const validMessages = messages.filter((m) => m.content && m.content.trim());
-        const firstUserIdx = validMessages.findIndex((m) => m.role === 'user');
-        const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
-
-        const contents = sliced.map((m) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        }));
-
-        const stream = await ai.models.generateContentStream({
-          model: modelCandidate,
-          contents,
-          config: {
-            systemInstruction: DUENG_SATI_MASTER_PROMPT,
-            temperature: 0.75,
-            maxOutputTokens: 1000,
-          },
-        });
-
-        let fullText = '';
-        for await (const chunk of stream) {
-          const textChunk = chunk.text || '';
-          if (textChunk) {
-            fullText += textChunk;
-            onChunk(textChunk);
-          }
-        }
-
-        if (fullText.trim()) {
-          console.log(`[RESPONSE GENERATED - SOURCE: GEMINI (${modelCandidate})]:\n${fullText}\n`);
-          onDone(fullText, 'gemini');
-          return;
-        }
-      } catch (err: any) {
-        console.warn(`[AI Provider] Model ${modelCandidate} failed (${err?.status || err?.message?.slice(0, 80)}). Trying next candidate...`);
+        parsed = { assistantMessage: JSON.parse(`"${match[1]}"`) };
+      } catch {
+        parsed = { assistantMessage: match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') };
       }
     }
   }
 
-  // 2. Shared Protocol Deterministic Fallback Generator
+  let assistantMsg = '';
+  const rawMsg = parsed?.assistantMessage || parsed?.assistant_message;
+  if (typeof rawMsg === 'string' && rawMsg.trim()) {
+    assistantMsg = rawMsg.trim();
+    if (assistantMsg.startsWith('{') && (assistantMsg.includes('"assistantMessage"') || assistantMsg.includes('"assistant_message"'))) {
+      try {
+        const inner = JSON.parse(assistantMsg);
+        const innerMsg = inner.assistantMessage || inner.assistant_message;
+        if (typeof innerMsg === 'string' && innerMsg.trim()) {
+          assistantMsg = innerMsg.trim();
+        }
+      } catch {}
+    }
+  } else {
+    assistantMsg = 'เรารับรู้และเข้าใจในสิ่งที่เธอเล่ามานะ... ลองบอกเพิ่มอีกนิดได้ไหมว่าจุดไหนที่ทำให้รู้สึกอึดอัดที่สุด?';
+  }
+
+  const quickReplies =
+    Array.isArray(parsed?.quickReplies) && parsed.quickReplies.length > 0
+      ? parsed.quickReplies
+      : Array.isArray(parsed?.quick_replies) && parsed.quick_replies.length > 0
+      ? parsed.quick_replies
+      : ['เล่าต่อ', 'ยังไม่แน่ใจ', 'ขอเวลาคิดแป๊บนะ'];
+
+  const candidatePattern = parsed?.candidatePattern || parsed?.candidate_loop || null;
+
+  // Map legacy / sub-intents to the 5 V1 official intents
+  let normalizedIntent: UserConversationIntent = 'vent';
+  const rawIntent = parsed?.intent || parsed?.user_intent;
+  if (rawIntent === 'understand' || rawIntent === 'understand_self' || rawIntent === 'understand_other') {
+    normalizedIntent = 'understand';
+  } else if (rawIntent === 'decide' || rawIntent === 'pause') {
+    normalizedIntent = 'decide';
+  } else if (rawIntent === 'change' || rawIntent === 'practice') {
+    normalizedIntent = 'change';
+  } else if (rawIntent === 'vent') {
+    normalizedIntent = 'vent';
+  } else {
+    normalizedIntent = 'unknown';
+  }
+
+  const structuredTurn: ChatEngineTurnResponse = {
+    assistant_message: assistantMsg,
+    safety_state: (parsed?.safety || parsed?.safety_state || 'normal') as SafetyState,
+    mode: (parsed?.mode || 'HOLD') as ConversationMode,
+    capacity: (parsed?.capacity || 'medium') as UserCognitiveCapacity,
+    user_intent: normalizedIntent,
+    stage: (typeof parsed?.stage === 'number' ? parsed.stage : 1) as CbtConversationStage,
+    intensity: typeof parsed?.intensity === 'number' ? parsed.intensity : 5,
+    readiness: (parsed?.readiness || 'story') as ReadinessLevel,
+    recommended_exercise: parsed?.recommendedExercise || parsed?.recommended_exercise || null,
+    quick_replies: quickReplies,
+    candidate_loop: candidatePattern,
+    evidence_candidate: parsed?.evidenceCandidate || parsed?.evidence_candidate || null,
+    known_fields: (parsed?.knownFields || parsed?.known_fields || []) as KnownFieldDimension[],
+    checkin_consent: (parsed?.checkinConsent || parsed?.checkin_consent || 'idle') as CheckinConsentState,
+    suggested_intervention: (parsed?.suggestedIntervention || parsed?.suggested_intervention || 'reflection') as SuggestedIntervention,
+  };
+
+  return { assistant_message: assistantMsg, turn: structuredTurn };
+}
+
+export async function streamChatResponse(params: StreamChatResponseParams): Promise<void> {
+  const { messages, safety, requestId, onAssistantToken, onAssistantMeta, onDone } = params;
+
   try {
-    const chatHistory: ChatMessage[] = messages.map((m, idx) => ({
-      id: `msg-${idx}`,
-      role: m.role === 'user' ? 'user' : 'ai',
-      text: m.content,
+    const startTime = Date.now();
+    const lastMsg = messages[messages.length - 1];
+    const latestUserMsg = lastMsg?.content || '';
+    const apiKey = config.geminiApiKey || '';
+    const isKeyPresent = Boolean(apiKey.trim().length > 0);
+    const primaryModel = config.aiModel || 'gemini-3.5-flash';
+
+    // Priority 0: Crisis Triage Gate (Immediate safety response)
+    if (safety.mode === 'protect' || isCrisisMessage(latestUserMsg)) {
+      const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+      const fullCrisisTurn: ChatEngineTurnResponse = {
+        assistant_message: crisisText,
+        safety_state: 'crisis',
+        mode: 'HOLD',
+        capacity: 'low',
+        user_intent: 'vent',
+        stage: 1,
+        intensity: 10,
+        readiness: 'story',
+        recommended_exercise: null,
+        quick_replies: ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
+        candidate_loop: null,
+        evidence_candidate: null,
+        suggested_intervention: 'ground',
+      };
+
+      onAssistantToken(crisisText);
+      onAssistantMeta(fullCrisisTurn);
+      onDone(crisisText, 'gemini', fullCrisisTurn);
+      return;
+    }
+
+    if (!isKeyPresent) {
+      throw new Error('GEMINI_API_KEY is not configured in .env file.');
+    }
+
+    // Active candidate models with verified live quota
+    const modelCandidates = [
+      primaryModel,
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite-preview',
+    ];
+    const uniqueCandidates = Array.from(new Set(modelCandidates));
+
+    // Keep only recent non-empty messages
+    const validMessages = messages.filter((m) => m.content && m.content.trim());
+    const recentMessages = validMessages.slice(-12);
+    const firstUserIdx = recentMessages.findIndex((m) => m.role === 'user');
+    const sliced = firstUserIdx >= 0 ? recentMessages.slice(firstUserIdx) : recentMessages;
+
+    const contents = sliced.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
     }));
 
-    const checkinState = sessionState?.checkinState || { step: 'idle' };
-    const cbtStage = sessionState?.cbtStage || 1;
+    let lastError: any = null;
 
-    const dynamicRes = generateDynamicCBTResponse(chatHistory, checkinState, cbtStage);
-    const fallbackText = dynamicRes.text;
-
-    console.log(`[RESPONSE GENERATED - SOURCE: FALLBACK]:\n${fallbackText}\n`);
-
-    let currentIdx = 0;
-    const chunkSize = 4;
-    const interval = setInterval(() => {
-      if (currentIdx < fallbackText.length) {
-        onChunk(fallbackText.slice(currentIdx, currentIdx + chunkSize));
-        currentIdx += chunkSize;
-      } else {
-        clearInterval(interval);
-        onDone(
-          fallbackText,
-          'fallback',
-          dynamicRes.options,
-          dynamicRes.checkinData,
-          dynamicRes.exerciseCard
+    for (const modelCandidate of uniqueCandidates) {
+      try {
+        console.log(
+          `[Trace] reqId=${requestId ?? '1'} count=${messages.length} lastRole=${lastMsg?.role} preview="${latestUserMsg.slice(0, 50)}" model=${modelCandidate} starting...`
         );
+        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+        const response = await ai.models.generateContent({
+          model: modelCandidate,
+          contents,
+          config: {
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
+            temperature: 0.5,
+            maxOutputTokens: 1000,
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const rawText = response.text || '';
+        if (rawText.trim()) {
+          const { assistant_message, turn } = sanitizeDeungSatiResponse(rawText);
+          const latencyMs = Date.now() - startTime;
+
+          console.log(
+            `[Trace] reqId=${requestId ?? '1'} model=${modelCandidate} status=200 parseSuccess=true assistantPresent=${Boolean(
+              assistant_message
+            )} latency=${latencyMs}ms`
+          );
+
+          // Stream natural token for the user bubble
+          onAssistantToken(assistant_message);
+          // Send internal metadata separately
+          onAssistantMeta(turn);
+          // Complete the turn
+          onDone(assistant_message, 'gemini', turn);
+          return;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || err?.statusCode || '';
+        console.warn(`[AI Provider] Model ${modelCandidate} call failed (${status}). Trying next candidate...`);
       }
-    }, 12);
-  } catch (err) {
-    onError(err instanceof Error ? err : new Error(String(err)));
+    }
+
+    throw lastError || new Error('All Gemini model candidates failed to respond.');
+  } catch (err: any) {
+    console.error('[AI Provider Error]:', err?.status || err?.code, err?.message);
+    const fallbackErrorText = 'เมื่อกี้การเชื่อมต่อกับ AI ขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะเธอ 🌱';
+    const errorTurn: ChatEngineTurnResponse = {
+      assistant_message: fallbackErrorText,
+      safety_state: 'normal',
+      mode: 'HOLD',
+      capacity: 'medium',
+      user_intent: 'vent',
+      stage: 1,
+      intensity: 5,
+      readiness: 'story',
+      recommended_exercise: null,
+      quick_replies: ['ลองส่งใหม่อีกครั้ง'],
+      candidate_loop: null,
+      evidence_candidate: null,
+      suggested_intervention: 'none',
+    };
+    onAssistantToken(fallbackErrorText);
+    onAssistantMeta(errorTurn);
+    onDone(fallbackErrorText, 'error', errorTurn);
   }
 }

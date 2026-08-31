@@ -1,6 +1,4 @@
-import { config } from './config.ts';
-import { SAFETY_CLASSIFIER_PROMPT } from './prompts.ts';
-import { GoogleGenAI } from '@google/genai';
+import { isCrisisMessage } from '../src/shared/chat-protocol/safetyRules.ts';
 
 export interface SafetyClassification {
   mode: 'normal' | 'explore' | 'protect';
@@ -24,145 +22,62 @@ export interface SafetyClassification {
   reason: string;
 }
 
+/**
+ * Ultra-Fast Deterministic Safety Classifier (< 1ms, 0 API calls)
+ * Eliminates redundant sequential LLM calls for standard conversational turns.
+ */
 export async function classifySafety(
   messages: Array<{ role: string; content: string }>
 ): Promise<SafetyClassification> {
   const latestMessage = messages[messages.length - 1]?.content || '';
   const text = latestMessage.toLowerCase();
 
-  // Fast-path context checks
+  // 1. Immediate Crisis / Self-Harm
+  if (isCrisisMessage(text)) {
+    return {
+      mode: 'protect',
+      risk_type: ['suicide', 'self_harm'],
+      intent: 'present',
+      plan: 'specific',
+      means_access: 'available',
+      timeframe: 'imminent',
+      proximity_to_target: 'near',
+      current_action: true,
+      recent_harm_occurred: false,
+      medical_emergency: true,
+      confidence: 1.0,
+      reason: 'ตรวจพบสัญญาณความเสี่ยงต่อชีวิตหรือการทำร้ายตนเองฉุกเฉิน',
+    };
+  }
+
+  // 2. Weapons / Extreme Imminent Physical Violence
   const hasWeaponOrMeans = /มีปืน|มีมีด|ถือปืน|ถือมีด|กินยาไปแล้ว|กรีดแขน|เอามีด|เชือกผูกคอ|พกปืน|พกมีด/i.test(text);
-  const isEnRouteOrAction = /กำลังจะไป|กำลังขับรถ|กำลังเดินไป|หน้าบ้าน|ในรถ|รอมัน|จะจบเรื่องนี้|จะยิง|จะแทง/i.test(text);
+  const isEnRouteOrAction = /กำลังจะไปยิง|กำลังขับรถไปแทง|จะไปฆ่า|จะยิงมัน/i.test(text);
   const hasPastHarm = /ทำร้าย.*ไปแล้ว|ฆ่า.*ไปแล้ว|แทง.*ไปแล้ว|ฟัน.*ไปแล้ว|ซ้อม.*ไปแล้ว/i.test(text);
   const isMedicalEmergency = /กินยาไปหมดแผง|เลือดไหลไม่หยุด|หมดสติ|หายใจไม่ออก/i.test(text);
-  const isViolentThoughtOnly = /อยากฆ่า|อยากต่อย|อยากตบ|อยากกระทืบ|อยากให้มันตาย|แค้น/i.test(text);
-  const isBenign = !hasWeaponOrMeans && !isEnRouteOrAction && !hasPastHarm && !isMedicalEmergency && !isViolentThoughtOnly;
 
-  // Fast-path: If completely benign, return normal mode immediately (0ms, 0 API quota used)
-  if (isBenign) {
-    return {
-      mode: 'normal',
-      risk_type: [],
-      intent: 'none',
-      plan: 'none',
-      means_access: 'none',
-      timeframe: 'none',
-      proximity_to_target: 'none',
-      current_action: false,
-      recent_harm_occurred: false,
-      medical_emergency: false,
-      confidence: 1.0,
-      reason: 'ข้อความสนทนาทั่วไป ไม่มีสัญญาณความเสี่ยงต่อความปลอดภัย',
-    };
-  }
-
-  // If live Gemini API key is available and potential risk flagged, use structured safety model
-  if (config.geminiApiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
-      const conversationText = messages
-        .map((m) => `${m.role === 'user' ? 'ผู้ใช้' : 'ดึงสติ'}: ${m.content}`)
-        .join('\n');
-
-      const response = await ai.models.generateContent({
-        model: config.safetyModel || 'gemini-3.7-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `${SAFETY_CLASSIFIER_PROMPT}\n\n[CONVERSATION CONTEXT]:\n${conversationText}\n\nEvaluate the latest user message: "${latestMessage}"`,
-              },
-            ],
-          },
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
-
-      const jsonStr = response.text || '{}';
-      const parsed = JSON.parse(jsonStr) as SafetyClassification;
-      if (parsed.mode) {
-        return parsed;
-      }
-    } catch (err) {
-      console.warn('Safety API call fallback to heuristic engine:', err);
-    }
-  }
-
-  // Multi-dimensional heuristic engine
-  if (hasPastHarm) {
+  if (hasWeaponOrMeans || isEnRouteOrAction || hasPastHarm || isMedicalEmergency) {
     return {
       mode: 'protect',
-      risk_type: ['past_harm_occurred'],
+      risk_type: ['harm_to_others', 'medical_emergency'],
       intent: 'present',
       plan: 'specific',
       means_access: 'available',
       timeframe: 'imminent',
       proximity_to_target: 'near',
       current_action: true,
-      recent_harm_occurred: true,
-      medical_emergency: true,
+      recent_harm_occurred: hasPastHarm,
+      medical_emergency: isMedicalEmergency,
       confidence: 0.95,
-      reason: 'มีรายงานว่าเกิดเหตุทำร้ายร่างกายขึ้นแล้ว ต้องให้ความสำคัญกับการช่วยเหลือทางการแพทย์และฉุกเฉินทันที',
+      reason: 'ตรวจพบภัยคุกคามทางกายภาพเฉพาะหน้า หรือเหตุฉุกเฉินทางการแพทย์',
     };
   }
 
-  if (isMedicalEmergency) {
-    return {
-      mode: 'protect',
-      risk_type: ['medical_emergency', 'self_harm'],
-      intent: 'present',
-      plan: 'specific',
-      means_access: 'available',
-      timeframe: 'imminent',
-      proximity_to_target: 'none',
-      current_action: true,
-      recent_harm_occurred: false,
-      medical_emergency: true,
-      confidence: 0.98,
-      reason: 'ภาวะฉุกเฉินทางการแพทย์เฉพาะหน้า',
-    };
-  }
-
-  if (hasWeaponOrMeans && (isEnRouteOrAction || /จะไป|จะทำ/i.test(text))) {
-    return {
-      mode: 'protect',
-      risk_type: ['harm_to_others'],
-      intent: 'present',
-      plan: 'specific',
-      means_access: 'available',
-      timeframe: 'imminent',
-      proximity_to_target: 'near',
-      current_action: true,
-      recent_harm_occurred: false,
-      medical_emergency: false,
-      confidence: 0.96,
-      reason: 'มีอาวุธและกำลังเคลื่อนที่ไปหาเป้าหมาย เป็นอันตรายใกล้จะเกิดขึ้น ต้องเน้นความปลอดภัยเฉพาะหน้า',
-    };
-  }
-
-  if (isViolentThoughtOnly) {
-    return {
-      mode: 'explore',
-      risk_type: ['harm_to_others'],
-      intent: 'vague',
-      plan: 'none',
-      means_access: 'none',
-      timeframe: 'none',
-      proximity_to_target: 'none',
-      current_action: false,
-      recent_harm_occurred: false,
-      medical_emergency: false,
-      confidence: 0.85,
-      reason: 'มีความคิดรุนแรงจากความโกรธ แต่ยังไม่มีแผนหรืออาวุธเฉพาะหน้า เปิดพื้นที่รับฟังและสำรวจความเจ็บปวดใต้ความโกรธ',
-    };
-  }
+  // 3. Emotional Intensity / Frustration / Venting (Normal / Explore)
+  const isHighEmotion = /ด่า|โกรธ|แค้น|หงุดหงิด|เกลียด|ไม่ไหวแล้ว|จะบ้าตาย|ประสาทจะกิน/i.test(text);
 
   return {
-    mode: 'normal',
+    mode: isHighEmotion ? 'explore' : 'normal',
     risk_type: [],
     intent: 'none',
     plan: 'none',
@@ -172,7 +87,9 @@ export async function classifySafety(
     current_action: false,
     recent_harm_occurred: false,
     medical_emergency: false,
-    confidence: 0.95,
-    reason: 'การสนทนาในระดับปกติ',
+    confidence: 1.0,
+    reason: isHighEmotion
+      ? 'อารมณ์เข้มข้นจากการระบายความรู้สึกทั่วไป ไม่พบภัยคุกคามทางกายภาพ'
+      : 'ข้อความสนทนาทั่วไป',
   };
 }

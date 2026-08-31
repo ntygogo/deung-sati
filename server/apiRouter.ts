@@ -7,6 +7,7 @@ import { simulateConsequence } from './consequenceSimulator.ts';
 import { analyzeEmpathyLens } from './empathyLens.ts';
 import { filterCommunicationMessage } from './communicationFilter.ts';
 import { sessionStore } from './sessionStore.ts';
+import type { ChatEngineTurnResponse } from '../src/shared/chat-protocol/index.ts';
 
 export const apiApp = express();
 
@@ -53,21 +54,27 @@ apiApp.get('/session/:sessionId', (req: Request, res: Response) => {
   });
 });
 
-// 4. Pure Gemini Streaming Chat endpoint (SSE)
+// 4. Pure Gemini Streaming Chat endpoint (SSE) with Structured Turn Contract
 apiApp.post('/chat/stream', async (req: Request, res: Response) => {
   try {
-    const { messages, sessionId = 'default-session', sessionState } = req.body;
+    const { messages, sessionId = 'default-session', sessionState, requestId } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required' });
       return;
     }
 
-    const latestUserMsg = messages[messages.length - 1]?.content || '';
+    const lastMsg = messages[messages.length - 1];
+    const latestUserMsg = lastMsg?.content || '';
+
+    // Safe debugging log (no secrets)
+    console.log(
+      `[Chat API] reqId=${requestId ?? 'none'}, count=${messages.length}, lastRole=${lastMsg?.role}, preview="${latestUserMsg.slice(0, 50)}"`
+    );
 
     // Record user message in session
     sessionStore.recordUserTurn(sessionId, latestUserMsg);
 
-    // Run safety classification gate
+    // Run safety classification gate (0ms fast path)
     const safety = await classifySafety(messages);
 
     // Setup Server-Sent Events headers
@@ -86,37 +93,67 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
       messages,
       safety,
       sessionState,
-      onChunk: (chunkText: string) => {
-        res.write(`event: chunk\ndata: ${JSON.stringify({ text: chunkText })}\n\n`);
+      requestId,
+      onAssistantToken: (chunkText: string) => {
+        if (!res.writableEnded) {
+          res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: chunkText, requestId })}\n\n`);
+          // Also emit legacy chunk event for backward compatibility
+          res.write(`event: chunk\ndata: ${JSON.stringify({ text: chunkText, requestId })}\n\n`);
+        }
+      },
+      onAssistantMeta: (meta: ChatEngineTurnResponse) => {
+        if (!res.writableEnded) {
+          res.write(
+            `event: assistant_meta\ndata: ${JSON.stringify({
+              requestId,
+              safety_state: meta.safety_state,
+              mode: meta.mode,
+              capacity: meta.capacity,
+              user_intent: meta.user_intent,
+              readiness: meta.readiness,
+              recommended_exercise: meta.recommended_exercise,
+              quick_replies: meta.quick_replies,
+            })}\n\n`
+          );
+        }
       },
       onDone: (
         fullText: string,
-        source: 'gemini' | 'fallback',
-        options?: string[],
-        checkinData?: any,
-        exerciseCard?: any
+        source: 'gemini' | 'error',
+        structuredTurn: ChatEngineTurnResponse
       ) => {
         // Record assistant turn in session
         sessionStore.recordAssistantTurn(sessionId, fullText);
-        res.write(
-          `event: done\ndata: ${JSON.stringify({
-            fullText,
-            source,
-            options,
-            checkinData,
-            exerciseCard,
-          })}\n\n`
-        );
-        res.end();
+        if (!res.writableEnded) {
+          res.write(
+            `event: done\ndata: ${JSON.stringify({
+              requestId,
+              fullText,
+              source,
+              structuredTurn,
+              options: structuredTurn.quick_replies,
+              recommended_exercise: structuredTurn.recommended_exercise,
+              mode: structuredTurn.mode,
+              safety_state: structuredTurn.safety_state,
+              capacity: structuredTurn.capacity,
+              user_intent: structuredTurn.user_intent,
+              readiness: structuredTurn.readiness,
+            })}\n\n`
+          );
+          res.end();
+        }
       },
       onError: (err: Error) => {
         console.error('Chat stream error:', err);
-        res.write(
-          `event: error\ndata: ${JSON.stringify({
-            message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง',
-          })}\n\n`
-        );
-        res.end();
+        if (!res.writableEnded) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              requestId,
+              message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง',
+            })}\n\n`
+          );
+          res.end();
+        }
       },
     });
   } catch (err) {
@@ -129,7 +166,7 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
   }
 });
 
-// 5. Structured Loop Extraction endpoint (Secondary observation / Loop Map)
+// 5. Structured Loop Extraction endpoint
 apiApp.post('/extract-loop', async (req: Request, res: Response) => {
   try {
     const { messages } = req.body;
@@ -137,68 +174,58 @@ apiApp.post('/extract-loop', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Messages array is required' });
       return;
     }
-
-    const loop = await extractLoop(messages);
-    res.json(loop);
+    const result = await extractLoop(messages);
+    res.json(result);
   } catch (err) {
     console.error('Extract loop error:', err);
     res.status(500).json({ error: 'Failed to extract loop' });
   }
 });
 
-// 6. Consequence Simulation endpoint (Gemini AI Powered Worst-Case Simulator)
+// 6. Consequence Simulator endpoint
 apiApp.post('/simulate-consequence', async (req: Request, res: Response) => {
   try {
-    const { action } = req.body;
-    if (!action || typeof action !== 'string') {
-      res.status(400).json({ error: 'Action string is required' });
+    const { actionDescription } = req.body;
+    if (!actionDescription) {
+      res.status(400).json({ error: 'actionDescription is required' });
       return;
     }
-
-    const result = await simulateConsequence(action);
+    const result = await simulateConsequence(actionDescription);
     res.json(result);
   } catch (err) {
-    console.error('Consequence simulation error:', err);
+    console.error('Simulate consequence error:', err);
     res.status(500).json({ error: 'Failed to simulate consequence' });
   }
 });
 
-// 7. Empathy Lens endpoint (Gemini AI Powered Reverse Perspective Decrypter)
-apiApp.post('/simulate-empathy-lens', async (req: Request, res: Response) => {
+// 7. Perspective / Empathy Lens endpoint (4-Quadrant)
+apiApp.post('/analyze-empathy', async (req: Request, res: Response) => {
   try {
-    const { relationshipType = 'แฟน / คนรัก', situation, userReaction } = req.body;
-    if (!situation || typeof situation !== 'string') {
-      res.status(400).json({ error: 'Situation string is required' });
+    const { rawConflictText } = req.body;
+    if (!rawConflictText) {
+      res.status(400).json({ error: 'rawConflictText is required' });
       return;
     }
-
-    const result = await analyzeEmpathyLens({
-      relationshipType,
-      situation,
-      userReaction,
-    });
+    const result = await analyzeEmpathyLens(rawConflictText);
     res.json(result);
   } catch (err) {
-    console.error('Empathy Lens simulation error:', err);
-    res.status(500).json({ error: 'Failed to simulate empathy lens' });
+    console.error('Analyze empathy error:', err);
+    res.status(500).json({ error: 'Failed to analyze empathy' });
   }
 });
 
-// 8. Communication Filter endpoint (Gemini AI Powered NVC Message Refiner)
+// 8. Communication Filter / Before Speak endpoint (NVC 4-Style)
 apiApp.post('/filter-communication', async (req: Request, res: Response) => {
   try {
-    const { message } = req.body;
-    if (!message || typeof message !== 'string') {
-      res.status(400).json({ error: 'Message string is required' });
+    const { rawMessage } = req.body;
+    if (!rawMessage) {
+      res.status(400).json({ error: 'rawMessage is required' });
       return;
     }
-
-    const result = await filterCommunicationMessage(message);
+    const result = await filterCommunicationMessage(rawMessage);
     res.json(result);
   } catch (err) {
-    console.error('Communication Filter error:', err);
-    res.status(500).json({ error: 'Failed to filter message' });
+    console.error('Filter communication error:', err);
+    res.status(500).json({ error: 'Failed to filter communication' });
   }
 });
-
-
