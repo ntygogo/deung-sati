@@ -1,4 +1,4 @@
-import { config } from './config';
+import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
 import {
   DUENG_SATI_UNIFIED_MASTER_PROMPT,
@@ -13,8 +13,8 @@ import {
   type CheckinConsentState,
   type SuggestedIntervention,
   type CbtConversationStage,
-} from '../src/shared/chat-protocol';
-import type { SafetyClassification } from './safetyClassifier';
+} from '../src/shared/chat-protocol/index.js';
+import type { SafetyClassification } from './safetyClassifier.js';
 
 export interface StreamChatResponseParams {
   messages: Array<{ role: string; content: string }>;

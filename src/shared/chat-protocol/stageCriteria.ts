@@ -8,10 +8,10 @@ import type {
   ChatMessage,
   ChatEngineTurnResponse,
   CbtConversationStage,
-} from './conversationTypes';
-import type { UserConversationIntent } from './conversationIntents';
-import { isCrisisMessage } from './safetyRules';
-import { evaluateCheckinConsent } from './consentRules';
+} from './conversationTypes.js';
+import type { UserConversationIntent } from './conversationIntents.js';
+import { isCrisisMessage } from './safetyRules.js';
+import { evaluateCheckinConsent } from './consentRules.js';
 
 export interface StageDefinition {
   stage: CbtConversationStage;

@@ -1,3 +1,3 @@
-import { apiApp } from '../server/apiRouter';
+import { apiApp } from '../server/apiRouter.js';
 
 export default apiApp;

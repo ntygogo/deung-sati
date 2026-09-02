@@ -14,7 +14,7 @@ import {
   type CheckinConsentState,
   type SuggestedIntervention,
   type CbtConversationStage,
-} from '../../src/shared/chat-protocol';
+} from '../../src/shared/chat-protocol/index.js';
 
 function sanitizeResponse(raw: string): {
   assistant_message: string;

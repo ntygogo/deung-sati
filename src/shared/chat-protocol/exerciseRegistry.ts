@@ -1,4 +1,4 @@
-import type { ExerciseId } from './conversationTypes';
+import type { ExerciseId } from './conversationTypes.js';
 
 export interface ExerciseDefinition {
   id: ExerciseId;

@@ -1,13 +1,13 @@
 import express from 'express';
 import type { Request, Response } from 'express';
-import { classifySafety } from './safetyClassifier';
-import { streamChatResponse } from './aiProvider';
-import { extractLoop } from './loopExtractor';
-import { simulateConsequence } from './consequenceSimulator';
-import { analyzeEmpathyLens } from './empathyLens';
-import { filterCommunicationMessage } from './communicationFilter';
-import { sessionStore } from './sessionStore';
-import type { ChatEngineTurnResponse } from '../src/shared/chat-protocol';
+import { classifySafety } from './safetyClassifier.js';
+import { streamChatResponse } from './aiProvider.js';
+import { extractLoop } from './loopExtractor.js';
+import { simulateConsequence } from './consequenceSimulator.js';
+import { analyzeEmpathyLens } from './empathyLens.js';
+import { filterCommunicationMessage } from './communicationFilter.js';
+import { sessionStore } from './sessionStore.js';
+import type { ChatEngineTurnResponse } from '../src/shared/chat-protocol/index.js';
 
 export const apiApp = express();
 

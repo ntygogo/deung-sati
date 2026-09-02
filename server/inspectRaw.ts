@@ -1,6 +1,6 @@
-import { config } from './config';
+import { config } from './config.ts';
 import { GoogleGenAI } from '@google/genai';
-import { DUENG_SATI_UNIFIED_MASTER_PROMPT } from '../src/shared/chat-protocol';
+import { DUENG_SATI_UNIFIED_MASTER_PROMPT } from '../src/shared/chat-protocol/masterPrompt.ts';
 
 async function test() {
   const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });

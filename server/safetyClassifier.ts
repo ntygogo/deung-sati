@@ -1,4 +1,4 @@
-import { isCrisisMessage } from '../src/shared/chat-protocol';
+import { isCrisisMessage } from '../src/shared/chat-protocol/index.js';
 
 export interface SafetyClassification {
   mode: 'normal' | 'explore' | 'protect';
