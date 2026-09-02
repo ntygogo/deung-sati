@@ -21,6 +21,7 @@ export interface StreamChatResponseParams {
   safety: SafetyClassification;
   sessionState?: any;
   requestId?: number;
+  exerciseResult?: any;
   onAssistantToken: (token: string) => void;
   onAssistantMeta: (meta: ChatEngineTurnResponse) => void;
   onDone: (
@@ -134,7 +135,7 @@ export function sanitizeDeungSatiResponse(raw: string): {
 }
 
 export async function streamChatResponse(params: StreamChatResponseParams): Promise<void> {
-  const { messages, safety, requestId, onAssistantToken, onAssistantMeta, onDone } = params;
+  const { messages, safety, requestId, exerciseResult, onAssistantToken, onAssistantMeta, onDone } = params;
 
   try {
     const startTime = Date.now();
@@ -148,7 +149,10 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
     // Priority 0: Crisis Triage Gate (Immediate safety response)
     if (safety.mode === 'protect' || isCrisisMessage(latestUserMsg)) {
-      const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+      const isDomesticViolence = safety.risk_type?.includes('domestic_violence');
+      const crisisText = isDomesticViolence
+        ? `ความปลอดภัยของเธอสำคัญที่สุดเลยนะ... ตอนนี้เธอปลอดภัยดีไหม?\n\nถ้าทำได้โดยไม่เพิ่มความเสี่ยง ลองไปอยู่ในจุดที่ปลอดภัยหรือใกล้คนที่ช่วยได้ หากตกอยู่ในอันตรายหรือรู้สึกไม่ปลอดภัย ขอให้โทรแจ้งสายด่วนช่วยเหลือสังคม 1300 (พม. 24 ชม.) หรือโทร 191 ได้ทันทีนะ เราอยู่ตรงนี้พร้อมช่วยคิดหาความปลอดภัยไปด้วยกัน 🌿`
+        : `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
       const fullCrisisTurn: ChatEngineTurnResponse = {
         assistant_message: crisisText,
         safety_state: 'crisis',
@@ -159,7 +163,9 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
         intensity: 10,
         readiness: 'story',
         recommended_exercise: null,
-        quick_replies: ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
+        quick_replies: isDomesticViolence
+          ? ['1300 ศูนย์ช่วยเหลือสังคม', '191 แจ้งเหตุด่วน', 'ตอนนี้ปลอดภัยแล้ว']
+          : ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
         candidate_loop: null,
         evidence_candidate: null,
         suggested_intervention: 'ground',
@@ -195,7 +201,53 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
       parts: [{ text: m.content }],
     }));
 
+    if (exerciseResult) {
+      const exId = exerciseResult.exercise_id || exerciseResult.exerciseId || 'exercise';
+      const outcome = exerciseResult.result?.outcome || exerciseResult.outcome || 'completed';
+      const inputs = exerciseResult.result?.user_inputs || exerciseResult.user_inputs || {};
+      const timing = exerciseResult.timing || 'immediate';
+
+      let inputDetails = '';
+      const inputEntries = Object.entries(inputs);
+      if (inputEntries.length > 0) {
+        inputDetails = '\nข้อมูลที่ผู้ใช้บันทึกไว้ในเครื่องมือ:';
+        for (const [k, v] of inputEntries) {
+          inputDetails += `\n- ${k}: "${v}"`;
+        }
+      }
+
+      let contextStr = '';
+      if (timing === 'immediate') {
+        contextStr = `[INTERNAL EXERCISE CONTEXT — ผู้ใช้เพิ่งทำแบบฝึกหัดเสร็จสิ้นในเทิร์นนี้]
+ข้อมูลด้านล่างคือคำตอบที่ผู้ใช้บันทึกไว้ในเครื่องมือ ไม่ใช่ประโยคที่ผู้ใช้พิมพ์คุยเอง
+ข้อกำหนดสำคัญสำหรับการตอบ:
+1. สานต่อบทสนทนาจากสิ่งที่ค้นพบโดยตรง ห้ามชวนทำแบบฝึกหัดซ้ำ หรือถามซ้ำข้อมูลที่ผู้ใช้ให้มาแล้ว
+2. ต้องสะท้อนรายละเอียดรูปธรรมอย่างน้อย 1 อย่างจากสิ่งที่ผู้ใช้บันทึกจริง (เช่น เรื่องที่เกิดขึ้น หรือความคิดที่ใจแต่งเติม)
+3. ห้ามตอบแบบกว้างๆ ลอยๆ เช่น "พอแยก Fact ออกมาแล้ว..." โดยไม่เชื่อมโยงกับสิ่งที่ผู้ใช้บันทึก
+4. หากมีส่วนที่ไม่รู้แน่ชัด (Unknown): ต้องคงสภาพความไม่รู้ไว้ว่ายังไม่มีข้อมูลพอจะสรุป ห้ามคาดเดาหรือแต่งเรื่องอธิบายเหตุผลแทนเด็ดขาด
+5. สื่อสารอย่างอ่อนโยน เป็นธรรมชาติ 1–3 ประโยค และถามได้ไม่เกิน 1 คำถามต่อเทิร์น ห้ามตอบเป็นหัวข้อแบบฟอร์มการบ้าน
+
+รายละเอียดแบบฝึกหัด:
+- แบบฝึกหัด: ${exId}
+- ผลลัพธ์หลังฝึก: ${outcome}${inputDetails}`;
+      } else {
+        contextStr = `[INTERNAL EXERCISE CONTEXT — บริบทอ้างอิงจากแบบฝึกหัดก่อนหน้านี้]
+ผู้ใช้เคยทำแบบฝึกหัด ${exId} ในบทสนทนานี้ และบันทึกข้อมูลไว้ดังนี้:${inputDetails}
+(คำแนะนำ: ใช้เป็นข้อมูลเบื้องหลังเมื่อเกี่ยวข้องเท่านั้น ห้ามถามซ้ำในสิ่งที่ผู้ใช้เคยตอบไว้แล้ว และไม่ต้องยัดเยียดกล่าวถึงแบบฝึกหัดนี้หากไม่สอดคล้องกับข้อความล่าสุด)`;
+      }
+
+      contents.push({
+        role: 'user',
+        parts: [{ text: contextStr }],
+      });
+    }
+
     let lastError: any = null;
+
+    const generationTemperature =
+      exerciseResult && (!exerciseResult.timing || exerciseResult.timing === 'immediate')
+        ? 0.2
+        : 0.5;
 
     for (const modelCandidate of uniqueCandidates) {
       try {
@@ -206,8 +258,11 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           contents,
           config: {
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
-            temperature: 0.5,
+            temperature: generationTemperature,
             maxOutputTokens: 1000,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
             responseMimeType: 'application/json',
           },
         });

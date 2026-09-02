@@ -1,17 +1,38 @@
 import React, { useState } from 'react';
-import { getGuidedExercise, type GuidedExerciseDefinition } from '../shared/chat-protocol';
-
-export interface ExerciseResultPayload {
-  exerciseId: string;
-  status: 'completed' | 'skipped' | 'stopped';
-  outcome: 'better' | 'same' | 'worse' | 'unknown';
-  summaryText?: string;
-}
+import {
+  getGuidedExercise,
+  type GuidedExerciseDefinition,
+  type ExerciseResultPayload,
+  type ExerciseId,
+} from '../shared/chat-protocol';
 
 interface GuidedExerciseCardProps {
   exerciseId?: string;
   onComplete: (result: ExerciseResultPayload) => void;
   onCancel?: () => void;
+}
+
+function buildExerciseSummaryText(
+  exerciseTitle: string,
+  outcome: 'better' | 'same' | 'worse' | 'unknown',
+  userInputs: Record<string, string>
+): string {
+  const outcomeTextMap = {
+    better: 'รู้สึกเบาลงและมีสติมากขึ้น',
+    same: 'รู้สึกยังเหมือนเดิม',
+    worse: 'ยังมีความกังวล/ค้างคาใจอยู่',
+    unknown: 'เสร็จสิ้นการฝึก',
+  };
+
+  let summary = `[ผลลัพธ์แบบฝึกหัด: ${exerciseTitle}]\nผลลัพธ์หลังฝึก: ${outcomeTextMap[outcome]}`;
+  const entries = Object.entries(userInputs);
+  if (entries.length > 0) {
+    summary += '\nสิ่งที่บันทึกไว้:';
+    for (const [key, val] of entries) {
+      summary += `\n- ${key}: "${val}"`;
+    }
+  }
+  return summary;
 }
 
 export const GuidedExerciseCard: React.FC<GuidedExerciseCardProps> = ({
@@ -24,12 +45,20 @@ export const GuidedExerciseCard: React.FC<GuidedExerciseCardProps> = ({
   const [isCompleted, setIsCompleted] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [selectedChoice, setSelectedChoice] = useState('');
+  const [userInputs, setUserInputs] = useState<Record<string, string>>({});
 
   const currentStep = exercise.steps[currentStepIdx];
   const totalSteps = exercise.steps.length;
   const progressPercent = Math.round(((currentStepIdx + 1) / totalSteps) * 100);
 
   const handleNextStep = () => {
+    const val = textInput.trim() || selectedChoice;
+    if (val) {
+      setUserInputs((prev) => ({
+        ...prev,
+        [currentStep.title || `step_${currentStepIdx + 1}`]: val,
+      }));
+    }
     if (currentStepIdx < totalSteps - 1) {
       setCurrentStepIdx((prev) => prev + 1);
       setTextInput('');
@@ -52,25 +81,34 @@ export const GuidedExerciseCard: React.FC<GuidedExerciseCardProps> = ({
       onCancel();
     } else {
       onComplete({
-        exerciseId: exercise.id,
-        status: 'stopped',
-        outcome: 'unknown',
-        summaryText: 'หยุดทำแบบฝึกหัดกลางคัน',
+        type: 'exercise_result',
+        exercise_id: exercise.id as ExerciseId,
+        result: {
+          completed: false,
+          outcome: 'unknown',
+          user_inputs: userInputs,
+        },
+        summary_text: buildExerciseSummaryText(exercise.title, 'unknown', userInputs),
       });
     }
   };
 
   const handleSelectOutcome = (outcome: 'better' | 'same' | 'worse') => {
-    const outcomeTextMap = {
-      better: 'ทำเสร็จแล้ว รู้สึกเบาลงและมีสติมากขึ้น',
-      same: 'ทำเสร็จแล้ว รู้สึกยังเหมือนเดิม',
-      worse: 'ทำเสร็จแล้ว ยังมีความกังวล/ค้างคาใจอยู่',
-    };
+    const finalInputs = { ...userInputs };
+    const currentVal = textInput.trim() || selectedChoice;
+    if (currentVal && !finalInputs[currentStep.title || `step_${currentStepIdx + 1}`]) {
+      finalInputs[currentStep.title || `step_${currentStepIdx + 1}`] = currentVal;
+    }
+
     onComplete({
-      exerciseId: exercise.id,
-      status: 'completed',
-      outcome,
-      summaryText: outcomeTextMap[outcome],
+      type: 'exercise_result',
+      exercise_id: exercise.id as ExerciseId,
+      result: {
+        completed: true,
+        outcome,
+        user_inputs: finalInputs,
+      },
+      summary_text: buildExerciseSummaryText(exercise.title, outcome, finalInputs),
     });
   };
 

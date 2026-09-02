@@ -117,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, requestId } = req.body || {};
+  const { messages, requestId, exerciseResult } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
@@ -135,9 +135,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userMsgs = messages.filter((m: any) => m.role === 'user');
   const latestUser = (userMsgs[userMsgs.length - 1]?.content || userMsgs[userMsgs.length - 1]?.text || '').trim();
 
+  const isDomesticViolenceOrThreat =
+    /(พ่อ|แม่|แฟน|สามี|ภรรยา|คนในบ้าน|ครอบครัว).*(ตี|ซ้อม|ทำร้าย|ขู่|ทุบ)|ขู่กู|ขู่จะตี|ขู่จะซ้อม|ขู่จะทำร้าย|กลัวเขาทำร้าย|ไม่ปลอดภัยในบ้าน|จะโดนตี|จะโดนซ้อม/i.test(
+      latestUser
+    );
+
   // Priority 0: Safety & Crisis Gate
-  if (isCrisisMessage(latestUser)) {
-    const crisisText = `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารม้นท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+  if (isCrisisMessage(latestUser) || isDomesticViolenceOrThreat) {
+    const isDomesticViolence = isDomesticViolenceOrThreat;
+    const crisisText = isDomesticViolence
+      ? `ความปลอดภัยของเธอสำคัญที่สุดเลยนะ... ตอนนี้เธอปลอดภัยดีไหม?\n\nถ้าทำได้โดยไม่เพิ่มความเสี่ยง ลองไปอยู่ในจุดที่ปลอดภัยหรือใกล้คนที่ช่วยได้ หากตกอยู่ในอันตรายหรือรู้สึกไม่ปลอดภัย ขอให้โทรแจ้งสายด่วนช่วยเหลือสังคม 1300 (พม. 24 ชม.) หรือโทร 191 ได้ทันทีนะ เราอยู่ตรงนี้พร้อมช่วยคิดหาความปลอดภัยไปด้วยกัน 🌿`
+      : `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
     const crisisTurn: ChatEngineTurnResponse = {
       assistant_message: crisisText,
       safety_state: 'crisis',
@@ -148,11 +156,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       intensity: 10,
       readiness: 'story',
       recommended_exercise: null,
-      quick_replies: ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
+      quick_replies: isDomesticViolence
+        ? ['1300 ศูนย์ช่วยเหลือสังคม', '191 แจ้งเหตุด่วน', 'ตอนนี้ปลอดภัยแล้ว']
+        : ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
       suggested_intervention: 'ground',
     };
 
-    res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: ['crisis'] })}\n\n`);
+    res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: isDomesticViolence ? ['domestic_violence'] : ['crisis'] })}\n\n`);
     res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
     res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
     res.write(`event: assistant_meta\ndata: ${JSON.stringify(crisisTurn)}\n\n`);
@@ -172,7 +182,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts: [{ text: m.content || m.text || '' }],
     }));
 
+    if (exerciseResult) {
+      const exId = exerciseResult.exercise_id || exerciseResult.exerciseId || 'exercise';
+      const outcome = exerciseResult.result?.outcome || exerciseResult.outcome || 'completed';
+      const inputs = exerciseResult.result?.user_inputs || exerciseResult.user_inputs || {};
+      const timing = exerciseResult.timing || 'immediate';
+
+      let inputDetails = '';
+      const inputEntries = Object.entries(inputs);
+      if (inputEntries.length > 0) {
+        inputDetails = '\nข้อมูลที่ผู้ใช้บันทึกไว้ในเครื่องมือ:';
+        for (const [k, v] of inputEntries) {
+          inputDetails += `\n- ${k}: "${v}"`;
+        }
+      }
+
+      let contextStr = '';
+      if (timing === 'immediate') {
+        contextStr = `[INTERNAL EXERCISE CONTEXT — ผู้ใช้เพิ่งทำแบบฝึกหัดเสร็จสิ้นในเทิร์นนี้]
+ข้อมูลด้านล่างคือคำตอบที่ผู้ใช้บันทึกไว้ในเครื่องมือ ไม่ใช่ประโยคที่ผู้ใช้พิมพ์คุยเอง
+ข้อกำหนดสำคัญสำหรับการตอบ:
+1. สานต่อบทสนทนาจากสิ่งที่ค้นพบโดยตรง ห้ามชวนทำแบบฝึกหัดซ้ำ หรือถามซ้ำข้อมูลที่ผู้ใช้ให้มาแล้ว
+2. ต้องสะท้อนรายละเอียดรูปธรรมอย่างน้อย 1 อย่างจากสิ่งที่ผู้ใช้บันทึกจริง (เช่น เรื่องที่เกิดขึ้น หรือความคิดที่ใจแต่งเติม)
+3. ห้ามตอบแบบกว้างๆ ลอยๆ เช่น "พอแยก Fact ออกมาแล้ว..." โดยไม่เชื่อมโยงกับสิ่งที่ผู้ใช้บันทึก
+4. หากมีส่วนที่ไม่รู้แน่ชัด (Unknown): ต้องคงสภาพความไม่รู้ไว้ว่ายังไม่มีข้อมูลพอจะสรุป ห้ามคาดเดาหรือแต่งเรื่องอธิบายเหตุผลแทนเด็ดขาด
+5. สื่อสารอย่างอ่อนโยน เป็นธรรมชาติ 1–3 ประโยค และถามได้ไม่เกิน 1 คำถามต่อเทิร์น ห้ามตอบเป็นหัวข้อแบบฟอร์มการบ้าน
+
+รายละเอียดแบบฝึกหัด:
+- แบบฝึกหัด: ${exId}
+- ผลลัพธ์หลังฝึก: ${outcome}${inputDetails}`;
+      } else {
+        contextStr = `[INTERNAL EXERCISE CONTEXT — บริบทอ้างอิงจากแบบฝึกหัดก่อนหน้านี้]
+ผู้ใช้เคยทำแบบฝึกหัด ${exId} ในบทสนทนานี้ และบันทึกข้อมูลไว้ดังนี้:${inputDetails}
+(คำแนะนำ: ใช้เป็นข้อมูลเบื้องหลังเมื่อเกี่ยวข้องเท่านั้น ห้ามถามซ้ำในสิ่งที่ผู้ใช้เคยตอบไว้แล้ว และไม่ต้องยัดเยียดกล่าวถึงแบบฝึกหัดนี้หากไม่สอดคล้องกับข้อความล่าสุด)`;
+      }
+
+      contents.push({
+        role: 'user',
+        parts: [{ text: contextStr }],
+      });
+    }
+
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+
+    const generationTemperature =
+      exerciseResult && (!exerciseResult.timing || exerciseResult.timing === 'immediate')
+        ? 0.2
+        : 0.5;
 
     for (const modelCandidate of modelCandidates) {
       try {
@@ -181,8 +237,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents,
           config: {
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
-            temperature: 0.5,
+            temperature: generationTemperature,
             maxOutputTokens: 1000,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
             responseMimeType: 'application/json',
           },
         });

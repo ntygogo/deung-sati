@@ -15,6 +15,7 @@ export * from './toneRules.js';
 export * from './consentRules.js';
 export * from './safetyRules.js';
 export * from './chipLabels.js';
+export * from './stageDefinitions.js';
 export * from './stageCriteria.js';
 export * from './exerciseRegistry.js';
 export * from './structuredOutputSchema.js';

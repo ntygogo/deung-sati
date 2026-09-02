@@ -73,6 +73,29 @@ export async function classifySafety(
     };
   }
 
+  // 3. Domestic Violence, Threat of Violence, or Immediate Danger
+  const isDomesticViolenceOrThreat =
+    /(พ่อ|แม่|แฟน|สามี|ภรรยา|คนในบ้าน|ครอบครัว).*(ตี|ซ้อม|ทำร้าย|ขู่|ทุบ)|ขู่กู|ขู่จะตี|ขู่จะซ้อม|ขู่จะทำร้าย|กลัวเขาทำร้าย|ไม่ปลอดภัยในบ้าน|จะโดนตี|จะโดนซ้อม/i.test(
+      text
+    );
+
+  if (isDomesticViolenceOrThreat) {
+    return {
+      mode: 'protect',
+      risk_type: ['domestic_violence'],
+      intent: 'present',
+      plan: 'none',
+      means_access: 'unknown',
+      timeframe: 'imminent',
+      proximity_to_target: 'near',
+      current_action: false,
+      recent_harm_occurred: true,
+      medical_emergency: false,
+      confidence: 0.95,
+      reason: 'ตรวจพบความเสี่ยงจากความรุนแรงในครอบครัวหรือการถูกข่มขู่ทำร้าย',
+    };
+  }
+
   // 3. Emotional Intensity / Frustration / Venting (Normal / Explore)
   const isHighEmotion = /ด่า|โกรธ|แค้น|หงุดหงิด|เกลียด|ไม่ไหวแล้ว|จะบ้าตาย|ประสาทจะกิน/i.test(text);
 

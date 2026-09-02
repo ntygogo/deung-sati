@@ -7,6 +7,7 @@ export type SuggestedIntervention =
   | 'reflect'
   | 'clarify'
   | 'ground'
+  | 'immediate_reset'
   | 'fact_story'
   | 'relationship_mirror'
   | 'explore_need'
@@ -48,6 +49,12 @@ export const INTERVENTION_CATALOG: Record<SuggestedIntervention, InterventionInf
     title: 'ดึงสติติดกับปัจจุบัน',
     description: 'ช่วยชะลออารมณ์ฉุกเฉินด้วยการหายใจหรือผ่อนคลายร่างกาย (เมื่อยินยอม)',
     applicableMode: 'HOLD',
+  },
+  immediate_reset: {
+    id: 'immediate_reset',
+    title: 'หยุดพักความคิดด้วยการกระทำเล็กๆ',
+    description: 'ลดภาวะสมองล้น/ฟุ้งซ่านด้วยการชวนทำ micro-action สั้นๆ ปลอดภัย แล้วกลับมาคุยต่อ',
+    applicableMode: 'ALL',
   },
   fact_story: {
     id: 'fact_story',

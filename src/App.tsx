@@ -562,7 +562,8 @@ async function triggerAiStream(
   activeRequestIdRef: React.MutableRefObject<number>,
   isSendingRef?: React.MutableRefObject<boolean>,
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
-  setDebugInfo?: React.Dispatch<React.SetStateAction<ChatDebugInfo>>
+  setDebugInfo?: React.Dispatch<React.SetStateAction<ChatDebugInfo>>,
+  exerciseResult?: ExerciseResultPayload
 ) {
   const aiMsgId = `ai-${requestId}-${Date.now()}`;
   console.log(`[ASSISTANT_MESSAGE_CREATE] assistantMessageId=${aiMsgId} requestId=${requestId}`);
@@ -590,13 +591,27 @@ async function triggerAiStream(
   }
 
   try {
-    // Only send non-empty valid messages in chronological order ending with the latest user turn
+    // Exclude ExerciseResult messages from message history serialization (Fix 2: Never serialize as fake assistant or user speech)
     const formattedMessages = history
-      .filter((m) => m.text && m.text.trim().length > 0)
+      .filter((m) => !m.exerciseResult && m.text && m.text.trim().length > 0)
       .map((m) => ({
         role: m.role === "ai" ? "assistant" : "user",
         content: m.text.trim(),
       }));
+
+    // Resolve structured exercise context: immediate if just completed, or latest retained from history (Fix 3)
+    let effectiveExerciseResult: any = exerciseResult ? { ...exerciseResult, timing: 'immediate' } : undefined;
+    if (!effectiveExerciseResult) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].exerciseResult) {
+          effectiveExerciseResult = {
+            ...history[i].exerciseResult,
+            timing: 'retained',
+          };
+          break;
+        }
+      }
+    }
 
     const response = await fetch("/api/chat/stream", {
       method: "POST",
@@ -605,6 +620,7 @@ async function triggerAiStream(
         messages: formattedMessages,
         sessionId: "default-session",
         requestId,
+        exerciseResult: effectiveExerciseResult || undefined,
       }),
     });
 
@@ -1120,7 +1136,32 @@ function ChatScreen({
 
         {messages.map((msg) => (
           <div key={msg.id} className="messageTurnWrapper">
-            {msg.role === "user" ? (
+            {msg.exerciseResult ? (
+              <div
+                className="exerciseResultCard"
+                style={{
+                  background: "#F2F6F3",
+                  border: "1.5px solid #C4D9C7",
+                  borderRadius: "14px",
+                  padding: "12px 16px",
+                  margin: "12px auto",
+                  maxWidth: "92%",
+                  color: "#38503C",
+                  fontSize: "13px",
+                  lineHeight: 1.6,
+                }}
+              >
+                <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px", color: "#2E5E35" }}>
+                  <span>🌱</span>
+                  <span>บันทึกผลลัพธ์แบบฝึกหัด</span>
+                </div>
+                {msg.text.split("\n").map((line, idx) => (
+                  <div key={idx} style={{ opacity: idx === 0 ? 0.85 : 1 }}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ) : msg.role === "user" ? (
               <div className="userBubble">
                 {msg.text}
                 <small>
@@ -1160,6 +1201,11 @@ function ChatScreen({
                         type="button"
                         className="retryMessageBtn"
                         onClick={() => {
+                          if (isSendingRef.current) {
+                            console.log(`[Chat Client] Ignored retry because previous request is in flight.`);
+                            return;
+                          }
+                          isSendingRef.current = true;
                           const reqId = ++activeRequestId.current;
                           const cleanHistory = messages.filter(
                             (m) => m.id !== msg.id && m.text && m.text.trim().length > 0
@@ -1187,10 +1233,30 @@ function ChatScreen({
                       onComplete={(result) => {
                         setActiveInlineExercise(null);
                         setDismissedExerciseMsgIds((prev) => [...prev, msg.id]);
-                        const summary =
-                          result.summaryText ||
-                          `ได้ทำแบบฝึกหัด ${result.exerciseId} เสร็จแล้ว (${result.outcome})`;
-                        handleSendMessage(summary);
+
+                        const exRecordMsg: ChatMessage = {
+                          id: `ex-result-${Date.now()}`,
+                          role: "ai",
+                          text: result.summary_text || `[บันทึกผลแบบฝึกหัด: ${result.exercise_id}]`,
+                          createdAt: Date.now(),
+                          exerciseResult: result,
+                        };
+
+                        const cleanPrev = messages.filter((m) => m.text && m.text.trim().length > 0);
+                        const nextHistory = [...cleanPrev, exRecordMsg];
+                        setMessages(nextHistory);
+
+                        const reqId = ++activeRequestId.current;
+                        isSendingRef.current = true;
+                        triggerAiStream(
+                          nextHistory,
+                          reqId,
+                          activeRequestId,
+                          isSendingRef,
+                          setMessages,
+                          setDebugInfo,
+                          result
+                        );
                       }}
                       onCancel={() => {
                         setActiveInlineExercise(null);
