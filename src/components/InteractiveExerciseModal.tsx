@@ -170,8 +170,17 @@ export const InteractiveExerciseModal: React.FC<InteractiveExerciseModalProps> =
         break;
 
       case 'before_speak':
-        result = { raw: rawText, refined: refinedText };
-        summary_text = `ฉันได้ลองเกลาคำพูดก่อนส่งแล้ว:\n- ข้อความเดิม: "${rawText || 'คำพูดตอนอารมณ์แรง'}"\n- ข้อความที่เกลาแล้ว: "${refinedText || 'คำพูดที่ชัดเจนและสันติ'}" 🌱`;
+        result = {
+          completed: true,
+          outcome: 'better',
+          user_inputs: {
+            raw_message: rawText,
+            refined_message: refinedText,
+          },
+          raw: rawText,
+          refined: refinedText,
+        };
+        summary_text = `[กรองคำก่อนพูด]\n- สิ่งที่อยากพูดตอนแรก: "${rawText || '-'}"\n- ลองพูดแบบนี้ได้: "${refinedText || '-'}" 🌱`;
         break;
 
       case 'perspective_lens':
@@ -385,11 +394,17 @@ export const InteractiveExerciseModal: React.FC<InteractiveExerciseModalProps> =
           {/* 5. Before Speak - Live AI Refinement */}
           {exerciseId === 'before_speak' && (
             <div className="exerciseFormGroup">
-              <label>ข้อความดิบที่อยากส่งตอนอารมณ์แรง:</label>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: '#3A2E26' }}>
+                พิมพ์สิ่งที่อยากพูดออกมาได้เลย
+              </label>
+              <div style={{ fontSize: '11.5px', color: '#8C7355', marginTop: '-4px', marginBottom: '4px' }}>
+                ไม่ต้องสุภาพ ไม่ต้องกรองคำ เขียนอย่างที่มันอยู่ในหัวตอนนี้ได้เลย
+              </div>
               <textarea
-                placeholder="เช่น เออ ไม่ต้องตอบแล้วก็ได้ จะไปไหนก็ไป!"
+                placeholder="ทำไมอ่านแล้วไม่ตอบ กูโคตรไม่โอเคเลย"
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
+                rows={4}
               />
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '4px 0 8px' }}>
@@ -398,20 +413,27 @@ export const InteractiveExerciseModal: React.FC<InteractiveExerciseModalProps> =
                   className="aiRefineMiniBtn"
                   onClick={handleRefineBeforeSpeakAI}
                   disabled={isRefiningAI || !rawText.trim()}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
                 >
-                  {isRefiningAI ? 'กำลังเกลาคำด้วย AI...' : '✨ เกลาคำด้วย AI'}
+                  {isRefiningAI ? 'กำลังช่วยกรองคำ...' : 'ช่วยกรองให้หน่อย ✨'}
                 </button>
               </div>
 
-              <div className="downArrow">↓</div>
-
-              <label>🌱 ข้อความที่เกลาแล้ว (บอกความรู้สึก + ความต้องการโดยไม่ประชด):</label>
-              <textarea
-                placeholder="ข้อความที่เรียบเรียงอย่างสันติ..."
-                value={refinedText}
-                onChange={(e) => setRefinedText(e.target.value)}
-                className="refinedBox"
-              />
+              {refinedText && (
+                <>
+                  <div className="downArrow">↓</div>
+                  <label style={{ fontSize: '12.5px', fontWeight: 600, color: '#2E692B' }}>
+                    ✉️ ลองพูดแบบนี้ได้:
+                  </label>
+                  <textarea
+                    placeholder="ข้อความที่เรียบเรียงอย่างเป็นธรรมชาติ..."
+                    value={refinedText}
+                    onChange={(e) => setRefinedText(e.target.value)}
+                    className="refinedBox"
+                    rows={3}
+                  />
+                </>
+              )}
             </div>
           )}
 

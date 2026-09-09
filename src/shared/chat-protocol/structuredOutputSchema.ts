@@ -27,6 +27,18 @@ export interface CandidatePattern {
 }
 
 /**
+export type LoopReadinessStatus = 'collecting' | 'ready';
+
+export interface Extracted6PartLoop {
+  trigger?: string;
+  emotion_or_body?: string;
+  automatic_story?: string;
+  facts?: string;
+  old_response?: string;
+  new_choice?: string;
+}
+
+/**
  * Unified Deung Sati AI Response Contract (V1 SSOT)
  */
 export interface DeungSatiAIResponse {
@@ -44,6 +56,8 @@ export interface DeungSatiAIResponse {
   quickReplies: string[];
   recommendedExercise?: RecommendedExercise | null;
   evidenceCandidate?: EvidenceCandidate | null;
+  loopReadiness?: LoopReadinessStatus;
+  extracted6PartLoop?: Extracted6PartLoop | null;
 }
 
 /**
@@ -65,4 +79,6 @@ export interface ChatEngineTurnResponse {
   known_fields?: KnownFieldDimension[];
   checkin_consent?: CheckinConsentState;
   suggested_intervention?: SuggestedIntervention;
+  loop_readiness?: LoopReadinessStatus;
+  extracted_loop?: Extracted6PartLoop | null;
 }

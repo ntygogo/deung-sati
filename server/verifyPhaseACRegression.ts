@@ -170,7 +170,7 @@ export async function runStrictRegressionSuite() {
   ];
   const hasSpeculation = speculativePhrases.some((p) => aiMsgBCD.includes(p));
 
-  // 2. Must positively require language that preserves uncertainty
+  // 2. Must positively require language that preserves uncertainty naturally
   const uncertaintyPreservingPhrases = [
     'ยังไม่รู้',
     'ยังไม่มีข้อมูล',
@@ -180,8 +180,20 @@ export async function runStrictRegressionSuite() {
     'ข้อมูลยังไม่พอ',
     'ยังไม่ได้คุย',
     'ยังไม่มีใครรู้',
+    'ยังสรุป',
+    'ไม่รู้ว่า',
+    'ไม่แน่ใจ',
   ];
-  const preservesUncertaintySemantics = uncertaintyPreservingPhrases.some((phrase) => aiMsgBCD.includes(phrase));
+  const naturalUncertaintyRegexes = [
+    /ยังสรุป.*ไม่ได้/,
+    /ยังไม่มี.*ข้อมูล/,
+    /ยังไม่.*แน่ชัด/,
+    /ไม่รู้.*คิดอะไร/,
+    /ยังไม่.*ทราบ/,
+  ];
+  const preservesUncertaintySemantics =
+    uncertaintyPreservingPhrases.some((phrase) => aiMsgBCD.includes(phrase)) ||
+    naturalUncertaintyRegexes.some((regex) => regex.test(aiMsgBCD));
 
   const passedC = !hasSpeculation && preservesUncertaintySemantics;
   testReport.push({

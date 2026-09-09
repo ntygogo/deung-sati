@@ -10,7 +10,8 @@ export type Screen =
   | 'beforeSpeak'
   | 'perspective'
   | 'journey'
-  | 'profile';
+  | 'profile'
+  | 'companion';
 
 export type EvidenceType =
   | 'รู้ตัวหลังเกิด'

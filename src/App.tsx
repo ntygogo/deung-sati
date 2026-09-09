@@ -23,6 +23,10 @@ import {
   GrowthReflectionCard,
 } from "./components/HomeComponents";
 import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio";
+import { CompanionRoom } from "./components/CompanionRoom";
+import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
+import { useCompanion } from "./context/CompanionContext";
+import { LoopReviewCard } from "./components/LoopReviewCard";
 
 const SvgIcon = ({
   name,
@@ -193,34 +197,45 @@ const BottomNav = ({
 }: {
   screen: Screen;
   setScreen: (s: Screen) => void;
-}) => (
-  <div className="bottomNav">
-    <NavItem
-      active={screen === "home"}
-      label="วันนี้"
-      icon="leaf"
-      onClick={() => setScreen("home")}
-    />
-    <NavItem
-      active={screen === "chat"}
-      label="ดึงสติ"
-      icon="chat"
-      onClick={() => setScreen("chat")}
-    />
-    <NavItem
-      active={screen === "journey"}
-      label="เส้นทาง"
-      icon="path"
-      onClick={() => setScreen("journey")}
-    />
-    <NavItem
-      active={screen === "profile"}
-      label="ฉัน"
-      icon="user"
-      onClick={() => setScreen("profile")}
-    />
-  </div>
-);
+}) => {
+  const { companion, traceCount } = useCompanion();
+  const eggLabel = companion?.stage === 0 ? `ไข่ (${Math.min(20, traceCount)}/20)` : (companion?.name || "สหาย");
+
+  return (
+    <div className="bottomNav">
+      <NavItem
+        active={screen === "home"}
+        label="วันนี้"
+        icon="leaf"
+        onClick={() => setScreen("home")}
+      />
+      <NavItem
+        active={screen === "chat"}
+        label="ดึงสติ"
+        icon="chat"
+        onClick={() => setScreen("chat")}
+      />
+      <NavItem
+        active={screen === "companion"}
+        label={eggLabel}
+        icon="heart"
+        onClick={() => setScreen("companion")}
+      />
+      <NavItem
+        active={screen === "journey"}
+        label="เส้นทาง"
+        icon="path"
+        onClick={() => setScreen("journey")}
+      />
+      <NavItem
+        active={screen === "profile"}
+        label="ฉัน"
+        icon="user"
+        onClick={() => setScreen("profile")}
+      />
+    </div>
+  );
+};
 
 const NavItem = ({
   active,
@@ -346,6 +361,64 @@ export default function App() {
     "เลือกใหม่",
   ]);
 
+  type OnboardingLifecycleStatus =
+    | "pending_hydration"
+    | "idle"
+    | "active"
+    | "reveal_only"
+    | "completed"
+    | "cancelled";
+
+  // Decoupled Onboarding Lifecycle State Machine: Independent of companion updates during the flow
+  const { companion, isHydrated } = useCompanion();
+  const [onboardingLifecycle, setOnboardingLifecycle] = useState<OnboardingLifecycleStatus>("pending_hydration");
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    setOnboardingLifecycle((current) => {
+      // Once active, reveal_only, completed, or cancelled, do not interrupt flow
+      if (current !== "pending_hydration") {
+        return current;
+      }
+
+      try {
+        const isCompleted = localStorage.getItem("deung_sati_onboarding_completed_v2") === "true";
+        if (isCompleted) {
+          return "idle";
+        }
+
+        const isEggCreatedPending = localStorage.getItem("deung_sati_onboarding_egg_created") === "true";
+        if (companion) {
+          if (isEggCreatedPending || companion.stage === 0) {
+            // Reloaded after egg creation in Step 4 before clicking Step 5 complete
+            return "reveal_only";
+          }
+          // Established companion already exists
+          return "idle";
+        }
+
+        // Hydrated, no companion, and not completed -> start fresh onboarding
+        return "active";
+      } catch {
+        return "idle";
+      }
+    });
+  }, [isHydrated, companion]);
+
+  const handleOnboardingComplete = () => {
+    setOnboardingLifecycle("completed");
+    try {
+      localStorage.setItem("deung_sati_onboarding_completed_v2", "true");
+      localStorage.removeItem("deung_sati_onboarding_egg_created");
+    } catch {}
+    setScreen("companion");
+  };
+
+  const handleOnboardingCancel = () => {
+    setOnboardingLifecycle("cancelled");
+  };
+
   // Active Interactive Exercise Modal state
   const [activeExerciseModal, setActiveExerciseModal] = useState<ExerciseId | null>(null);
 
@@ -405,12 +478,28 @@ export default function App() {
       <div className="phone">
         {isDebugMode && <DevDebugPanel debugInfo={debugInfo} />}
 
+        {/* Conversational Onboarding if new user or pending reveal (Decoupled lifecycle) */}
+        {(onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
+          <ConversationalOnboarding
+            initialStep={onboardingLifecycle === "reveal_only" ? 5 : 1}
+            onComplete={handleOnboardingComplete}
+            onCancel={onboardingLifecycle === "active" ? handleOnboardingCancel : undefined}
+          />
+        )}
+
         {screen === "home" && (
           <Home
             setScreen={setScreen}
             openEvidence={() => setShowEvidence(true)}
             onOpenMenu={() => setIsDrawerOpen(true)}
             onStartChat={handleStartChatFromHome}
+          />
+        )}
+
+        {screen === "companion" && (
+          <CompanionRoom
+            onBack={() => setScreen("home")}
+            onOpenChat={() => setScreen("chat")}
           />
         )}
 
@@ -764,6 +853,8 @@ function Home({
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
 }) {
+  const { companion, traceCount, wallet } = useCompanion();
+
   return (
     <div className="screen scrollArea homeScreenRoot">
       <AppHeader
@@ -774,6 +865,45 @@ function Home({
 
       {/* 1. NIBBANA SANCTUARY BANNER (Welcoming visual tone) */}
       <NibbanaWorld />
+
+      {/* COMPANION SANCTUARY / EGG STATUS WIDGET */}
+      <div
+        onClick={() => setScreen("companion")}
+        style={{
+          margin: "12px 18px",
+          padding: "16px",
+          background: "linear-gradient(135deg, #FFF9FA 0%, #FFF0F3 100%)",
+          border: "1.5px solid #FFD1DC",
+          borderRadius: "22px",
+          boxShadow: "0 6px 16px rgba(236, 72, 153, 0.08)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+        }}
+      >
+        <div style={{ width: "48px", height: "54px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: "32px" }}>
+            {companion?.stage === 0 ? "🥚" : "🐾"}
+          </span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 700, fontSize: "14px", color: "#3E2D23" }}>
+              {companion?.stage === 0 ? "ไข่แห่งการรู้ตัว" : (companion?.name || "สหายสติ")}
+            </span>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: traceCount >= 20 && companion?.stage === 0 ? "#F59E0B" : "#EC4899" }}>
+              {companion?.stage === 0 ? `${Math.min(20, traceCount)}/20 Traces` : `Lv.${wallet.level}`}
+            </span>
+          </div>
+          <div style={{ fontSize: "11.5px", color: "#7E6D63", marginTop: "3px" }}>
+            {companion?.stage === 0
+              ? (traceCount >= 20 ? "✨ ไข่พร้อมฟักแล้ว! แตะเพื่อฟักสหาย" : "สะสม Loop Trace ให้ครบ 20 เพื่อฟักน้อง")
+              : `ห้องเลี้ยงน้อง (${wallet.shells} 🐚, ${wallet.memory_crystals} 💎)`}
+          </div>
+        </div>
+        <span style={{ fontSize: "18px", color: "#EC4899" }}>→</span>
+      </div>
 
       {/* 2. QUICK CHAT — START VENTING / CONVERSATION IMMEDIATELY */}
       <QuickChatCard
@@ -1026,6 +1156,31 @@ function ChatScreen({
   const [inputText, setInputText] = useState("");
   const [dismissedExerciseMsgIds, setDismissedExerciseMsgIds] = useState<string[]>([]);
   const [activeInlineExercise, setActiveInlineExercise] = useState<{ msgId: string; exerciseId: string } | null>(null);
+  const [showLoopReview, setShowLoopReview] = useState(false);
+  const [reviewInitialData, setReviewInitialData] = useState<any>(null);
+  const conversationIdRef = useRef(`conv_${Date.now()}`);
+
+  // Server-authoritative Loop Readiness: strictly read from server's latest structuredTurn
+  const lastAiWithTurn = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn);
+  const serverLoopReadiness = lastAiWithTurn?.structuredTurn?.loop_readiness || 'collecting';
+  const serverExtractedLoop = lastAiWithTurn?.structuredTurn?.extracted_loop || null;
+  const isLoopReady = serverLoopReadiness === 'ready' && Boolean(serverExtractedLoop);
+
+  const handleOpenLoopReview = () => {
+    // Client cannot override readiness: strictly requires server loopReadiness === "ready"
+    if (!isLoopReady || !serverExtractedLoop) return;
+
+    setReviewInitialData({
+      trigger: serverExtractedLoop.trigger || "",
+      emotionOrBody: serverExtractedLoop.emotion_or_body || "",
+      automaticStory: serverExtractedLoop.automatic_story || "",
+      facts: serverExtractedLoop.facts || "",
+      oldResponse: serverExtractedLoop.old_response || "",
+      newChoice: serverExtractedLoop.new_choice || "",
+    });
+    setShowLoopReview(true);
+  };
+
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const activeRequestId = useRef(0);
   const isSendingRef = useRef(false);
@@ -1127,8 +1282,37 @@ function ChatScreen({
         <Baby small size={44} />
         <div className="chatSubHeaderCopy">
           <b>ดึงสติตอนนี้ 🌱</b>
-          <span>นิพพานเบบี้พร้อมรับฟังคุณเสมอ...</span>
+          <span>สหายสติพร้อมรับฟังคุณเสมอ...</span>
         </div>
+        <button
+          type="button"
+          disabled={!isLoopReady}
+          onClick={isLoopReady ? handleOpenLoopReview : undefined}
+          style={{
+            marginLeft: "auto",
+            padding: "6px 12px",
+            borderRadius: "999px",
+            background: isLoopReady
+              ? "linear-gradient(135deg, #FFF0F3, #FFE4E6)"
+              : "#F3F4F6",
+            border: isLoopReady ? "1px solid #FDA4AF" : "1px solid #E5E7EB",
+            color: isLoopReady ? "#BE123C" : "#9CA3AF",
+            fontSize: "11px",
+            fontWeight: 600,
+            cursor: isLoopReady ? "pointer" : "not-allowed",
+            opacity: isLoopReady ? 1 : 0.6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+          title={
+            isLoopReady
+              ? "เปิดการ์ดตรวจทานลูป 6 ส่วน (พร้อมแล้ว)"
+              : "กำลังสังเกตลูปจากบทสนทนา (ยังไม่ครบ 6 ส่วน)"
+          }
+        >
+          👁️ ส่องลูปสติ 6 ส่วน {isLoopReady ? "✨ (พร้อม)" : "⏳ (กำลังสังเกต...)"}
+        </button>
       </div>
 
       <div className="chatBody" ref={chatScrollRef}>
@@ -1324,17 +1508,31 @@ function ChatScreen({
                       </div>
                     )}
 
-                  <small>
-                    {new Date(msg.createdAt || Date.now()).toLocaleTimeString(
-                      [],
-                      { hour: "2-digit", minute: "2-digit" }
-                    )}
-                  </small>
+                  <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", marginTop: "4px" }}>
+                    <small>
+                      {new Date(msg.createdAt || Date.now()).toLocaleTimeString(
+                        [],
+                        { hour: "2-digit", minute: "2-digit" }
+                      )}
+                    </small>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         ))}
+
+        {/* 6-Part Completed Loop Review Card */}
+        {showLoopReview && (
+          <LoopReviewCard
+            conversationId={conversationIdRef.current}
+            initialData={reviewInitialData}
+            onClose={() => setShowLoopReview(false)}
+            onConfirmed={() => {
+              // Confirmed by server
+            }}
+          />
+        )}
 
         {/* Quick Reply Chips: strictly only rendered when latest message is finished AI turn */}
         {messages[messages.length - 1]?.role === "ai" &&
@@ -1429,6 +1627,42 @@ function ChatScreen({
         </button>
       </form>
       <div className="bottomSpacer" />
+
+      {/* 6-Part Completed Loop Review Modal (Strictly Server-Authoritative) */}
+      {showLoopReview && isLoopReady && reviewInitialData && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: 'calc(100dvh - 24px)',
+              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            <LoopReviewCard
+              conversationId={conversationIdRef.current}
+              initialData={reviewInitialData}
+              onClose={() => setShowLoopReview(false)}
+              onConfirmed={() => {
+                setShowLoopReview(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3756,9 +3990,10 @@ button {
 
 .exerciseModalCard {
   width: 100%;
-  max-height: 88vh;
+  max-height: calc(100dvh - 24px);
   overflow-y: auto;
-  padding: 20px 20px 24px;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 20px calc(24px + env(safe-area-inset-bottom, 16px));
   background: #FFFDF9;
   border-radius: 28px 28px 0 0;
   box-shadow: 0 -8px 32px rgba(44, 38, 30, 0.18);
@@ -4060,7 +4295,10 @@ button {
 
 .evidenceModal {
   width: 100%;
-  padding: 22px 20px 30px;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 22px 20px calc(30px + env(safe-area-inset-bottom, 16px));
   background: var(--bg-cream);
   border-radius: 32px 32px 0 0;
   position: relative;

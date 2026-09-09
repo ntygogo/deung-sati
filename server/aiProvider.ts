@@ -14,11 +14,11 @@ import {
   type SuggestedIntervention,
   type CbtConversationStage,
 } from '../src/shared/chat-protocol/index.js';
-import type { SafetyClassification } from './safetyClassifier.js';
+import { classifySafety, type SafetyClassification } from './safetyClassifier.js';
 
 export interface StreamChatResponseParams {
   messages: Array<{ role: string; content: string }>;
-  safety: SafetyClassification;
+  safety?: SafetyClassification;
   sessionState?: any;
   requestId?: number;
   exerciseResult?: any;
@@ -113,6 +113,48 @@ export function sanitizeDeungSatiResponse(raw: string): {
     normalizedIntent = 'unknown';
   }
 
+  // Server-authoritative Loop Readiness calculation (Strict 6-part check)
+  const extracted6 = parsed?.extracted6PartLoop || parsed?.extracted_loop || null;
+  const trig = (extracted6?.trigger || candidatePattern?.trigger || '').trim();
+  const emo = (extracted6?.emotion_or_body || candidatePattern?.emotion || '').trim();
+  const story = (extracted6?.automatic_story || candidatePattern?.interpretation || '').trim();
+  const facts = (extracted6?.facts || (parsed?.facts ? String(parsed.facts) : '')).trim();
+  const oldResp = (extracted6?.old_response || candidatePattern?.habitual_action || '').trim();
+  const newCh = (extracted6?.new_choice || candidatePattern?.new_choice || '').trim();
+
+  const hasAll6 =
+    trig.length >= 3 &&
+    emo.length >= 2 &&
+    story.length >= 3 &&
+    facts.length >= 3 &&
+    oldResp.length >= 3 &&
+    newCh.length >= 3;
+
+  const isDistinct =
+    new Set([
+      trig.toLowerCase(),
+      emo.toLowerCase(),
+      story.toLowerCase(),
+      facts.toLowerCase(),
+      oldResp.toLowerCase(),
+      newCh.toLowerCase(),
+    ]).size >= 5;
+
+  let loopReadiness: 'collecting' | 'ready' = 'collecting';
+  let extractedLoop = null;
+
+  if (hasAll6 && isDistinct) {
+    loopReadiness = 'ready';
+    extractedLoop = {
+      trigger: trig,
+      emotion_or_body: emo,
+      automatic_story: story,
+      facts: facts,
+      old_response: oldResp,
+      new_choice: newCh,
+    };
+  }
+
   const structuredTurn: ChatEngineTurnResponse = {
     assistant_message: assistantMsg,
     safety_state: (parsed?.safety || parsed?.safety_state || 'normal') as SafetyState,
@@ -129,6 +171,8 @@ export function sanitizeDeungSatiResponse(raw: string): {
     known_fields: (parsed?.knownFields || parsed?.known_fields || []) as KnownFieldDimension[],
     checkin_consent: (parsed?.checkinConsent || parsed?.checkin_consent || 'idle') as CheckinConsentState,
     suggested_intervention: (parsed?.suggestedIntervention || parsed?.suggested_intervention || 'reflection') as SuggestedIntervention,
+    loop_readiness: loopReadiness,
+    extracted_loop: extractedLoop,
   };
 
   return { assistant_message: assistantMsg, turn: structuredTurn };
@@ -148,8 +192,9 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
     console.log(`[API_RECEIVED] requestId=${requestId ?? '1'}`);
 
     // Priority 0: Crisis Triage Gate (Immediate safety response)
-    if (safety.mode === 'protect' || isCrisisMessage(latestUserMsg)) {
-      const isDomesticViolence = safety.risk_type?.includes('domestic_violence');
+    const currentSafety = safety || await classifySafety(messages);
+    if (currentSafety.mode === 'protect' || isCrisisMessage(latestUserMsg)) {
+      const isDomesticViolence = currentSafety.risk_type?.includes('domestic_violence');
       const crisisText = isDomesticViolence
         ? `ความปลอดภัยของเธอสำคัญที่สุดเลยนะ... ตอนนี้เธอปลอดภัยดีไหม?\n\nถ้าทำได้โดยไม่เพิ่มความเสี่ยง ลองไปอยู่ในจุดที่ปลอดภัยหรือใกล้คนที่ช่วยได้ หากตกอยู่ในอันตรายหรือรู้สึกไม่ปลอดภัย ขอให้โทรแจ้งสายด่วนช่วยเหลือสังคม 1300 (พม. 24 ชม.) หรือโทร 191 ได้ทันทีนะ เราอยู่ตรงนี้พร้อมช่วยคิดหาความปลอดภัยไปด้วยกัน 🌿`
         : `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
@@ -218,14 +263,22 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
       let contextStr = '';
       if (timing === 'immediate') {
+        const isBeforeSpeak = exId === 'before_speak';
+        const specificGuidance = isBeforeSpeak
+          ? `\nข้อกำหนดเฉพาะสำหรับ Before Speak:
+- ห้ามชมเชย ห้ามอธิบายกระบวนการ ("เราเห็นความตั้งใจของเธอ...")
+- ใช้ประโยคที่เกลาได้มาสานต่อโดยตรง สั้น กระชับ (ไม่เกิน 35 คำ)
+- ถามไม่เกิน 1 คำถาม เช่น "แบบนี้ใกล้กับสิ่งที่เธออยากพูดจริงๆ ไหม?" หรือ "ตอนนี้ยังอยากส่งทันทีอยู่ไหม?"`
+          : '';
+
         contextStr = `[INTERNAL EXERCISE CONTEXT — ผู้ใช้เพิ่งทำแบบฝึกหัดเสร็จสิ้นในเทิร์นนี้]
 ข้อมูลด้านล่างคือคำตอบที่ผู้ใช้บันทึกไว้ในเครื่องมือ ไม่ใช่ประโยคที่ผู้ใช้พิมพ์คุยเอง
 ข้อกำหนดสำคัญสำหรับการตอบ:
-1. สานต่อบทสนทนาจากสิ่งที่ค้นพบโดยตรง ห้ามชวนทำแบบฝึกหัดซ้ำ หรือถามซ้ำข้อมูลที่ผู้ใช้ให้มาแล้ว
-2. ต้องสะท้อนรายละเอียดรูปธรรมอย่างน้อย 1 อย่างจากสิ่งที่ผู้ใช้บันทึกจริง (เช่น เรื่องที่เกิดขึ้น หรือความคิดที่ใจแต่งเติม)
-3. ห้ามตอบแบบกว้างๆ ลอยๆ เช่น "พอแยก Fact ออกมาแล้ว..." โดยไม่เชื่อมโยงกับสิ่งที่ผู้ใช้บันทึก
-4. หากมีส่วนที่ไม่รู้แน่ชัด (Unknown): ต้องคงสภาพความไม่รู้ไว้ว่ายังไม่มีข้อมูลพอจะสรุป ห้ามคาดเดาหรือแต่งเรื่องอธิบายเหตุผลแทนเด็ดขาด
-5. สื่อสารอย่างอ่อนโยน เป็นธรรมชาติ 1–3 ประโยค และถามได้ไม่เกิน 1 คำถามต่อเทิร์น ห้ามตอบเป็นหัวข้อแบบฟอร์มการบ้าน
+1. สานต่อบทสนทนาจากสิ่งที่ค้นพบโดยตรง สั้น กระชับ 1–2 ประโยค (แนะนำ <= 35–40 คำไทย)
+2. สะท้อนรายละเอียดรูปธรรมสั้นๆ 1 อย่าง ห้ามทวนเรื่องเล่าทั้งกระบิ และห้ามถามซ้ำสิ่งที่ผู้ใช้ตอบมาแล้ว
+3. ห้ามชมเชย ห้ามเทศน์จิตวิทยา ห้ามอธิบายว่า AI กำลังทำอะไร
+4. หากมีส่วนที่ไม่รู้แน่ชัด (Unknown): ต้องคงสภาพความไม่รู้ไว้ชัดเจนด้วยภาษาธรรมชาติที่รักษาความไม่แน่ชัด เช่น "เรายังสรุปเหตุผลของเขาไม่ได้", "ยังไม่มีข้อมูลพอจะรู้ว่าเขาคิดอะไร", "ยังไม่รู้แน่ชัด" ห้ามคาดเดาเหตุผลแทนคนอื่นเด็ดขาด
+5. ถามได้ไม่เกิน 1 คำถามต่อเทิร์น${specificGuidance}
 
 รายละเอียดแบบฝึกหัด:
 - แบบฝึกหัด: ${exId}

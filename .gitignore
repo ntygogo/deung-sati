@@ -28,5 +28,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+scratch/
 scratch_*
 screenshot_*.png
+*.db
+server/data/*.db
+
+.vercel
+.env*

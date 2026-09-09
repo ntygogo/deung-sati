@@ -36,9 +36,6 @@ export const GratitudeJarModal: React.FC<GratitudeJarModalProps> = ({
   onAddEntry,
   onDeleteEntry,
 }) => {
-  if (!isOpen) return null;
-
-  const safeEntries = Array.isArray(entries) ? entries : [];
   const [inputText, setInputText] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isDropping, setIsDropping] = useState<boolean>(false);
@@ -47,6 +44,10 @@ export const GratitudeJarModal: React.FC<GratitudeJarModalProps> = ({
   const [showSuccessToast, setShowSuccessToast] = useState<boolean>(false);
   const [randomMemory, setRandomMemory] = useState<GratitudeEntry | null>(null);
   const [showHistory, setShowHistory] = useState<boolean>(false);
+
+  if (!isOpen) return null;
+
+  const safeEntries = Array.isArray(entries) ? entries : [];
 
   const handleSaveEntry = (e: React.FormEvent) => {
     e.preventDefault();

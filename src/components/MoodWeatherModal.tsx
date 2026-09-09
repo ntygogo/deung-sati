@@ -28,12 +28,12 @@ export const MoodWeatherModal: React.FC<MoodWeatherModalProps> = ({
   onDeleteDayEntry,
   onSelectDayEntry,
 }) => {
+  const [triggerTodayPicker, setTriggerTodayPicker] = useState<boolean>(false);
+
   if (!isOpen) return null;
 
   const safeEntries = Array.isArray(entries) ? entries : [];
   const currentOption = MOOD_WEATHER_OPTIONS.find((m) => m.id === selectedMood) || MOOD_WEATHER_OPTIONS[1];
-  const [triggerTodayPicker, setTriggerTodayPicker] = useState<boolean>(false);
-
   const todayStr = new Date().toISOString().split('T')[0];
 
   return (

@@ -42,15 +42,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
     setIsLoading(true);
 
-    setTimeout(() => {
+    try {
       if (mode === 'login') {
-        const result = login(email, password);
+        const result = await login(email, password);
         if (result.success) {
           setSuccessMsg('เข้าสู่ระบบสำเร็จ ยินดีต้อนรับกลับมาค่ะ! 🌿✨');
           setTimeout(() => {
@@ -63,7 +63,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setErrorMsg(result.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
         }
       } else {
-        const result = register(name, email, password);
+        const result = await register(name, email, password);
         if (result.success) {
           setSuccessMsg('สมัครสมาชิกสำเร็จแล้ว! ข้อมูลของคุณจะถูกซิงค์อย่างปลอดภัย 🎉');
           setTimeout(() => {
@@ -76,7 +76,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setErrorMsg(result.message || 'เกิดข้อผิดพลาดในการสมัครสมาชิก');
         }
       }
-    }, 400);
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    }
   };
 
   return (
