@@ -15,12 +15,11 @@ import {
   type DrawerMenuItemId,
 } from "./components/Navigation";
 import {
-  NibbanaWorld,
+  EmotionalTerrariumHero,
   QuickChatCard,
+  MindfulToolsSection,
   EmergencyPauseCard,
-  QuickToolCard,
   FutureSelfCard,
-  GrowthReflectionCard,
 } from "./components/HomeComponents";
 import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio";
 import { CompanionRoom } from "./components/CompanionRoom";
@@ -34,6 +33,8 @@ const SvgIcon = ({
   stroke = "#3F5944",
 }: {
   name:
+    | "sparkle"
+    | "egg"
     | "leaf"
     | "chat"
     | "eye"
@@ -61,6 +62,20 @@ const SvgIcon = ({
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
   };
+
+  if (name === "sparkle")
+    return (
+      <svg {...common}>
+        <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" />
+      </svg>
+    );
+
+  if (name === "egg")
+    return (
+      <svg {...common}>
+        <path d="M12 3C7.5 3 4 8.5 4 14.5C4 18.5 7.5 21 12 21C16.5 21 20 18.5 20 14.5C20 8.5 16.5 3 12 3Z" />
+      </svg>
+    );
 
   if (name === "leaf")
     return (
@@ -206,7 +221,7 @@ const BottomNav = ({
       <NavItem
         active={screen === "home"}
         label="วันนี้"
-        icon="leaf"
+        icon="sparkle"
         onClick={() => setScreen("home")}
       />
       <NavItem
@@ -218,14 +233,8 @@ const BottomNav = ({
       <NavItem
         active={screen === "companion"}
         label={eggLabel}
-        icon="heart"
+        icon="egg"
         onClick={() => setScreen("companion")}
-      />
-      <NavItem
-        active={screen === "journey"}
-        label="เส้นทาง"
-        icon="path"
-        onClick={() => setScreen("journey")}
       />
       <NavItem
         active={screen === "profile"}
@@ -248,9 +257,9 @@ const NavItem = ({
   icon: Parameters<typeof SvgIcon>[0]["name"];
   onClick: () => void;
 }) => (
-  <button className={`navItem ${active ? "navActive" : ""}`} onClick={onClick}>
+  <button className={`navItem ${active ? "navActive" : ""}`} onClick={onClick} aria-label={label}>
     <div className="navIconWrap">
-      <SvgIcon name={icon} size={22} stroke={active ? "#3F5944" : "#8A7868"} />
+      <SvgIcon name={icon} size={22} stroke={active ? "#7C3AED" : "#94A3B8"} />
     </div>
     <span>{label}</span>
   </button>
@@ -390,7 +399,7 @@ export default function App() {
 
         const isEggCreatedPending = localStorage.getItem("deung_sati_onboarding_egg_created") === "true";
         if (companion) {
-          if (isEggCreatedPending || companion.stage === 0) {
+          if (isEggCreatedPending) {
             // Reloaded after egg creation in Step 4 before clicking Step 5 complete
             return "reveal_only";
           }
@@ -853,7 +862,7 @@ function Home({
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
 }) {
-  const { companion, traceCount, wallet } = useCompanion();
+  const { companion, traceCount } = useCompanion();
 
   return (
     <div className="screen scrollArea homeScreenRoot">
@@ -863,47 +872,13 @@ function Home({
         onOpenMenu={onOpenMenu}
       />
 
-      {/* 1. NIBBANA SANCTUARY BANNER (Welcoming visual tone) */}
-      <NibbanaWorld />
-
-      {/* COMPANION SANCTUARY / EGG STATUS WIDGET */}
-      <div
-        onClick={() => setScreen("companion")}
-        style={{
-          margin: "12px 18px",
-          padding: "16px",
-          background: "linear-gradient(135deg, #FFF9FA 0%, #FFF0F3 100%)",
-          border: "1.5px solid #FFD1DC",
-          borderRadius: "22px",
-          boxShadow: "0 6px 16px rgba(236, 72, 153, 0.08)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: "14px",
-        }}
-      >
-        <div style={{ width: "48px", height: "54px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: "32px" }}>
-            {companion?.stage === 0 ? "🥚" : "🐾"}
-          </span>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: 700, fontSize: "14px", color: "#3E2D23" }}>
-              {companion?.stage === 0 ? "ไข่แห่งการรู้ตัว" : (companion?.name || "สหายสติ")}
-            </span>
-            <span style={{ fontSize: "12px", fontWeight: 700, color: traceCount >= 20 && companion?.stage === 0 ? "#F59E0B" : "#EC4899" }}>
-              {companion?.stage === 0 ? `${Math.min(20, traceCount)}/20 Traces` : `Lv.${wallet.level}`}
-            </span>
-          </div>
-          <div style={{ fontSize: "11.5px", color: "#7E6D63", marginTop: "3px" }}>
-            {companion?.stage === 0
-              ? (traceCount >= 20 ? "✨ ไข่พร้อมฟักแล้ว! แตะเพื่อฟักสหาย" : "สะสม Loop Trace ให้ครบ 20 เพื่อฟักน้อง")
-              : `ห้องเลี้ยงน้อง (${wallet.shells} 🐚, ${wallet.memory_crystals} 💎)`}
-          </div>
-        </div>
-        <span style={{ fontSize: "18px", color: "#EC4899" }}>→</span>
-      </div>
+      {/* 1. EMOTIONAL TERRARIUM HERO: 35-45% of Screen Height, Translucent Egg with Living Embryo */}
+      <EmotionalTerrariumHero
+        companion={companion}
+        traceCount={traceCount}
+        onOpenCompanionRoom={() => setScreen("companion")}
+        onPetCompanion={() => {}}
+      />
 
       {/* 2. QUICK CHAT — START VENTING / CONVERSATION IMMEDIATELY */}
       <QuickChatCard
@@ -911,49 +886,24 @@ function Home({
         onOpenChat={() => setScreen("chat")}
       />
 
-      {/* 3. QUICK TOOLS GRID */}
-      <h3 className="sectionCategoryTitle">เครื่องมือช่วยใจของคุณ</h3>
-      <div className="toolGrid">
-        <QuickToolCard
-          icon="💬"
-          title="ก่อนพูด"
-          subtitle="คิดก่อน... เพื่อสัมพันธ์ที่ดี"
-          onClick={() => setScreen("beforeSpeak")}
-        />
-        <QuickToolCard
-          icon="👁️"
-          title="มองอีกมุม"
-          subtitle="มองให้กว้างขึ้น"
-          onClick={() => setScreen("perspective")}
-        />
-        <QuickToolCard
-          icon="✓"
-          title="เมื่อกี้ฉันรู้ทัน"
-          subtitle="กลับมาทันใจ"
-          onClick={openEvidence}
-        />
-      </div>
+      {/* 3. MINDFUL TOOLS: Organic Sacred Resonance Orbit Path */}
+      <MindfulToolsSection
+        onBeforeSpeak={() => setScreen("beforeSpeak")}
+        onPerspective={() => setScreen("perspective")}
+        onAwareness={() => onStartChat("ตอนนี้ฉันรู้สึกรู้ทันความคิดตัวเองแล้ว อยากบันทึกดู")}
+      />
 
-      {/* 4. SOOTHING EMERGENCY PAUSE (Gentle, Peaceful, Accessible) */}
-      <div className="pauseSectionWrap">
-        <EmergencyPauseCard onTriggerEmergency={() => setScreen("pause")} />
-      </div>
+      {/* 4. EMERGENCY PAUSE: Compact Amber-Coral Glowing Glass Pill */}
+      <EmergencyPauseCard onTriggerEmergency={() => setScreen("pause")} />
 
-      {/* 5. FUTURE SELF */}
+      {/* 5. FUTURE SELF: Cosmic Glass Letter from Future Self */}
       <FutureSelfCard
-        trait="คนที่สงบและชัดเจน"
-        evidence="หยุดก่อนพูดได้ 2 ครั้ง"
-        onClick={() => setScreen("journey")}
+        trait="คนที่สงบและชัดเจนขึ้นในทุกความรู้สึก"
+        evidence="หยุดก่อนพูดและสังเกตใจได้ 2 ครั้ง"
+        onClick={openEvidence}
       />
 
-      {/* 6. GROWTH REFLECTION */}
-      <GrowthReflectionCard
-        topic="การรู้ทันความโกรธในความสัมพันธ์"
-        percent={72}
-        onClick={() => setScreen("journey")}
-      />
-
-      <div className="bottomSpacer" />
+      <div className="bottomSpacer" style={{ height: "40px" }} />
     </div>
   );
 }
@@ -2244,20 +2194,26 @@ const styles = `
 /* Deung Sati Design System Tokens & Global Base                              */
 /* ========================================================================== */
 :root {
-  --bg-cream: #FAF5ED;
-  --bg-card: rgba(255, 253, 249, 0.88);
-  --sage-primary: #657E53;
-  --sage-dark: #3F5944;
-  --sage-light: #DDE7D8;
-  --cocoa-dark: #3E2D23;
-  --cocoa-mid: #685141;
-  --cocoa-light: #9C8775;
-  --emergency-coral: #D9532B;
-  --gold-accent: #E4B869;
+  --bg-cream: #FAF5FF;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --pearl-pink: #FFB7C5;
+  --lavender-mist: #E9D5FF;
+  --lavender-deep: #7C3AED;
+  --coral-vibe: #FB7185;
+  --cobalt-deep: #1E1B4B;
+  --amber-glow: #F59E0B;
+  --sage-primary: #8B5CF6;
+  --sage-dark: #1E1B4B;
+  --sage-light: #EDE9FE;
+  --cocoa-dark: #1E1B4B;
+  --cocoa-mid: #4C1D95;
+  --cocoa-light: #64748B;
+  --emergency-coral: #E11D48;
+  --gold-accent: #F59E0B;
   
   font-family: Inter, "Noto Sans Thai", "Tahoma", system-ui, -apple-system, sans-serif;
   color: var(--cocoa-dark);
-  background: #EDE8DE;
+  background: #F3E8FF;
 }
 
 * {
@@ -2267,9 +2223,10 @@ const styles = `
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 10% 10%, #FAF6EE 0%, transparent 40%),
-    radial-gradient(circle at 90% 25%, #E5ECE0 0%, transparent 35%),
-    #ECE6DC;
+    radial-gradient(circle at 15% 15%, #FDF2F8 0%, transparent 45%),
+    radial-gradient(circle at 85% 25%, #F5F3FF 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, #FFFBEB 0%, transparent 40%),
+    #F3E8FF;
 }
 
 button, input, textarea {
@@ -2324,38 +2281,52 @@ button {
   display: none;
 }
 
+.emotional-terrarium-hero,
+.nattiTerrariumHero {
+  flex-shrink: 0;
+  min-height: 290px;
+}
+
+.homeQuickChatCard,
+.homeChatCapsule {
+  flex-shrink: 0;
+}
+
 /* ========================================================================== */
 /* Top Header (Conventional Mobile Header with 🚨 ☰)                          */
 /* ========================================================================== */
 .appHeader {
-  height: 68px;
-  padding: 12px 18px 6px;
+  height: 52px;
+  padding: 6px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: relative;
   z-index: 40;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(244, 114, 182, 0.2);
 }
 
 .headerLeft {
-  min-width: 84px;
+  min-width: 80px;
   display: flex;
   align-items: center;
 }
 
 .headerBrand {
-  color: var(--sage-dark);
+  color: var(--cobalt-deep);
   font-weight: 800;
-  font-family: Georgia, "Noto Serif Thai", serif;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: -0.2px;
 }
 
 .headerBackBtn {
   border: 0;
   background: transparent;
-  color: #796552;
-  font-size: 24px;
+  color: var(--cobalt-deep);
+  font-size: 22px;
   line-height: 1;
   padding: 4px 8px 4px 0;
   display: flex;
@@ -2364,16 +2335,15 @@ button {
 
 .headerTitle {
   margin: 0;
-  color: var(--sage-dark);
-  font-size: 18.5px;
+  color: var(--cobalt-deep);
+  font-size: 16px;
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
-  font-family: Georgia, "Noto Serif Thai", serif;
 }
 
 .headerRightActions {
-  min-width: 84px;
+  min-width: 80px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -2384,14 +2354,14 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: linear-gradient(135deg, #DE5A35, #BA3B1C);
+  background: linear-gradient(135deg, #FB7185, #E11D48);
   color: white;
   border: 0;
   border-radius: 999px;
-  padding: 5px 9px 5px 7px;
+  padding: 4px 10px 4px 8px;
   font-size: 11px;
-  font-weight: 600;
-  box-shadow: 0 3px 9px rgba(186, 59, 28, 0.28);
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(225, 29, 72, 0.25);
   position: relative;
   overflow: hidden;
   transition: transform 0.15s ease;
@@ -2406,15 +2376,15 @@ button {
 }
 
 .hamburgerIconBtn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  border: 1px solid #E5D9CB;
+  border: 1px solid rgba(192, 132, 252, 0.35);
   background: rgba(255, 255, 255, 0.85);
   display: grid;
   place-items: center;
-  color: var(--cocoa-dark);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  color: var(--cobalt-deep);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.06);
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
@@ -2956,44 +2926,55 @@ button {
 }
 
 /* ========================================================================== */
-/* Bottom Navigation                                                          */
+/* Bottom Navigation (Frosted Pearl Bar with Lavender-Coral Glow)             */
 /* ========================================================================== */
 .bottomNav {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 84px;
-  background: rgba(255, 252, 247, 0.96);
-  border-top: 1px solid #EBE2D5;
+  height: 82px;
+  background: rgba(255, 255, 255, 0.86);
+  border-top: 1px solid rgba(244, 114, 182, 0.24);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   z-index: 60;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 -10px 30px rgba(30, 27, 75, 0.06);
 }
 
 .navItem {
   border: 0;
   background: transparent;
-  color: #8A7868;
+  color: #64748B;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   flex-direction: column;
-  font-size: 11.5px;
-  transition: color 0.15s ease;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .navIconWrap {
   display: grid;
   place-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  transition: all 0.2s ease;
 }
 
 .navActive {
-  color: var(--sage-dark);
-  font-weight: 600;
-  background: linear-gradient(to top, rgba(221, 231, 216, 0.75), transparent);
+  color: #7C3AED;
+  font-weight: 700;
+}
+
+.navActive .navIconWrap {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.22), rgba(124, 58, 237, 0.16));
+  box-shadow: 0 0 14px rgba(244, 114, 182, 0.4);
 }
 
 /* ========================================================================== */

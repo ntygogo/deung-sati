@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export interface GrowthDnaProps {
   primary_pink_shade?: string;
@@ -32,55 +32,96 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
   onPet,
   size = 280,
 }) => {
-  const [blink, setBlink] = useState(false);
-  const [hearts, setHearts] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [particles, setParticles] = useState<{ id: number; x: number; y: number; char: string; color: string }[]>([]);
+  const [touchPoint, setTouchPoint] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [isTouched, setIsTouched] = useState(false);
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  // Natural blinking effect for hatched mascot
-  useEffect(() => {
-    if (stage === 0) return;
-    const interval = setInterval(() => {
-      setBlink(true);
-      setTimeout(() => setBlink(false), 220);
-    }, 3600);
-    return () => clearInterval(interval);
-  }, [stage]);
-
-  const handleInteraction = (e: React.MouseEvent) => {
+  const handleInteraction = (e: React.MouseEvent<HTMLDivElement>) => {
     if (onPet) {
       onPet();
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      setHearts((prev) => [...prev, { id: Date.now(), x, y }]);
-      setTimeout(() => {
-        setHearts((prev) => prev.filter((h) => Date.now() - h.id < 1200));
-      }, 1200);
     }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+
+    // Trigger local touch ripple and joyful axolotl reaction
+    setIsTouched(true);
+    setTouchPoint({ x: clientX, y: clientY, id: Date.now() });
+    setTimeout(() => setIsTouched(false), 650);
+
+    // Particle burst: pearl hearts, amber sparkles, water bubbles
+    const symbols = ['✨', '💖', '🫧', '✦', '🌸'];
+    const colors = ['#FBBF24', '#FF8DA1', '#60A5FA', '#C084FC', '#F472B6'];
+    const newParticles = Array.from({ length: 3 }).map((_, i) => ({
+      id: Date.now() + i,
+      x: clientX + (Math.random() * 40 - 20),
+      y: clientY + (Math.random() * 30 - 15),
+      char: symbols[Math.floor(Math.random() * symbols.length)],
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+
+    setParticles((prev) => [...prev, ...newParticles]);
+    setTimeout(() => {
+      setParticles((prev) => prev.filter((p) => Date.now() - p.id < 1400));
+    }, 1400);
   };
 
   // Color mapping from Growth DNA
-  const pinkShades: Record<string, { body: string; shadow: string; belly: string }> = {
-    soft_sakura: { body: '#FFB7C5', shadow: '#E297A7', belly: '#FFF0F3' },
-    coral_pastel: { body: '#FFAA95', shadow: '#E58A75', belly: '#FFF2EE' },
-    electric_rose: { body: '#FF8DA1', shadow: '#D96E82', belly: '#FFEBF0' },
-    lavender_pink: { body: '#F2B5D4', shadow: '#CC95B0', belly: '#FCF2F7' },
-    golden_pink: { body: '#FFBEA6', shadow: '#E29C85', belly: '#FFF7F2' },
+  const pinkShades: Record<string, { body: string; shadow: string; belly: string; glow: string; highlight: string }> = {
+    soft_sakura: { body: '#FFB7C5', shadow: '#E297A7', belly: '#FFF0F3', glow: '#FFD1DC', highlight: '#FFFFFF' },
+    coral_pastel: { body: '#FFA07A', shadow: '#E57373', belly: '#FFF5EB', glow: '#FF8A75', highlight: '#FFEFEA' },
+    electric_rose: { body: '#FF6584', shadow: '#D83A56', belly: '#FFE3EC', glow: '#FF4D6D', highlight: '#FFF0F5' },
+    lavender_pink: { body: '#E8A7D0', shadow: '#B5739D', belly: '#FAF0F7', glow: '#D8B4E2', highlight: '#FFFFFF' },
+    golden_pink: { body: '#FDB095', shadow: '#D97A5E', belly: '#FFF4EE', glow: '#FBBF24', highlight: '#FFFDF0' },
   };
 
   const currentShade = (dna?.primary_pink_shade && pinkShades[dna.primary_pink_shade]) || pinkShades.soft_sakura;
   const secondaryColor = dna?.secondary_color || '#8BD3DD';
 
-  // -------------------------------------------------------------
-  // STAGE 0: THE COMPANION EGG (0 to 20 Loop Traces Progress)
-  // -------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // STAGE 0: THE TRANSLUCENT EMOTIONAL TERRARIUM EGG
+  // Visible Axolotl Embryo floating inside glass/jelly shell with living movement
+  // --------------------------------------------------------------------------
   if (stage === 0) {
     const progress = Math.min(20, Math.max(0, traceCount));
     const ratio = progress / 20;
     const isReadyToHatch = progress >= 20;
 
+    // Embryo developmental scale & opacity across milestones
+    // 0/20: tiny sleeping seed, 5/20: stirring buds, 10/20: defined tail, 15/20: radiant frills, 20/20: ready
+    let embryoScale = 0.70;
+    let embryoOpacity = 0.70;
+    let gillLength = 10;
+    let coreGlowOpacity = 0.45;
+
+    if (progress >= 20) {
+      embryoScale = 0.98;
+      embryoOpacity = 1.0;
+      gillLength = 28;
+      coreGlowOpacity = 0.95;
+    } else if (progress >= 15) {
+      embryoScale = 0.92;
+      embryoOpacity = 0.95;
+      gillLength = 24;
+      coreGlowOpacity = 0.85;
+    } else if (progress >= 10) {
+      embryoScale = 0.84;
+      embryoOpacity = 0.88;
+      gillLength = 19;
+      coreGlowOpacity = 0.70;
+    } else if (progress >= 5) {
+      embryoScale = 0.77;
+      embryoOpacity = 0.80;
+      gillLength = 14;
+      coreGlowOpacity = 0.58;
+    }
+
     return (
       <div
-        className="companion-egg-wrapper"
+        className="companion-egg-container"
+        data-testid="companion-egg-container"
         onClick={handleInteraction}
         style={{
           width: size,
@@ -91,178 +132,494 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
           justifyContent: 'center',
           cursor: 'pointer',
           userSelect: 'none',
+          touchAction: 'manipulation',
         }}
+        role="button"
+        tabIndex={0}
+        aria-label={`ไข่แห่งการรู้ตัว ความคืบหน้า ${progress} จาก 20 Loop Traces`}
       >
-        {/* Radiating Aura based on trace progress */}
+        <style>{`
+          @keyframes embryoBreathe {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.035) translateY(-2px); }
+          }
+          @keyframes embryoTailDrift {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(4deg); }
+          }
+          @keyframes gillWaveSoft {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(3deg); }
+          }
+          @keyframes soulPulseGlow {
+            0%, 100% { opacity: ${coreGlowOpacity}; transform: scale(1); }
+            50% { opacity: ${Math.min(1, coreGlowOpacity + 0.25)}; transform: scale(1.15); }
+          }
+          @keyframes auraBreathe {
+            0%, 100% { transform: scale(0.96); opacity: 0.65; }
+            50% { transform: scale(1.04); opacity: 0.90; }
+          }
+          @keyframes eggFloatDrift {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-4px) rotate(0.8deg); }
+          }
+          @keyframes touchRippleEffect {
+            0% { transform: scale(0.2); opacity: 0.9; }
+            100% { transform: scale(2.2); opacity: 0; }
+          }
+          @keyframes particleFloatUp {
+            0% { transform: translateY(0) scale(0.6); opacity: 1; }
+            100% { transform: translateY(-48px) scale(1.1); opacity: 0; }
+          }
+
+          /* Accessibility: Respect user motion preference */
+          @media (prefers-reduced-motion: reduce) {
+            .eggLivingAnimated, .embryoAnimatedGroup, .gillWaveGroup, .tailAnimatedGroup, .auraAnimated {
+              animation: none !important;
+            }
+          }
+        `}</style>
+
+        {/* 1. LAYER: Multi-Spectral Background Bioluminescent Aura */}
         <div
+          className="auraAnimated"
           style={{
             position: 'absolute',
-            width: size * 0.75,
-            height: size * 0.9,
+            width: size * 0.88,
+            height: size * 1.05,
             borderRadius: '50% 50% 46% 46% / 60% 60% 40% 40%',
             background: isReadyToHatch
-              ? 'radial-gradient(circle, rgba(255, 215, 0, 0.55) 0%, rgba(255, 182, 193, 0.4) 50%, transparent 75%)'
-              : `radial-gradient(circle, rgba(255, 183, 197, ${0.15 + ratio * 0.45}) 0%, transparent 70%)`,
-            filter: 'blur(16px)',
-            transform: isInteracting ? 'scale(1.12)' : 'scale(1)',
-            transition: 'all 0.5s ease',
-            animation: isReadyToHatch ? 'pulseHatch 1.8s infinite' : 'pulseWarmth 3.5s ease-in-out infinite',
+              ? 'radial-gradient(circle at 50% 55%, rgba(251, 191, 36, 0.45) 0%, rgba(244, 114, 182, 0.35) 45%, rgba(139, 92, 246, 0.25) 70%, transparent 85%)'
+              : `radial-gradient(circle at 50% 55%, ${currentShade.glow}44 0%, rgba(192, 132, 252, ${0.15 + ratio * 0.25}) 40%, rgba(37, 99, 235, 0.12) 68%, transparent 85%)`,
+            filter: 'blur(22px)',
+            animation: 'auraBreathe 5s ease-in-out infinite',
+            pointerEvents: 'none',
           }}
         />
 
-        {/* The SVG Egg */}
+        {/* 2. LAYER: Main SVG Translucent Glass Egg */}
         <svg
-          width={size * 0.7}
-          height={size * 0.88}
-          viewBox="0 0 200 250"
+          ref={svgRef}
+          className="eggLivingAnimated"
+          width={size * 0.82}
+          height={size * 0.98}
+          viewBox="0 0 240 300"
           style={{
             overflow: 'visible',
-            filter: 'drop-shadow(0 12px 20px rgba(160, 110, 120, 0.25))',
-            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            transform: isInteracting ? 'scale(1.05) rotate(2deg)' : 'scale(1)',
+            filter: isTouched
+              ? 'drop-shadow(0 14px 28px rgba(244, 114, 182, 0.4))'
+              : 'drop-shadow(0 12px 24px rgba(30, 27, 75, 0.22))',
+            animation: 'eggFloatDrift 6s ease-in-out infinite',
+            transition: 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            transform: isTouched ? 'scale(1.05)' : 'scale(1)',
           }}
         >
           <defs>
-            <linearGradient id="eggGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FFF9FA" />
-              <stop offset="35%" stopColor={currentShade.body} />
+            {/* Amniotic Glass Jelly Fluid Gradient */}
+            <radialGradient id="amnioticJellyGrad" cx="50%" cy="56%" r="62%">
+              <stop offset="0%" stopColor="#FFF9FB" stopOpacity="0.48" />
+              <stop offset="38%" stopColor={currentShade.belly} stopOpacity="0.32" />
+              <stop offset="72%" stopColor="#DDD6FE" stopOpacity="0.26" />
+              <stop offset="92%" stopColor="#3B82F6" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#F472B6" stopOpacity="0.55" />
+            </radialGradient>
+
+            {/* Specular Rim Glow Gradient (Refracting Terrarium Light) */}
+            <linearGradient id="eggRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+              <stop offset="25%" stopColor={currentShade.highlight} stopOpacity="0.65" />
+              <stop offset="60%" stopColor="#C084FC" stopOpacity="0.4" />
+              <stop offset="85%" stopColor="#F59E0B" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.75" />
+            </linearGradient>
+
+            {/* Axolotl Embryo Body Gradient */}
+            <linearGradient id="embryoBodyGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+              <stop offset="0%" stopColor="#FFF4F6" />
+              <stop offset="30%" stopColor={currentShade.body} />
               <stop offset="85%" stopColor={currentShade.shadow} />
-              <stop offset="100%" stopColor="#C97585" />
+              <stop offset="100%" stopColor="#BE185D" />
             </linearGradient>
 
-            <linearGradient id="innerGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#FFE066" stopOpacity={0.1 + ratio * 0.7} />
-              <stop offset="100%" stopColor="#FF70A6" stopOpacity={0.2 + ratio * 0.5} />
+            {/* Axolotl Gills Gradient */}
+            <linearGradient id="embryoGillGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FF7597" />
+              <stop offset="60%" stopColor={currentShade.body} />
+              <stop offset="100%" stopColor={secondaryColor} />
             </linearGradient>
 
-            <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
+            {/* Inner Core Soul Nucleus (Bioluminescent Heartbeat) */}
+            <radialGradient id="soulNucleusGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#FFFBEB" stopOpacity="0.95" />
+              <stop offset="25%" stopColor="#FBBF24" stopOpacity="0.85" />
+              <stop offset="65%" stopColor="#F43F5E" stopOpacity="0.6" />
+              <stop offset="90%" stopColor="#8B5CF6" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+            </radialGradient>
+
+            {/* Soft Glow Filter */}
+            <filter id="softGlowFilter" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
+
+            {/* Intense Golden Radiance Filter */}
+            <filter id="radiantVeinGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="4.5" result="blur1" />
+              <feGaussianBlur stdDeviation="1.5" result="blur2" />
+              <feMerge>
+                <feMergeNode in="blur1" />
+                <feMergeNode in="blur2" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            {/* Egg Shell Clip Path to encapsulate amniotic fluid & baby axolotl */}
+            <clipPath id="eggShellInnerClip">
+              <path d="M120,26 C182,26 214,104 214,182 C214,240 175,268 120,268 C65,268 26,240 26,182 C26,104 58,26 120,26 Z" />
+            </clipPath>
           </defs>
 
-          {/* Ground Soft Shadow */}
-          <ellipse cx="100" cy="235" rx="65" ry="14" fill="rgba(80, 50, 60, 0.15)" filter="blur(3px)" />
+          {/* Ground Refracted Shadow */}
+          <ellipse cx="120" cy="272" rx="72" ry="14" fill="rgba(30, 27, 75, 0.18)" filter="blur(5px)" />
 
-          {/* Egg Base Shell */}
+          {/* ================================================================= */}
+          {/* EGG INTERIOR (Inside Glass Jelly Shell)                           */}
+          {/* ================================================================= */}
+          <g clipPath="url(#eggShellInnerClip)">
+            {/* Deep Amniotic Fluid Fill */}
+            <path
+              d="M120,25 C185,25 218,105 218,185 C218,245 178,272 120,272 C62,272 22,245 22,185 C22,105 55,25 120,25 Z"
+              fill="url(#amnioticJellyGrad)"
+            />
+
+            {/* Ambient Internal Caustic Nebula Rays */}
+            <circle cx="120" cy="165" r="75" fill={`url(#soulNucleusGrad)`} opacity={0.3 + ratio * 0.4} />
+            <ellipse cx="85" cy="115" rx="35" ry="50" fill="rgba(255, 255, 255, 0.12)" filter="blur(8px)" />
+
+            {/* ------------------------------------------------------------- */}
+            {/* THE LIVING PINK BABY AXOLOTL EMBRYO                           */}
+            {/* ------------------------------------------------------------- */}
+            <g
+              className="embryoAnimatedGroup"
+              style={{
+                transformOrigin: '120px 165px',
+                animation: 'embryoBreathe 4.5s ease-in-out infinite',
+                opacity: embryoOpacity,
+              }}
+            >
+              {/* Scale container based on Growth Progress */}
+              <g transform={`translate(120, 165) scale(${embryoScale}) translate(-120, -165)`}>
+                
+                {/* 1. Embryo Curled Long Swimming Tail with Translucent Swimming Fin */}
+                <g className="tailAnimatedGroup" style={{ transformOrigin: '135px 185px', animation: 'embryoTailDrift 3.5s ease-in-out infinite' }}>
+                  {/* Outer Translucent Salamander Swimming Fin Ribbon */}
+                  <path
+                    d="M136,176 C162,198 154,238 120,248 C88,258 64,232 74,204 C78,190 90,188 92,198 C85,214 100,234 122,228 C142,220 150,196 128,176 Z"
+                    fill={secondaryColor}
+                    opacity="0.6"
+                    filter="url(#softGlowFilter)"
+                  />
+                  {/* Core Muscular Axolotl Tail */}
+                  <path
+                    d="M132,180 C148,198 140,224 116,232 C96,238 80,220 86,206 C88,198 94,196 95,202 C92,212 102,224 116,218 C128,212 136,198 124,180 Z"
+                    fill="url(#embryoBodyGrad)"
+                    opacity="0.94"
+                  />
+                </g>
+
+                {/* 2. Embryo Curled Axolotl Torso */}
+                <path
+                  d="M98,138 C136,134 156,158 150,188 C144,214 118,224 96,212 C76,200 80,168 90,146 C94,140 96,138 98,138 Z"
+                  fill="url(#embryoBodyGrad)"
+                />
+
+                {/* Soft Pearlescent Warm Belly */}
+                <ellipse cx="118" cy="176" rx="20" ry="15" fill={currentShade.belly} opacity="0.7" filter="blur(2px)" />
+
+                {/* 3. Bioluminescent Soul Nucleus (Inner Heartbeat of Mindfulness) */}
+                <g style={{ transformOrigin: '118px 172px', animation: 'soulPulseGlow 3s ease-in-out infinite' }}>
+                  <circle cx="118" cy="172" r={16 + ratio * 10} fill="url(#soulNucleusGrad)" filter="url(#radiantVeinGlow)" />
+                  <circle cx="118" cy="172" r="5" fill="#FFFFFF" opacity="0.92" />
+                </g>
+
+                {/* 4. Cute Wide Rounded Baby Axolotl Head */}
+                <ellipse cx="118" cy="124" rx="39" ry="29" fill="url(#embryoBodyGrad)" />
+
+                {/* Cute Rosy Cheeks */}
+                <ellipse cx="92" cy="131" rx="7" ry="4.5" fill="#F43F5E" opacity="0.5" filter="blur(1px)" />
+                <ellipse cx="144" cy="131" rx="7" ry="4.5" fill="#F43F5E" opacity="0.5" filter="blur(1px)" />
+
+                {/* Cute Axolotl Eyes & Sweet Expression */}
+                {isTouched ? (
+                  // Open sparkly joyful kawaii eyes on tap!
+                  <g>
+                    <ellipse cx="104" cy="122" rx="4.8" ry="6" fill="#1E1B4B" />
+                    <ellipse cx="132" cy="122" rx="4.8" ry="6" fill="#1E1B4B" />
+                    <circle cx="106" cy="120" r="1.8" fill="#FFFFFF" />
+                    <circle cx="134" cy="120" r="1.8" fill="#FFFFFF" />
+                    <circle cx="103" cy="124" r="0.9" fill="#FFFFFF" />
+                    <circle cx="131" cy="124" r="0.9" fill="#FFFFFF" />
+                    <path d="M115,129 Q118,133 121,129" stroke="#9F1239" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  </g>
+                ) : (
+                  // Sleeping calm crescent eyes with sweet smile
+                  <g stroke="#9F1239" strokeWidth="2.2" strokeLinecap="round" fill="none">
+                    <path d="M100,122 Q105,127 110,122" />
+                    <path d="M126,122 Q131,127 136,122" />
+                    <path d="M115,129 Q118,132 121,129" strokeWidth="1.5" />
+                  </g>
+                )}
+
+                {/* 5. Feathery External Gills (3 distinct branching frills on each side) */}
+                {/* Left External Gill Stalks */}
+                <g className="gillWaveGroup" style={{ transformOrigin: '84px 124px', animation: 'gillWaveSoft 2.8s ease-in-out infinite' }}>
+                  {/* Top Feathery Branch */}
+                  <path
+                    d={`M86,114 Q${86 - gillLength * 0.7},${104 - gillLength * 0.3} ${86 - gillLength * 1.35},${110 - gillLength * 0.2}`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.4"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  {/* Gill frill fringe spikes */}
+                  <path d={`M${86 - gillLength * 0.6},${108 - gillLength * 0.2} Q${86 - gillLength * 0.8},${102 - gillLength * 0.3} ${86 - gillLength * 1.0},${104 - gillLength * 0.3}`} stroke={secondaryColor} strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <circle cx={86 - gillLength * 1.35} cy={110 - gillLength * 0.2} r="3.2" fill={secondaryColor} opacity="0.85" />
+
+                  {/* Mid Feathery Branch */}
+                  <path
+                    d={`M82,124 Q${82 - gillLength * 0.8},122 ${82 - gillLength * 1.45},127`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.8"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <path d={`M${82 - gillLength * 0.7},121 Q${82 - gillLength * 0.9},116 ${82 - gillLength * 1.1},118`} stroke={secondaryColor} strokeWidth="2" strokeLinecap="round" fill="none" />
+                  <circle cx={82 - gillLength * 1.45} cy={127} r="3.5" fill={secondaryColor} opacity="0.85" />
+
+                  {/* Bottom Feathery Branch */}
+                  <path
+                    d={`M85,134 Q${85 - gillLength * 0.7},${138 + gillLength * 0.3} ${85 - gillLength * 1.3},${144 + gillLength * 0.5}`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <path d={`M${85 - gillLength * 0.6},${137 + gillLength * 0.2} Q${85 - gillLength * 0.8},${142 + gillLength * 0.3} ${85 - gillLength * 1.0},${141 + gillLength * 0.4}`} stroke={secondaryColor} strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <circle cx={85 - gillLength * 1.3} cy={144 + gillLength * 0.5} r="3" fill={secondaryColor} opacity="0.85" />
+                </g>
+
+                {/* Right External Gill Stalks */}
+                <g className="gillWaveGroup" style={{ transformOrigin: '152px 124px', animation: 'gillWaveSoft 2.8s ease-in-out infinite alternate' }}>
+                  {/* Top Feathery Branch */}
+                  <path
+                    d={`M150,114 Q${150 + gillLength * 0.7},${104 - gillLength * 0.3} ${150 + gillLength * 1.35},${110 - gillLength * 0.2}`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.4"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <path d={`M${150 + gillLength * 0.6},${108 - gillLength * 0.2} Q${150 + gillLength * 0.8},${102 - gillLength * 0.3} ${150 + gillLength * 1.0},${104 - gillLength * 0.3}`} stroke={secondaryColor} strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <circle cx={150 + gillLength * 1.35} cy={110 - gillLength * 0.2} r="3.2" fill={secondaryColor} opacity="0.85" />
+
+                  {/* Mid Feathery Branch */}
+                  <path
+                    d={`M154,124 Q${154 + gillLength * 0.8},122 ${154 + gillLength * 1.45},127`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.8"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <path d={`M${154 + gillLength * 0.7},121 Q${154 + gillLength * 0.9},116 ${154 + gillLength * 1.1},118`} stroke={secondaryColor} strokeWidth="2" strokeLinecap="round" fill="none" />
+                  <circle cx={154 + gillLength * 1.45} cy={127} r="3.5" fill={secondaryColor} opacity="0.85" />
+
+                  {/* Bottom Feathery Branch */}
+                  <path
+                    d={`M151,134 Q${151 + gillLength * 0.7},${138 + gillLength * 0.3} ${151 + gillLength * 1.3},${144 + gillLength * 0.5}`}
+                    stroke="url(#embryoGillGrad)"
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <path d={`M${151 + gillLength * 0.6},${137 + gillLength * 0.2} Q${151 + gillLength * 0.8},${142 + gillLength * 0.3} ${151 + gillLength * 1.0},${141 + gillLength * 0.4}`} stroke={secondaryColor} strokeWidth="1.8" strokeLinecap="round" fill="none" />
+                  <circle cx={151 + gillLength * 1.3} cy={144 + gillLength * 0.5} r="3" fill={secondaryColor} opacity="0.85" />
+                </g>
+
+                {/* 6. Curled Baby Front Paws */}
+                <ellipse cx="106" cy="162" rx="7" ry="5" fill={currentShade.body} transform="rotate(-15 106 162)" />
+                <ellipse cx="130" cy="162" rx="7" ry="5" fill={currentShade.body} transform="rotate(15 130 162)" />
+              </g>
+            </g>
+
+            {/* Suspended Floating Bioluminescent Micro-Bubbles */}
+            <circle cx="70" cy="155" r="2.5" fill="#FFFFFF" opacity="0.6" />
+            <circle cx="165" cy="140" r="3" fill={secondaryColor} opacity="0.7" />
+            <circle cx="150" cy="205" r="2" fill="#FBBF24" opacity="0.75" />
+            <circle cx="85" cy="225" r="2" fill="#FFFFFF" opacity="0.5" />
+          </g>
+
+          {/* ================================================================= */}
+          {/* EGG SHELL EXTERIOR (Glass Surface, Specular & Luminous Veins)      */}
+          {/* ================================================================= */}
+
+          {/* Translucent Glass Outline with Fresnel Color Shift */}
           <path
-            d="M100,15 C155,15 185,90 185,160 C185,215 150,235 100,235 C50,235 15,215 15,160 C15,90 45,15 100,15 Z"
-            fill="url(#eggGrad)"
+            d="M120,25 C185,25 218,105 218,185 C218,245 178,272 120,272 C62,272 22,245 22,185 C22,105 55,25 120,25 Z"
+            fill="none"
+            stroke="url(#eggRimGrad)"
+            strokeWidth="3.5"
+            opacity="0.88"
           />
 
-          {/* Inner Light from Self-Observation */}
+          {/* Primary Top-Left Specular Reflection (Curved Glass Sheen) */}
           <path
-            d="M100,30 C145,30 170,95 170,155 C170,205 140,222 100,222 C60,222 30,205 30,155 C30,95 55,30 100,30 Z"
-            fill="url(#innerGlow)"
-            opacity={0.7}
+            d="M80,48 C108,35 142,38 162,52 C142,60 112,54 84,68 C78,60 76,54 80,48 Z"
+            fill="#FFFFFF"
+            opacity="0.62"
+            filter="blur(1.5px)"
           />
 
-          {/* Soft Highlight */}
-          <ellipse
-            cx="65"
-            cy="75"
-            rx="30"
-            ry="55"
-            transform="rotate(-25 65 75)"
-            fill="white"
-            opacity="0.35"
-            filter="blur(5px)"
+          {/* Side Arc Glass Highlight */}
+          <path
+            d="M40,130 C35,160 42,195 58,225"
+            stroke="#FFFFFF"
+            strokeWidth="3.2"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.4"
+            filter="blur(1px)"
           />
 
-          {/* Mindful Pattern based on DNA */}
-          {dna?.body_pattern === 'ripples' && (
-            <g stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none">
-              <ellipse cx="100" cy="140" rx="40" ry="12" strokeDasharray="4 6" />
-              <ellipse cx="100" cy="165" rx="55" ry="14" strokeDasharray="5 7" />
+          {/* Secondary Rim Caustic Reflection (Bottom Right) */}
+          <path
+            d="M190,210 C180,235 160,255 135,264"
+            stroke="url(#eggRimGrad)"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.6"
+          />
+
+          {/* ================================================================= */}
+          {/* LUMINOUS FRACTURES OF AWARENESS (0, 5, 10, 15, 20 TRACES)         */}
+          {/* ================================================================= */}
+          {/* 5+ Traces: First Hairline Vein of Inner Light */}
+          {progress >= 5 && (
+            <path
+              d="M92,85 L102,105 L96,122 L110,140"
+              stroke="#FDE68A"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              filter="url(#radiantVeinGlow)"
+              opacity={0.88}
+            />
+          )}
+
+          {/* 10+ Traces: Secondary Vein with Golden Spark */}
+          {progress >= 10 && (
+            <g>
+              <path
+                d="M148,82 L136,104 L150,120 L140,142 L154,160"
+                stroke="#FBBF24"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                filter="url(#radiantVeinGlow)"
+                opacity={0.92}
+              />
+              <circle cx="140" cy="142" r="3" fill="#FFF" filter="url(#softGlowFilter)" />
             </g>
           )}
 
-          {/* DYNAMIC PROGRESS CRACKS (Scale with 0 to 20 Traces) */}
-          {progress >= 5 && (
-            <path
-              d="M75,100 L85,115 L78,130 L90,145"
-              stroke="#FFF"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              fill="none"
-              filter="url(#softGlow)"
-              opacity={0.85}
-            />
-          )}
-
-          {progress >= 10 && (
-            <path
-              d="M125,95 L115,112 L128,125 L120,140 L132,152"
-              stroke="#FFF"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              fill="none"
-              filter="url(#softGlow)"
-              opacity={0.9}
-            />
-          )}
-
+          {/* 15+ Traces: Crown Crystalline Veins */}
           {progress >= 15 && (
             <g>
               <path
-                d="M95,45 L102,65 L92,80 L108,98"
-                stroke="#FFD700"
+                d="M112,42 L124,65 L114,84 L128,104"
+                stroke="#FDE047"
                 strokeWidth="2.8"
                 strokeLinecap="round"
+                strokeLinejoin="round"
                 fill="none"
-                filter="url(#softGlow)"
+                filter="url(#radiantVeinGlow)"
               />
               <path
-                d="M60,160 L75,172 L70,190"
-                stroke="#FFE066"
+                d="M68,172 L82,185 L76,204"
+                stroke="#FCD34D"
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 fill="none"
+                filter="url(#radiantVeinGlow)"
               />
             </g>
           )}
 
+          {/* 20+ Traces: Radiant Web of Emergence (Ready to Hatch) */}
           {progress >= 20 && (
             <g>
               <path
-                d="M100,15 L102,50 L88,75 L112,110 L95,145 L105,185 L98,235"
-                stroke="#FFF"
-                strokeWidth="3.5"
+                d="M120,25 L124,62 L108,92 L132,130 L115,168 L128,212 L120,272"
+                stroke="#FFFFFF"
+                strokeWidth="3.8"
                 strokeLinecap="round"
+                strokeLinejoin="round"
                 fill="none"
-                filter="url(#softGlow)"
+                filter="url(#radiantVeinGlow)"
               />
-              <circle cx="102" cy="110" r="12" fill="#FFE57F" opacity="0.6" filter="blur(4px)" />
+              <circle cx="132" cy="130" r="9" fill="#FEF08A" opacity="0.8" filter="blur(3px)" />
+              <circle cx="115" cy="168" r="7" fill="#FEF08A" opacity="0.75" filter="blur(2.5px)" />
             </g>
           )}
 
-          {/* Golden Speckles / Energy Sparks */}
-          {Array.from({ length: Math.min(progress, 12) }).map((_, i) => (
+          {/* Dynamic Golden Energy Motes (Count scales with progress) */}
+          {Array.from({ length: Math.min(progress, 16) }).map((_, i) => (
             <circle
               key={i}
-              cx={60 + (i * 23) % 80}
-              cy={80 + (i * 31) % 100}
-              r={1.5 + (i % 2)}
-              fill={i % 2 === 0 ? '#FFE066' : '#FFF'}
-              opacity="0.75"
+              cx={50 + (i * 27) % 140}
+              cy={70 + (i * 37) % 160}
+              r={1.2 + (i % 2.2) * 0.8}
+              fill={i % 2 === 0 ? '#FDE047' : '#FFFFFF'}
+              opacity={0.65 + (i % 3) * 0.12}
+              filter="url(#softGlowFilter)"
             />
           ))}
+
+          {/* Touch Ripple Visual in SVG space */}
+          {touchPoint && isTouched && (
+            <circle
+              cx={touchPoint.x * (240 / size)}
+              cy={touchPoint.y * (300 / size)}
+              r="22"
+              stroke="#FFF"
+              strokeWidth="2.5"
+              fill="rgba(255, 255, 255, 0.25)"
+              style={{
+                animation: 'touchRippleEffect 0.65s ease-out forwards',
+                transformOrigin: `${touchPoint.x * (240 / size)}px ${touchPoint.y * (300 / size)}px`,
+              }}
+            />
+          )}
         </svg>
 
-        {/* Floating Heart Particles upon Petting */}
-        {hearts.map((h) => (
+        {/* 3. LAYER: Floating Particles Burst upon Petting */}
+        {particles.map((p) => (
           <div
-            key={h.id}
+            key={p.id}
             style={{
               position: 'absolute',
-              left: h.x,
-              top: h.y,
+              left: p.x,
+              top: p.y,
               pointerEvents: 'none',
-              animation: 'floatUpHeart 1.2s forwards ease-out',
+              animation: 'particleFloatUp 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards',
               fontSize: '22px',
+              textShadow: `0 0 10px ${p.color}`,
+              zIndex: 10,
             }}
           >
-            💖
+            {p.char}
           </div>
         ))}
       </div>
@@ -272,9 +629,6 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
   // -------------------------------------------------------------
   // STAGE 1+: HATCHED COMPANION (Axolotl / Salamander)
   // -------------------------------------------------------------
-  const isSleeping = moodState === 'tired' || moodState === 'sleep';
-  const isExcited = moodState === 'excited' || moodState === 'playful';
-
   return (
     <div
       className="companion-axolotl-wrapper"
@@ -304,179 +658,67 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
         }}
       />
 
-      <svg
-        width={size * 0.85}
-        height={size * 0.85}
-        viewBox="0 0 240 240"
+      {/* Form 1 Master Candidate Asset with Floating & Glow */}
+      <img
+        src="/images/companion_form1.png"
+        alt="สหายสติ ร่าง 1"
+        className="form1AxolotlAsset"
+        data-testid="companion-form1-asset"
         style={{
-          overflow: 'visible',
-          filter: 'drop-shadow(0 10px 18px rgba(150, 100, 115, 0.2))',
-          transform: isInteracting ? 'scale(1.06) translateY(-4px)' : 'scale(1)',
-          transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          width: size * 0.95,
+          height: size * 0.95,
+          objectFit: 'contain',
+          position: 'relative',
+          zIndex: 5,
+          animation: 'form1FloatSoft 4.5s ease-in-out infinite alternate',
+          filter: isInteracting
+            ? 'drop-shadow(0 0 22px rgba(251, 191, 36, 0.65)) drop-shadow(0 12px 28px rgba(244, 114, 182, 0.55))'
+            : 'drop-shadow(0 0 12px rgba(244, 114, 182, 0.35)) drop-shadow(0 8px 20px rgba(168, 85, 247, 0.2))',
+          transform: isInteracting ? 'scale(1.08) translateY(-6px)' : 'scale(1)',
+          transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease',
+          pointerEvents: 'none',
         }}
-      >
-        <defs>
-          <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFF0F3" />
-            <stop offset="45%" stopColor={currentShade.body} />
-            <stop offset="100%" stopColor={currentShade.shadow} />
-          </linearGradient>
+      />
 
-          <linearGradient id="gillGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FF7597" />
-            <stop offset="100%" stopColor="#FF2E63" />
-          </linearGradient>
-        </defs>
-
-        {/* Soft shadow */}
-        <ellipse cx="120" cy="210" rx="55" ry="12" fill="rgba(80, 50, 60, 0.12)" filter="blur(3px)" />
-
-        {/* LAYER 1: CURVED TAIL WITH TRANSLUCENT FIN */}
-        <path
-          d="M145,160 Q190,175 185,135 Q175,105 140,135 Z"
-          fill="url(#bodyGrad)"
-          opacity="0.95"
-        />
-        <path
-          d="M150,155 Q198,178 190,130 Q178,98 140,130 Z"
-          fill={secondaryColor}
-          opacity="0.35"
-        />
-
-        {/* LAYER 2: EXTERNAL GILLS (Feathery Axolotl Ears) */}
-        {/* Left Gills */}
-        <g style={{ transformOrigin: '70px 105px', animation: 'gillWaveLeft 3s ease-in-out infinite' }}>
-          <path d="M75,95 Q40,75 25,85 Q45,100 70,105" fill="url(#gillGrad)" />
-          <path d="M72,110 Q32,105 20,118 Q40,125 70,118" fill="url(#gillGrad)" />
-          <path d="M73,125 Q38,135 28,150 Q52,142 75,128" fill="url(#gillGrad)" />
-          <circle cx="24" cy="85" r="3.5" fill="#FF85A2" />
-          <circle cx="19" cy="118" r="3.5" fill="#FF85A2" />
-          <circle cx="27" cy="150" r="3.5" fill="#FF85A2" />
-        </g>
-
-        {/* Right Gills */}
-        <g style={{ transformOrigin: '170px 105px', animation: 'gillWaveRight 3s ease-in-out infinite' }}>
-          <path d="M165,95 Q200,75 215,85 Q195,100 170,105" fill="url(#gillGrad)" />
-          <path d="M168,110 Q208,105 220,118 Q200,125 170,118" fill="url(#gillGrad)" />
-          <path d="M167,125 Q202,135 212,150 Q188,142 165,128" fill="url(#gillGrad)" />
-          <circle cx="216" cy="85" r="3.5" fill="#FF85A2" />
-          <circle cx="221" cy="118" r="3.5" fill="#FF85A2" />
-          <circle cx="213" cy="150" r="3.5" fill="#FF85A2" />
-        </g>
-
-        {/* LAYER 3: ROUND PLUMP BODY */}
-        <ellipse cx="120" cy="150" rx="52" ry="48" fill="url(#bodyGrad)" />
-        <ellipse cx="120" cy="156" rx="38" ry="34" fill={currentShade.belly} opacity="0.9" />
-
-        {/* LAYER 4: STUBBY PAWS */}
-        <circle cx="82" cy="175" r="9" fill="url(#bodyGrad)" />
-        <circle cx="158" cy="175" r="9" fill="url(#bodyGrad)" />
-        <circle cx="95" cy="195" r="10" fill="url(#bodyGrad)" />
-        <circle cx="145" cy="195" r="10" fill="url(#bodyGrad)" />
-
-        {/* LAYER 5: CUTE WIDE AXOLOTL HEAD */}
-        <path
-          d="M60,110 C60,65 180,65 180,110 C180,145 60,145 60,110 Z"
-          fill="url(#bodyGrad)"
-        />
-
-        {/* Blushing Cheeks */}
-        <ellipse cx="78" cy="118" rx="8" ry="5" fill="#FF7597" opacity="0.55" />
-        <ellipse cx="162" cy="118" rx="8" ry="5" fill="#FF7597" opacity="0.55" />
-
-        {/* LAYER 6: EYES & BLINKING */}
-        {isSleeping ? (
-          <g stroke="#3D2630" strokeWidth="2.5" strokeLinecap="round" fill="none">
-            <path d="M88,106 Q98,114 108,106" />
-            <path d="M132,106 Q142,114 152,106" />
-          </g>
-        ) : blink ? (
-          <g stroke="#3D2630" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="88" y1="108" x2="108" y2="108" />
-            <line x1="132" y1="108" x2="152" y2="108" />
-          </g>
-        ) : (
-          <g>
-            <ellipse cx="98" cy="106" rx="7.5" ry="9" fill="#2E1C24" />
-            <circle cx="96" cy="103" r="2.8" fill="white" />
-            <circle cx="101" cy="108" r="1.2" fill="white" />
-
-            <ellipse cx="142" cy="106" rx="7.5" ry="9" fill="#2E1C24" />
-            <circle cx="140" cy="103" r="2.8" fill="white" />
-            <circle cx="145" cy="108" r="1.2" fill="white" />
-          </g>
-        )}
-
-        {/* LAYER 7: GENTLE SMILE */}
-        <path
-          d={isExcited ? "M110,120 Q120,132 130,120" : "M112,121 Q120,127 128,121"}
-          stroke="#3D2630"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          fill={isExcited ? "#FF8DA1" : "none"}
-        />
-
-        {/* LAYER 8: HEAD LIGHT / GROWTH DNA TRAIT */}
-        {dna?.head_light_type === 'lotus' && (
-          <g transform="translate(112, 55)">
-            <path d="M8,0 C0,-10 0,-18 8,-22 C16,-18 16,-10 8,0 Z" fill="#FFE57F" />
-            <circle cx="8" cy="-12" r="6" fill="#FFF" opacity="0.8" filter="blur(2px)" />
-          </g>
-        )}
-
-        {dna?.head_light_type === 'crystal' && (
-          <g transform="translate(114, 52)">
-            <polygon points="6,-24 14,-12 6,0 -2,-12" fill={secondaryColor} opacity="0.9" />
-            <circle cx="6" cy="-12" r="5" fill="#FFF" opacity="0.75" filter="blur(2px)" />
-          </g>
-        )}
-
-        {(!dna?.head_light_type || dna?.head_light_type === 'lantern') && (
-          <g transform="translate(112, 55)">
-            <circle cx="8" cy="-10" r="7" fill="#FFE066" opacity="0.9" />
-            <circle cx="8" cy="-10" r="11" fill="#FFE066" opacity="0.4" filter="blur(3px)" />
-            <circle cx="8" cy="-10" r="3" fill="#FFF" />
-          </g>
-        )}
-      </svg>
-
-      {/* Floating Heart Particles upon Petting */}
-      {hearts.map((h) => (
+      {/* Floating Particles upon Petting */}
+      {particles.map((p) => (
         <div
-          key={h.id}
+          key={p.id}
           style={{
             position: 'absolute',
-            left: h.x,
-            top: h.y,
+            left: p.x,
+            top: p.y,
             pointerEvents: 'none',
             animation: 'floatUpHeart 1.2s forwards ease-out',
             fontSize: '22px',
+            textShadow: `0 0 10px ${p.color}`,
+            zIndex: 10,
           }}
         >
-          💖
+          {p.char}
         </div>
       ))}
 
       <style>{`
-        @keyframes pulseWarmth {
-          0%, 100% { transform: scale(1); opacity: 0.85; }
-          50% { transform: scale(1.08); opacity: 1; }
-        }
-        @keyframes pulseHatch {
-          0%, 100% { transform: scale(1.05); opacity: 0.9; }
-          50% { transform: scale(1.2); opacity: 1; }
-        }
-        @keyframes gillWaveLeft {
-          0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(-6deg); }
-        }
-        @keyframes gillWaveRight {
-          0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(6deg); }
+        @keyframes form1FloatSoft {
+          0% {
+            transform: translateY(0px) rotate(0deg);
+          }
+          50% {
+            transform: translateY(-8px) rotate(-1.5deg);
+          }
+          100% {
+            transform: translateY(4px) rotate(1deg);
+          }
         }
         @keyframes floatUpHeart {
           0% { opacity: 1; transform: translateY(0) scale(0.8); }
           100% { opacity: 0; transform: translateY(-50px) scale(1.3); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .form1AxolotlAsset {
+            animation: none !important;
+          }
         }
       `}</style>
     </div>
