@@ -1178,38 +1178,15 @@ function ChatScreen({
       (serverExtractedLoop as any)?.thoughts_or_fears ||
       ""
     ).trim();
+    // Automatic Story fallback (เก็บ serverExtractedLoop automatic_story / thoughts_or_fears เดิม)
     if (!automaticStoryText) {
-      if (hasUserContent) {
-        if (/เกิดมาทำไม|เพื่ออะไร|ความหมายของชีวิต|มีชีวิตอยู่ทำไม|มีเราทำไม/i.test(fullUserText)) {
-          automaticStoryText = `ตั้งคำถามกับความหมายและการมีอยู่ของชีวิต ("${triggerText}")`;
-        } else {
-          const thoughtMsg = substantiveUserMsgs.find((m) =>
-            /คิดว่า|กลัวว่า|รู้สึกเหมือน|คงจะ|ทำไม|กังวล/i.test(m.text)
-          );
-          if (thoughtMsg && thoughtMsg.text.trim() !== triggerText) {
-            automaticStoryText = thoughtMsg.text.trim();
-          } else {
-            automaticStoryText = UNEXPLORED;
-          }
-        }
-      } else {
-        automaticStoryText = UNEXPLORED;
-      }
+      const thoughtMsg = substantiveUserMsgs.find((m) => /คิดว่า|กลัวว่า|รู้สึกเหมือน|คงจะ/i.test(m.text));
+      automaticStoryText = thoughtMsg && thoughtMsg.text.trim() !== triggerText ? thoughtMsg.text.trim() : UNEXPLORED;
     }
 
-    // 4. Facts
+    // 4. Facts: ไม่สร้างข้อเท็จจริงจากหัวข้อสนทนา
     let factsText = (serverExtractedLoop?.facts || "").trim();
-    if (!factsText) {
-      if (hasUserContent) {
-        if (/เกิดมาทำไม|เพื่ออะไร|ความหมายของชีวิต/i.test(fullUserText)) {
-          factsText = "กำลังนั่งคิดทบทวนคำถามเรื่องเป้าหมายชีวิต โดยยังไม่มีคำตอบที่ตายตัวในตอนนี้";
-        } else {
-          factsText = UNEXPLORED;
-        }
-      } else {
-        factsText = UNEXPLORED;
-      }
-    }
+    if (!factsText) factsText = UNEXPLORED;
 
     // 5. Needs (Core Needs / Desires)
     let needsText = (
