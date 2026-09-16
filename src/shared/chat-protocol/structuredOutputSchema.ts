@@ -26,7 +26,6 @@ export interface CandidatePattern {
   new_choice?: string;
 }
 
-/**
 export type LoopReadinessStatus = 'collecting' | 'ready';
 
 export interface Extracted6PartLoop {
@@ -34,8 +33,15 @@ export interface Extracted6PartLoop {
   emotion_or_body?: string;
   automatic_story?: string;
   facts?: string;
+  needs?: string;
+  options?: string;
+  micro_action?: string;
+  reflection?: string;
+  // Aliases for compatibility
+  desires?: string;
   old_response?: string;
   new_choice?: string;
+  insights?: string;
 }
 
 /**

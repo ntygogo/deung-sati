@@ -119,8 +119,10 @@ export function sanitizeDeungSatiResponse(raw: string): {
   const emo = (extracted6?.emotion_or_body || candidatePattern?.emotion || '').trim();
   const story = (extracted6?.automatic_story || candidatePattern?.interpretation || '').trim();
   const facts = (extracted6?.facts || (parsed?.facts ? String(parsed.facts) : '')).trim();
-  const oldResp = (extracted6?.old_response || candidatePattern?.habitual_action || '').trim();
-  const newCh = (extracted6?.new_choice || candidatePattern?.new_choice || '').trim();
+  const oldResp = (extracted6?.old_response || (extracted6 as any)?.options || candidatePattern?.habitual_action || '').trim();
+  const newCh = (extracted6?.new_choice || (extracted6 as any)?.micro_action || candidatePattern?.new_choice || '').trim();
+  const needs = (extracted6?.needs || (extracted6 as any)?.desires || (candidatePattern as any)?.need || '').trim();
+  const reflection = ((extracted6 as any)?.reflection || (extracted6 as any)?.insights || '').trim();
 
   const hasAll6 =
     trig.length >= 3 &&
@@ -141,17 +143,27 @@ export function sanitizeDeungSatiResponse(raw: string): {
     ]).size >= 5;
 
   let loopReadiness: 'collecting' | 'ready' = 'collecting';
-  let extractedLoop = null;
-
   if (hasAll6 && isDistinct) {
     loopReadiness = 'ready';
+  }
+
+  // Preserve extracted loop even if partial (do not discard when collecting)
+  let extractedLoop: any = null;
+  if (trig || emo || story || facts || needs || oldResp || newCh || reflection) {
     extractedLoop = {
-      trigger: trig,
-      emotion_or_body: emo,
-      automatic_story: story,
-      facts: facts,
-      old_response: oldResp,
-      new_choice: newCh,
+      trigger: trig || undefined,
+      emotion_or_body: emo || undefined,
+      automatic_story: story || undefined,
+      facts: facts || undefined,
+      needs: needs || undefined,
+      options: oldResp || undefined,
+      micro_action: newCh || undefined,
+      reflection: reflection || undefined,
+      // Backward-compatible aliases
+      desires: needs || undefined,
+      old_response: oldResp || undefined,
+      new_choice: newCh || undefined,
+      insights: reflection || undefined,
     };
   }
 

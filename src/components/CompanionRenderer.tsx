@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 
 export interface GrowthDnaProps {
   primary_pink_shade?: string;
@@ -27,7 +27,7 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
   stage,
   traceCount = 0,
   dna,
-  moodState = 'calm',
+  moodState: _moodState = 'calm',
   isInteracting = false,
   onPet,
   size = 280,

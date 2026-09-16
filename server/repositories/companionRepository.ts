@@ -198,39 +198,26 @@ export class CompanionRepository {
 
   async updateGrowthDnaFromLoop(
     companionId: string,
-    emotionTag: string,
+    _emotionTag: string,
     learningTypes: string[]
   ): Promise<GrowthDnaRecord | null> {
-    const emotionHexMap: Record<string, string> = {
-      anger: '#FF6B6B',
-      sadness: '#4D96FF',
-      fear: '#6C5CE7',
-      anxiety: '#A29BFE',
-      loneliness: '#3B3B98',
-      shame: '#D1A3B8',
-      calm: '#00CEC9',
-      joy: '#FDCB6E',
-      hope: '#E17055',
-    };
+    // Emotion only affects temporary mood atmosphere; never alters permanent DNA colors
+    const updates: string[] = [];
+    const params: any[] = [companionId];
 
-    const secondary = emotionHexMap[emotionTag.toLowerCase()] || '#A29BFE';
-
-    const updates: string[] = ['secondary_color = $2'];
-    const params: any[] = [companionId, secondary];
-
-    if (learningTypes.includes('notice_emotion')) {
+    if (learningTypes.includes('notice_emotion') || learningTypes.includes('emotional_awareness')) {
       params.push('starlight_speckles');
       updates.push(`body_pattern = $${params.length}`);
     }
-    if (learningTypes.includes('set_boundaries')) {
+    if (learningTypes.includes('set_boundaries') || learningTypes.includes('somatic_awareness')) {
       params.push('feathered_majestic');
       updates.push(`gill_type = $${params.length}`);
     }
-    if (learningTypes.includes('understand_relationships')) {
+    if (learningTypes.includes('understand_relationships') || learningTypes.includes('cognitive_clarity')) {
       params.push('branched_delicate');
       updates.push(`cheek_feeler_type = $${params.length}`);
     }
-    if (learningTypes.includes('new_choice')) {
+    if (learningTypes.includes('new_choice') || learningTypes.includes('conscious_action')) {
       params.push('star_lantern');
       updates.push(`head_light_type = $${params.length}`);
     }
@@ -238,15 +225,13 @@ export class CompanionRepository {
       params.push('serene_swaying');
       updates.push(`movement_personality = $${params.length}`);
     }
-    if (learningTypes.includes('self_compassion')) {
-      params.push('soft_sakura');
-      updates.push(`primary_pink_shade = $${params.length}`);
-    }
 
-    await this.adapter.execute(
-      `UPDATE companion_growth_dna SET ${updates.join(', ')} WHERE companion_id = $1`,
-      params
-    );
+    if (updates.length > 0) {
+      await this.adapter.execute(
+        `UPDATE companion_growth_dna SET ${updates.join(', ')} WHERE companion_id = $1`,
+        params
+      );
+    }
 
     return await this.adapter.queryOne<GrowthDnaRecord>(
       'SELECT * FROM companion_growth_dna WHERE companion_id = $1',
@@ -257,9 +242,19 @@ export class CompanionRepository {
   async createDnaSnapshot(
     companionId: string,
     userId: string,
-    completedLoops: Array<{ id: string; emotion_tag: string; learning_types_json: any }>
+    completedLoops: Array<{
+      id: string;
+      emotion_tag: string;
+      learning_types_json: any;
+      emotional_awareness?: number;
+      somatic_awareness?: number;
+      cognitive_clarity?: number;
+      conscious_action?: number;
+    }>,
+    txAdapter?: IDatabaseAdapter
   ): Promise<CompanionDnaSnapshotRecord> {
-    const existing = await this.adapter.queryOne<CompanionDnaSnapshotRecord>(
+    const adapter = txAdapter || this.adapter;
+    const existing = await adapter.queryOne<CompanionDnaSnapshotRecord>(
       'SELECT * FROM companion_dna_snapshots WHERE companion_id = $1',
       [companionId]
     );
@@ -269,65 +264,98 @@ export class CompanionRepository {
     const hash = crypto.createHash('sha256').update(`${userId}:${loopIds}`).digest('hex');
     const seedInt = parseInt(hash.slice(0, 8), 16);
 
+    // Sum the 4 skill scores across all completed loops
+    let totalEA = 0;
+    let totalSA = 0;
+    let totalCC = 0;
+    let totalCA = 0;
+
     const emotionCounts: Record<string, number> = {};
     const learningCounts: Record<string, number> = {};
     for (const loop of completedLoops) {
       emotionCounts[loop.emotion_tag] = (emotionCounts[loop.emotion_tag] || 0) + 1;
+      totalEA += loop.emotional_awareness || 0;
+      totalSA += loop.somatic_awareness || 0;
+      totalCC += loop.cognitive_clarity || 0;
+      totalCA += loop.conscious_action || 0;
+
       const lTypes = Array.isArray(loop.learning_types_json) ? loop.learning_types_json : [];
       for (const lt of lTypes) {
         learningCounts[lt] = (learningCounts[lt] || 0) + 1;
       }
     }
 
-    const sortedLearnings = Object.entries(learningCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([k]) => k);
-    const top3Learnings = sortedLearnings.slice(0, 3);
+    // Existing companion record for deterministic base colors
+    const dnaRow = await adapter.queryOne<GrowthDnaRecord>(
+      'SELECT * FROM companion_growth_dna WHERE companion_id = $1',
+      [companionId]
+    );
+    const primaryColor = dnaRow?.primary_pink_shade || 'soft_sakura';
+    const secondaryColor = dnaRow?.secondary_color || '#8BD3DD';
 
+    // Skill-based mapping:
+    // 1. Emotional Awareness -> Eye shape & peaceful expression
     const eyeShapes = ['sparkle_curious', 'gentle_crescent', 'playful_round', 'starry_wonder'];
-    const cheekStyles = ['rosy_soft', 'star_dust', 'aurora_blush', 'coral_glow'];
+    const eyeIndex = Math.abs(totalEA + seedInt) % eyeShapes.length;
+
+    // 2. Somatic Awareness -> Gill style
     const gillStyles = ['triple_feather', 'crystalline_leaf', 'starlight_streamers', 'fluffy_cloud'];
-    const lanternShapes = ['star_beacon', 'crystal_lotus', 'pearl_glow', 'cosmic_orb'];
-    const auraStyles = ['dreamy_glow', 'stardust_ring', 'gentle_mist', 'warm_radiance'];
+    const gillIndex = Math.abs(totalSA + (seedInt >>> 2)) % gillStyles.length;
+
+    // 3. Cognitive Clarity -> Tail & cheek feeler structure
     const tailStyles = ['swaying_fin', 'ribbon_flow', 'sparkle_fan'];
+    const tailIndex = Math.abs(totalCC + (seedInt >>> 4)) % tailStyles.length;
+    const cheekStyles = ['rosy_soft', 'star_dust', 'aurora_blush', 'coral_glow'];
+    const cheekIndex = Math.abs(totalCC + (seedInt >>> 6)) % cheekStyles.length;
+
+    // 4. Conscious Action -> Lantern tip shape & radiant aura
+    const lanternShapes = ['star_beacon', 'crystal_lotus', 'pearl_glow', 'cosmic_orb'];
+    const lanternIndex = Math.abs(totalCA + (seedInt >>> 8)) % lanternShapes.length;
+    const auraStyles = ['dreamy_glow', 'stardust_ring', 'gentle_mist', 'warm_radiance'];
+    const auraIndex = Math.abs(totalCA + (seedInt >>> 10)) % auraStyles.length;
 
     const snapshotId = `snap_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
     const dnaJson = {
-      primaryColor: '#FFB7C5',
-      secondaryColor: (completedLoops[0]?.emotion_tag && EMOTION_COLOR_MAP[completedLoops[0].emotion_tag]?.hex) || '#A29BFE',
-      eyeShape: eyeShapes[seedInt % eyeShapes.length],
-      cheekStyle: cheekStyles[(seedInt >> 2) % cheekStyles.length],
-      gillStyle: gillStyles[(seedInt >> 4) % gillStyles.length],
-      lanternShape: lanternShapes[(seedInt >> 6) % lanternShapes.length],
-      auraStyle: auraStyles[(seedInt >> 8) % auraStyles.length],
-      tailStyle: tailStyles[(seedInt >> 10) % tailStyles.length],
+      primaryColor,
+      secondaryColor,
+      eyeShape: eyeShapes[eyeIndex],
+      cheekStyle: cheekStyles[cheekIndex],
+      gillStyle: gillStyles[gillIndex],
+      lanternShape: lanternShapes[lanternIndex],
+      auraStyle: auraStyles[auraIndex],
+      tailStyle: tailStyles[tailIndex],
+      skillsSummary: {
+        emotionalAwareness: totalEA,
+        somaticAwareness: totalSA,
+        cognitiveClarity: totalCC,
+        consciousAction: totalCA,
+      },
       emotionDistribution: emotionCounts,
-      learningDistribution: learningCounts,
-      topLearnings: top3Learnings,
       totalCompletedLoops: completedLoops.length,
     };
 
     const statsSummaryJson = {
       hatchedAt: new Date().toISOString(),
-      top3Learnings,
+      skillsSummary: dnaJson.skillsSummary,
       totalLoops: completedLoops.length,
-      quote: 'สีเหล่านี้คือสิ่งที่เราเคยผ่าน ไม่ใช่สิ่งที่นิยามว่าเราเป็นใคร',
+      quote: 'สีและรูปลักษณ์ของน้อง เติบโตจากทักษะการรู้ตัวที่เราได้ฝึกฝนร่วมกัน',
     };
 
-    await this.adapter.execute(
+    await adapter.execute(
       `INSERT INTO companion_dna_snapshots (id, companion_id, user_id, seed, dna_json, stats_summary_json, hatched_at)
        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
       [snapshotId, companionId, userId, hash.slice(0, 32), dnaJson, statsSummaryJson]
     );
 
-    return (await this.adapter.queryOne<CompanionDnaSnapshotRecord>(
+    return (await adapter.queryOne<CompanionDnaSnapshotRecord>(
       'SELECT * FROM companion_dna_snapshots WHERE id = $1',
       [snapshotId]
     ))!;
   }
 
-  async getDnaSnapshot(companionId: string): Promise<CompanionDnaSnapshotRecord | null> {
-    return await this.adapter.queryOne<CompanionDnaSnapshotRecord>(
+  async getDnaSnapshot(companionId: string, txAdapter?: IDatabaseAdapter): Promise<CompanionDnaSnapshotRecord | null> {
+    const adapter = txAdapter || this.adapter;
+    return await adapter.queryOne<CompanionDnaSnapshotRecord>(
       'SELECT * FROM companion_dna_snapshots WHERE companion_id = $1',
       [companionId]
     );

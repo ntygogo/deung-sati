@@ -455,11 +455,11 @@ apiApp.post('/companion/hatch', requireAuth, async (req: AuthenticatedRequest, r
     // Unlock Stage 1
     const updatedCompanion = await companionRepository.unlockNextStage(req.userId!, 1);
 
-    // Authoritative Milestone Reward from server
+    // Authoritative Milestone Reward from server (+50 XP, +25 Shells)
     const reward = await economyRepository.awardReward(
       req.userId!,
-      'loop_confirmed',
-      `hatch_${companion.id}`
+      'hatch_milestone',
+      `COMPANION_HATCH:${companion.id}`
     );
 
     res.json({ success: true, companion: updatedCompanion, snapshot, reward });
@@ -731,20 +731,188 @@ apiApp.get('/loops/traces', requireAuth, async (req: AuthenticatedRequest, res: 
   }
 });
 
-apiApp.post('/loops/traces', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+apiApp.get('/loops/traces/:traceId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { category, title, summary, rawTurnData, sessionId } = req.body;
-    if (!category || !title || !summary) {
-      res.status(400).json({ error: 'category, title, and summary are required' });
+    const traceId = Array.isArray(req.params.traceId) ? req.params.traceId[0] : String(req.params.traceId);
+    const trace = await loopRepository.getTraceById(traceId, req.userId!);
+    if (!trace) {
+      res.status(404).json({ error: 'Trace not found or unauthorized' });
       return;
     }
-    const trace = await loopRepository.createTrace(req.userId!, {
+    res.json({ trace });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiApp.put('/loops/traces/:traceId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const traceId = Array.isArray(req.params.traceId) ? req.params.traceId[0] : String(req.params.traceId);
+    const updated = await loopRepository.updateTrace(req.userId!, traceId, req.body);
+    if (!updated) {
+      res.status(404).json({ error: 'Trace not found or unauthorized' });
+      return;
+    }
+    res.json({ success: true, trace: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiApp.post('/loops/traces/:traceId/confirm', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const traceId = Array.isArray(req.params.traceId) ? req.params.traceId[0] : String(req.params.traceId);
+    const {
+      conversationId = 'default_conv',
+      idempotencyKey,
+      trigger,
+      emotionOrBody,
+      automaticStory,
+      facts,
+      oldResponse,
+      newChoice,
+      desires,
+      insights,
+      emotionTags,
+      skills = {},
+      isReview = false,
+      isCrisis = false,
+    } = req.body;
+
+    if (!idempotencyKey) {
+      res.status(400).json({ error: 'idempotencyKey is required' });
+      return;
+    }
+
+    const existingTrace = await loopRepository.getTraceById(traceId, req.userId!);
+    if (!existingTrace) {
+      res.status(404).json({ error: 'Loop trace not found or unauthorized' });
+      return;
+    }
+
+    const isAlreadyConfirmed = existingTrace.growth_event != null;
+
+    const UNEXPLORED = 'ยังไม่ได้สำรวจ';
+    const isInvalid = (val?: any, minLen = 2) => {
+      if (!val || typeof val !== 'string') return true;
+      const t = val.trim();
+      return (
+        t.length < minLen ||
+        t === UNEXPLORED ||
+        t === 'วงจรสติ' ||
+        t === 'แบบร่างลูปสติ' ||
+        t === 'Loop Trace' ||
+        t.startsWith('สิ่งที่เกิดขึ้น (บันทึกจากที่ได้คุยกัน')
+      );
+    };
+
+    const resolvedTrigger = trigger || existingTrace.trigger || existingTrace.title || '';
+    const resolvedEmotion = emotionOrBody || existingTrace.emotion_or_body || existingTrace.summary || '';
+    const resolvedStory = automaticStory || existingTrace.automatic_story || existingTrace.thoughts_or_fears || '';
+    const resolvedChoice = newChoice || existingTrace.new_choice || '';
+    const resolvedInsights = insights || existingTrace.insights || '';
+
+    const missingFields: string[] = [];
+    if (isInvalid(resolvedTrigger, 3)) missingFields.push('จุดสะกิด (Trigger)');
+    if (isInvalid(resolvedEmotion, 2)) missingFields.push('ความรู้สึก/สัญญาณร่างกาย (Emotion & Body)');
+    if (isInvalid(resolvedStory, 3)) missingFields.push('ความคิดแวบแรก (Automatic Story)');
+    const hasResolution = !isInvalid(resolvedChoice, 3) || !isInvalid(resolvedInsights, 3);
+    if (!hasResolution) missingFields.push('ทางเลือกใหม่/บทเรียน (Micro-action / Reflection)');
+
+    if (!isAlreadyConfirmed && missingFields.length > 0) {
+      res.status(400).json({
+        error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
+        errorCode: 'VALIDATION_FAILED',
+        missingFields,
+      });
+      return;
+    }
+
+    const result = await loopRepository.confirmGrowthEvent(req.userId!, {
+      loopTraceId: traceId,
+      conversationId,
+      idempotencyKey,
+      trigger,
+      emotionOrBody,
+      automaticStory,
+      facts,
+      oldResponse,
+      newChoice,
+      desires,
+      insights,
+      emotionTags: Array.isArray(emotionTags) ? emotionTags : [],
+      skills: {
+        emotional_awareness: skills.emotional_awareness ? 1 : 0,
+        somatic_awareness: skills.somatic_awareness ? 1 : 0,
+        cognitive_clarity: skills.cognitive_clarity ? 1 : 0,
+        conscious_action: skills.conscious_action ? 1 : 0,
+      },
+      isReview: Boolean(isReview),
+      isCrisis: Boolean(isCrisis),
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    if (err.message && (err.message.includes('unauthorized') || err.message.includes('not found'))) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    console.error('Confirm growth event error:', err);
+    res.status(500).json({ error: err.message || 'Failed to confirm growth event' });
+  }
+});
+
+apiApp.post('/loops/traces', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const {
       category,
       title,
       summary,
-      rawTurnData: rawTurnData || {},
+      rawTurnData,
       sessionId,
-    });
+      conversationId,
+      thoughtsOrFears,
+      desires,
+      oldResponse,
+      newChoice,
+      insights,
+      emotionTags,
+      practicedSkills,
+      id,
+      traceId,
+      trigger,
+      emotionOrBody,
+      automaticStory,
+      facts,
+      skills,
+    } = req.body;
+
+    const derivedCategory = category || 'mindful_loop';
+    const derivedTitle = (title || trigger || 'แบบร่างลูปสติ').trim();
+    const derivedSummary = (summary || emotionOrBody || automaticStory || 'แบบร่างการเรียนรู้').trim();
+    const activeSessionId = sessionId || conversationId || null;
+
+    const trace = await loopRepository.createTrace(req.userId!, {
+      id: id || traceId,
+      category: derivedCategory,
+      title: derivedTitle,
+      summary: derivedSummary,
+      rawTurnData: rawTurnData || { facts: facts || '' },
+      sessionId: activeSessionId,
+      conversationId: activeSessionId,
+      trigger: trigger || (title ? derivedTitle : ''),
+      emotionOrBody: emotionOrBody || (summary ? derivedSummary : ''),
+      automaticStory: automaticStory || thoughtsOrFears,
+      thoughtsOrFears: thoughtsOrFears || automaticStory,
+      desires,
+      facts,
+      oldResponse,
+      newChoice,
+      insights,
+      emotionTags: Array.isArray(emotionTags) ? emotionTags : [],
+      practicedSkills: practicedSkills || (skills ? Object.keys(skills).filter((k) => skills[k]) : []),
+    } as any);
+
     const totalCount = await loopRepository.getCompletedLoopCount(req.userId!);
     res.json({ trace, totalCount });
   } catch (err: any) {

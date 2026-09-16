@@ -21,3 +21,4 @@ export * from './exerciseRegistry.js';
 export * from './structuredOutputSchema.js';
 export * from './masterPrompt.js';
 export * from './exerciseCatalog.js';
+export * from './journeyStages.js';

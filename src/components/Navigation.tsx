@@ -111,6 +111,8 @@ export const AppHeader: React.FC<{
   onBack?: () => void;
   onEmergency: () => void;
   onOpenMenu: () => void;
+  leftElement?: React.ReactNode;
+  hideBrandText?: boolean;
 }> = ({
   title,
   brandText,
@@ -118,6 +120,8 @@ export const AppHeader: React.FC<{
   onBack,
   onEmergency,
   onOpenMenu,
+  leftElement,
+  hideBrandText = false,
 }) => {
   return (
     <header className="appHeader">
@@ -131,7 +135,11 @@ export const AppHeader: React.FC<{
           >
             ←
           </button>
-        ) : (
+        ) : leftElement ? (
+          <div className="headerLeftCustom" style={{ display: 'flex', alignItems: 'center' }}>
+            {leftElement}
+          </div>
+        ) : hideBrandText ? null : (
           <div className="headerBrand" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px' }}>
               {brandText || 'Deung Sati'}

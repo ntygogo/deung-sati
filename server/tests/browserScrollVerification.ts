@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const BROWSER_TEST_BASE_URL = process.env.BROWSER_TEST_BASE_URL || 'http://127.0.0.1:5173';
 
-interface CdpMessage {
+export interface CdpMessage {
   id: number;
   method: string;
   params?: any;
@@ -179,7 +179,6 @@ async function runBrowserVerification() {
 
     // Wait for App to mount and .onboardingCard to appear (Vite cold compile can take a few seconds)
     console.log('[STEP 1] Waiting for App to load and render Onboarding Modal...');
-    let obReady = false;
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 500));
       const check = await client.send('Runtime.evaluate', {
@@ -201,7 +200,6 @@ async function runBrowserVerification() {
       });
       const diag = check.result?.value;
       if (diag?.hasCard) {
-        obReady = true;
         console.log(`  -> Onboarding Modal appeared after ${((i + 1) * 0.5).toFixed(1)}s`);
         break;
       }

@@ -71,6 +71,8 @@ export class EconomyRepository {
     // Loop discovery & logging
     trace_recorded: { xp: 15, shells: 10 },
     record_trace: { xp: 15, shells: 10 },
+    growth_event_reward: { xp: 15, shells: 10 },
+    hatch_milestone: { xp: 50, shells: 25 },
     loop_detected: { xp: 20, shells: 15 },
     loop_confirmed: { xp: 30, shells: 30, crystals: 1 },
 

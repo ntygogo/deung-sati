@@ -6,6 +6,8 @@ import {
   type ExerciseId,
   type ExerciseResultPayload,
   EXERCISE_REGISTRY,
+  mapTurnToUserFacingStep,
+  USER_FACING_CHAT_STEPS,
 } from "./shared/chat-protocol";
 import { InteractiveExerciseModal } from "./components/InteractiveExerciseModal";
 import { GuidedExerciseCard } from "./components/GuidedExerciseCard";
@@ -1116,18 +1118,188 @@ function ChatScreen({
   const serverExtractedLoop = lastAiWithTurn?.structuredTurn?.extracted_loop || null;
   const isLoopReady = serverLoopReadiness === 'ready' && Boolean(serverExtractedLoop);
 
-  const handleOpenLoopReview = () => {
-    // Client cannot override readiness: strictly requires server loopReadiness === "ready"
-    if (!isLoopReady || !serverExtractedLoop) return;
+  const currentJourneyStep = mapTurnToUserFacingStep(
+    lastAiWithTurn?.structuredTurn?.stage,
+    lastAiWithTurn?.structuredTurn?.mode
+  );
+  const [showJourneyModal, setShowJourneyModal] = useState(false);
 
-    setReviewInitialData({
-      trigger: serverExtractedLoop.trigger || "",
-      emotionOrBody: serverExtractedLoop.emotion_or_body || "",
-      automaticStory: serverExtractedLoop.automatic_story || "",
-      facts: serverExtractedLoop.facts || "",
-      oldResponse: serverExtractedLoop.old_response || "",
-      newChoice: serverExtractedLoop.new_choice || "",
+  const UNEXPLORED = "ยังไม่ได้สำรวจ";
+
+  // Prepare structured review data across 8 sections without hallucinating unsaid information
+  const prepareLoopReviewData = () => {
+    // Collect all substantive user messages (excluding system/control phrases)
+    const controlKeywords = [
+      "บันทึกลูปนี้", "บันทึกเรื่องนี้", "เก็บเรื่องนี้ไว้", "สรุปแล้วบันทึกให้หน่อย",
+      "สรุปแล้วบันทึก", "บันทึกลูปที่คุย", "บันทึกสิ่งที่คุย", "บันทึกลูป", "เก็บบันทึก",
+      "บันทึกไว้", "สรุปให้หน่อย", "ไว้คราวหน้า", "พอแค่นี้ก่อน", "พอแค่นี้", "ขอบคุณนะ", "บาย"
+    ];
+    const substantiveUserMsgs = messages.filter((m) => {
+      if (m.role !== "user" || !m.text || !m.text.trim()) return false;
+      const clean = m.text.trim();
+      return !controlKeywords.some((k) => clean === k);
     });
+
+    const hasUserContent = substantiveUserMsgs.length > 0;
+    const fullUserText = substantiveUserMsgs.map((m) => m.text.trim()).join(" ");
+
+    // Determine status: "บทสนทนามีประเด็นแต่ยังไม่ครบลูป" vs "ไม่มีข้อมูล"
+    let conversationStatus: "no_data" | "partial_loop" | "complete_loop" = "no_data";
+    if (hasUserContent) {
+      conversationStatus = "partial_loop";
+    }
+
+    // 1. Trigger
+    let triggerText = (serverExtractedLoop?.trigger || "").trim();
+    if (!triggerText) {
+      if (hasUserContent) {
+        triggerText = substantiveUserMsgs[0].text.trim();
+      } else {
+        triggerText = UNEXPLORED;
+      }
+    }
+
+    // 2. Emotion / Body
+    let emotionOrBodyText = (serverExtractedLoop?.emotion_or_body || "").trim();
+    if (!emotionOrBodyText) {
+      const emoMatch = fullUserText.match(
+        /รู้สึก(แย่|เครียด|กลัว|กังวล|เคว้ง|ว่างเปล่า|เหงา|เศร้า|เหนื่อย|ท้อ|อึดอัด|เจ็บปวด|สับสน|โกรธ|หงุดหงิด|ไม่มั่นใจ)|แน่นหน้าอก|ใจสั่น|หายใจไม่ทั่ว|เกร็ง|ปวดหัว/i
+      );
+      if (emoMatch) {
+        emotionOrBodyText = emoMatch[0];
+      } else {
+        emotionOrBodyText = UNEXPLORED;
+      }
+    }
+
+    // 3. Automatic Story / Thoughts
+    let automaticStoryText = (
+      serverExtractedLoop?.automatic_story ||
+      (serverExtractedLoop as any)?.thoughts_or_fears ||
+      ""
+    ).trim();
+    if (!automaticStoryText) {
+      if (hasUserContent) {
+        if (/เกิดมาทำไม|เพื่ออะไร|ความหมายของชีวิต|มีชีวิตอยู่ทำไม|มีเราทำไม/i.test(fullUserText)) {
+          automaticStoryText = `ตั้งคำถามกับความหมายและการมีอยู่ของชีวิต ("${triggerText}")`;
+        } else {
+          const thoughtMsg = substantiveUserMsgs.find((m) =>
+            /คิดว่า|กลัวว่า|รู้สึกเหมือน|คงจะ|ทำไม|กังวล/i.test(m.text)
+          );
+          if (thoughtMsg && thoughtMsg.text.trim() !== triggerText) {
+            automaticStoryText = thoughtMsg.text.trim();
+          } else {
+            automaticStoryText = UNEXPLORED;
+          }
+        }
+      } else {
+        automaticStoryText = UNEXPLORED;
+      }
+    }
+
+    // 4. Facts
+    let factsText = (serverExtractedLoop?.facts || "").trim();
+    if (!factsText) {
+      if (hasUserContent) {
+        if (/เกิดมาทำไม|เพื่ออะไร|ความหมายของชีวิต/i.test(fullUserText)) {
+          factsText = "กำลังนั่งคิดทบทวนคำถามเรื่องเป้าหมายชีวิต โดยยังไม่มีคำตอบที่ตายตัวในตอนนี้";
+        } else {
+          factsText = UNEXPLORED;
+        }
+      } else {
+        factsText = UNEXPLORED;
+      }
+    }
+
+    // 5. Needs (Core Needs / Desires)
+    let needsText = (
+      serverExtractedLoop?.needs ||
+      (serverExtractedLoop as any)?.desires ||
+      ""
+    ).trim();
+    if (!needsText) {
+      if (/อยากให้|ต้องการ|อยากรู้|อยากเข้าใจ/i.test(fullUserText)) {
+        const needMatch = fullUserText.match(
+          /(อยากให้[^\s,]+|ต้องการ[^\s,]+|อยากรู้[^\s,]+|อยากเข้าใจ[^\s,]+)/
+        );
+        if (needMatch) needsText = needMatch[0];
+        else needsText = UNEXPLORED;
+      } else {
+        needsText = UNEXPLORED;
+      }
+    }
+
+    // 6. Options (Habitual or perspective options)
+    let optionsText = (
+      serverExtractedLoop?.options ||
+      (serverExtractedLoop as any)?.old_response ||
+      ""
+    ).trim();
+    if (!optionsText) {
+      optionsText = UNEXPLORED;
+    }
+
+    // 7. Micro-action (New choice / next small step)
+    let microActionText = (
+      serverExtractedLoop?.micro_action ||
+      (serverExtractedLoop as any)?.new_choice ||
+      ""
+    ).trim();
+    if (!microActionText) {
+      microActionText = UNEXPLORED;
+    }
+
+    // 8. Reflection (Insights / key realization)
+    let reflectionText = (
+      serverExtractedLoop?.reflection ||
+      (serverExtractedLoop as any)?.insights ||
+      ""
+    ).trim();
+    if (!reflectionText) {
+      reflectionText = UNEXPLORED;
+    }
+
+    const isAllComplete = [
+      triggerText,
+      emotionOrBodyText,
+      automaticStoryText,
+      factsText,
+      needsText,
+      optionsText,
+      microActionText,
+      reflectionText,
+    ].every((val) => val && val !== UNEXPLORED);
+
+    if (isAllComplete && hasUserContent) {
+      conversationStatus = "complete_loop";
+    }
+
+    return {
+      trigger: triggerText,
+      emotionOrBody: emotionOrBodyText,
+      automaticStory: automaticStoryText,
+      facts: factsText,
+      needs: needsText,
+      options: optionsText,
+      microAction: microActionText,
+      reflection: reflectionText,
+      // Backward compatibility aliases
+      desires: needsText,
+      oldResponse: optionsText,
+      newChoice: microActionText,
+      insights: reflectionText,
+      conversationStatus,
+      detectedSkills: (serverExtractedLoop as any)?.detected_skills || {
+        emotional_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
+        somatic_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
+        cognitive_clarity: Boolean(factsText && factsText !== UNEXPLORED),
+        conscious_action: Boolean(microActionText && microActionText !== UNEXPLORED),
+      },
+    };
+  };
+
+  const handleOpenLoopReview = () => {
+    setReviewInitialData(prepareLoopReviewData());
     setShowLoopReview(true);
   };
 
@@ -1184,6 +1356,160 @@ function ChatScreen({
       }
     }
 
+    // Normalize input for intent detection
+    const normalizedInput = trimmed.toLowerCase().replace(/\s+/g, " ");
+
+    // 1. Save Intent: “บันทึกลูปนี้”, “บันทึกเรื่องนี้”, “เก็บเรื่องนี้ไว้”, “สรุปแล้วบันทึกให้หน่อย”, etc.
+    const saveIntentKeywords = [
+      "บันทึกลูปนี้",
+      "บันทึกเรื่องนี้",
+      "เก็บเรื่องนี้ไว้",
+      "สรุปแล้วบันทึกให้หน่อย",
+      "สรุปแล้วบันทึก",
+      "บันทึกลูปที่คุย",
+      "บันทึกสิ่งที่คุย",
+      "บันทึกลูป",
+      "เก็บบันทึก",
+      "บันทึกไว้",
+    ];
+    const isSaveIntent = saveIntentKeywords.some((k) => normalizedInput.includes(k));
+
+    if (isSaveIntent) {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        createdAt: Date.now(),
+      };
+
+      const reviewData = prepareLoopReviewData();
+      setReviewInitialData(reviewData);
+
+      const aiReplyMessage: ChatMessage = {
+        id: `ai-save-intent-${Date.now()}`,
+        role: "ai",
+        text: "เราเตรียมสรุปวงจรสติจากที่เราคุยกันไว้ให้แล้วนะ ลองตรวจทานและปรับแก้สิ่งที่ตรงกับใจคุณได้เลย 🌱",
+        createdAt: Date.now() + 1,
+      };
+
+      setInputText("");
+      setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+      setShowLoopReview(true);
+      isSendingRef.current = false;
+      return;
+    }
+
+    // 2. Wrap-up / End-of-conversation Intent
+    const wrapUpKeywords = [
+      "พอแค่นี้",
+      "พอแค่นี้ก่อน",
+      "วันนี้พอแค่นี้",
+      "ไปนอนแล้ว",
+      "ไปทำงานก่อน",
+      "ขอตัวก่อน",
+      "แค่นี้ก่อน",
+      "ขอบคุณนะ",
+      "ขอบคุณมากนะ",
+      "บาย",
+      "บ๊ายบาย",
+      "จบการคุย",
+      "จบแค่นี้",
+    ];
+    const isWrapUpIntent = wrapUpKeywords.some((k) => normalizedInput.includes(k));
+
+    if (isWrapUpIntent) {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        createdAt: Date.now(),
+      };
+
+      const isDataComplete =
+        isLoopReady ||
+        (Boolean(serverExtractedLoop?.trigger) &&
+          Boolean(serverExtractedLoop?.emotion_or_body) &&
+          Boolean(serverExtractedLoop?.new_choice || serverExtractedLoop?.automatic_story));
+
+      if (isDataComplete) {
+        // Data is complete -> auto-present summary/review
+        const reviewData = prepareLoopReviewData();
+        setReviewInitialData(reviewData);
+
+        const aiReplyMessage: ChatMessage = {
+          id: `ai-wrapup-complete-${Date.now()}`,
+          role: "ai",
+          text: "ขอบคุณที่เปิดใจคุยกันนะ วันนี้เราเห็นความรู้สึกและการเลือกทางใหม่ของคุณชัดเจนเลย ก่อนแยกย้ายกัน เราสรุปสิ่งที่คุณได้เรียนรู้ไว้ให้แล้ว ตรวจทานและบันทึกพลังให้น้องได้เลยนะ 🌱",
+          createdAt: Date.now() + 1,
+        };
+
+        setInputText("");
+        setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+        setShowLoopReview(true);
+        isSendingRef.current = false;
+        return;
+      } else {
+        // Data not complete -> ask politely with quick replies
+        const aiReplyMessage: ChatMessage = {
+          id: `ai-wrapup-incomplete-${Date.now()}`,
+          role: "ai",
+          text: "ก่อนพักตรงนี้ อยากให้เราสรุปสิ่งที่เห็นจากที่คุยกันไว้ให้ไหม?",
+          options: ["สรุปให้หน่อย", "ไว้คราวหน้า"],
+          createdAt: Date.now() + 1,
+        };
+
+        setInputText("");
+        setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+        isSendingRef.current = false;
+        return;
+      }
+    }
+
+    // 3. User clicked quick reply "สรุปให้หน่อย" or "ไว้คราวหน้า"
+    if (trimmed === "สรุปให้หน่อย") {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        createdAt: Date.now(),
+      };
+      const reviewData = prepareLoopReviewData();
+      setReviewInitialData(reviewData);
+
+      const aiReplyMessage: ChatMessage = {
+        id: `ai-wrapup-summary-${Date.now()}`,
+        role: "ai",
+        text: "เราดึงสิ่งที่คุยกันออกมาให้ตรวจทานแล้วนะ ส่วนไหนที่ยังไม่ครบคุณพิมพ์เติมหรือปรับแก้ตามจริงได้เลย 🌱",
+        createdAt: Date.now() + 1,
+      };
+
+      setInputText("");
+      setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+      setShowLoopReview(true);
+      isSendingRef.current = false;
+      return;
+    }
+
+    if (trimmed === "ไว้คราวหน้า") {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        createdAt: Date.now(),
+      };
+      const aiReplyMessage: ChatMessage = {
+        id: `ai-wrapup-nexttime-${Date.now()}`,
+        role: "ai",
+        text: "ได้เลย พักผ่อนให้สบายใจนะ แล้วแวะมาคุยกันใหม่ได้เสมอ 🌱",
+        createdAt: Date.now() + 1,
+      };
+
+      setInputText("");
+      setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+      isSendingRef.current = false;
+      return;
+    }
+
     const reqId = ++activeRequestId.current;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -1224,45 +1550,107 @@ function ChatScreen({
     <div className="screen chatScreen">
       <AppHeader
         title="ดึงสติตอนนี้"
+        leftElement={
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <Baby small size={32} />
+          </div>
+        }
+        hideBrandText
         onEmergency={() => setScreen("pause")}
         onOpenMenu={onOpenMenu}
       />
 
-      <div className="chatSubHeader">
-        <Baby small size={44} />
-        <div className="chatSubHeaderCopy">
-          <b>ดึงสติตอนนี้ 🌱</b>
-          <span>สหายสติพร้อมรับฟังคุณเสมอ...</span>
-        </div>
-        <button
-          type="button"
-          disabled={!isLoopReady}
-          onClick={isLoopReady ? handleOpenLoopReview : undefined}
+      {/* 4-Step Chat Journey Path Bar (Decluttered Single Line) */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          padding: "8px 16px 10px",
+          background: "rgba(255, 255, 255, 0.95)",
+          borderBottom: "1px solid #F1E5E7",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+          gap: "6px",
+        }}
+      >
+        <div
           style={{
-            marginLeft: "auto",
-            padding: "6px 12px",
-            borderRadius: "999px",
-            background: isLoopReady
-              ? "linear-gradient(135deg, #FFF0F3, #FFE4E6)"
-              : "#F3F4F6",
-            border: isLoopReady ? "1px solid #FDA4AF" : "1px solid #E5E7EB",
-            color: isLoopReady ? "#BE123C" : "#9CA3AF",
-            fontSize: "11px",
-            fontWeight: 600,
-            cursor: isLoopReady ? "pointer" : "not-allowed",
-            opacity: isLoopReady ? 1 : 0.6,
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: "4px",
+            justifyContent: "space-between",
           }}
-          title={
-            isLoopReady
-              ? "เปิดการ์ดตรวจทานลูป 6 ส่วน (พร้อมแล้ว)"
-              : "กำลังสังเกตลูปจากบทสนทนา (ยังไม่ครบ 6 ส่วน)"
-          }
         >
-          👁️ ส่องลูปสติ 6 ส่วน {isLoopReady ? "✨ (พร้อม)" : "⏳ (กำลังสังเกต...)"}
-        </button>
+          <span style={{ fontSize: "12px", fontWeight: 700, color: "#9D174D" }}>
+            ขั้น {currentJourneyStep.step}/4 · {currentJourneyStep.title}
+          </span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isLoopReady && (
+              <button
+                type="button"
+                onClick={handleOpenLoopReview}
+                style={{
+                  padding: "3px 10px",
+                  borderRadius: "999px",
+                  background: "linear-gradient(135deg, #FFF0F3, #FFE4E6)",
+                  border: "1px solid #FDA4AF",
+                  color: "#BE123C",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+                title="เปิดการ์ดตรวจทานลูป 8 ส่วน"
+              >
+                👁️ ส่อง Loop ✨
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowJourneyModal(true)}
+              style={{
+                padding: "3px 8px",
+                borderRadius: "999px",
+                background: "#FFF1F2",
+                border: "1px solid #FECDD3",
+                color: "#BE123C",
+                fontSize: "11px",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "3px",
+              }}
+              title="ดูรายละเอียดเส้นทางการสนทนา 4 ขั้น"
+            >
+              <span>🧭 ดูเส้นทาง</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Single Line Progress Bar */}
+        <div
+          style={{
+            width: "100%",
+            height: "4px",
+            background: "#F3F4F6",
+            borderRadius: "999px",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${(currentJourneyStep.step / 4) * 100}%`,
+              height: "100%",
+              background: "linear-gradient(90deg, #F472B6, #E11D48)",
+              borderRadius: "999px",
+              transition: "width 0.4s ease",
+            }}
+          />
+        </div>
       </div>
 
       <div className="chatBody" ref={chatScrollRef}>
@@ -1472,17 +1860,6 @@ function ChatScreen({
           </div>
         ))}
 
-        {/* 6-Part Completed Loop Review Card */}
-        {showLoopReview && (
-          <LoopReviewCard
-            conversationId={conversationIdRef.current}
-            initialData={reviewInitialData}
-            onClose={() => setShowLoopReview(false)}
-            onConfirmed={() => {
-              // Confirmed by server
-            }}
-          />
-        )}
 
         {/* Quick Reply Chips: strictly only rendered when latest message is finished AI turn */}
         {messages[messages.length - 1]?.role === "ai" &&
@@ -1579,7 +1956,7 @@ function ChatScreen({
       <div className="bottomSpacer" />
 
       {/* 6-Part Completed Loop Review Modal (Strictly Server-Authoritative) */}
-      {showLoopReview && isLoopReady && reviewInitialData && (
+      {showLoopReview && reviewInitialData && (
         <div
           style={{
             position: 'fixed',
@@ -1607,9 +1984,152 @@ function ChatScreen({
               initialData={reviewInitialData}
               onClose={() => setShowLoopReview(false)}
               onConfirmed={() => {
-                setShowLoopReview(false);
+                // Keep modal open to show reward and celebration screen until user clicks close
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* 4-Step Chat Journey Modal */}
+      {showJourneyModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0, 0, 0, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => setShowJourneyModal(false)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              maxWidth: '420px',
+              width: '100%',
+              padding: '22px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+              animation: 'fadeInCard 0.2s ease-out',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🧭</span>
+                <h4 style={{ margin: 0, fontSize: '16px', color: '#9D174D', fontWeight: 700 }}>
+                  เส้นทางการสนทนา (4 ขั้น)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowJourneyModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '20px',
+                  color: '#9CA3AF',
+                  cursor: 'pointer',
+                  padding: '4px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 14px 0', lineHeight: 1.5 }}>
+              สหายสติจะคอยช่วยสะท้อนและรับฟังคุณไปตามธรรมชาติ โดยเชื่อมโยง 4 ขั้นนี้อย่างยืดหยุ่น:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {([1, 2, 3, 4] as const).map((stepNum) => {
+                const stepInfo = USER_FACING_CHAT_STEPS[stepNum];
+                const isCurrent = currentJourneyStep.step === stepNum;
+                return (
+                  <div
+                    key={stepNum}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '14px',
+                      background: isCurrent ? '#FFF1F2' : '#F9FAFB',
+                      border: isCurrent ? '1.5px solid #FDA4AF' : '1px solid #E5E7EB',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          background: isCurrent ? '#E11D48' : '#D1D5DB',
+                          color: '#FFF',
+                          fontSize: '11px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {stepNum}
+                      </span>
+                      <b style={{ fontSize: '13px', color: isCurrent ? '#9D174D' : '#374151' }}>
+                        {stepInfo.title}
+                      </b>
+                      {isCurrent && (
+                        <span
+                          style={{
+                            marginLeft: 'auto',
+                            fontSize: '10px',
+                            background: '#FFE4E6',
+                            color: '#BE123C',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          ขั้นปัจจุบัน
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#4B5563', lineHeight: 1.45, paddingLeft: '28px' }}>
+                      {stepInfo.description}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: '16px', textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowJourneyModal(false)}
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  borderRadius: '14px',
+                  background: '#F3F4F6',
+                  color: '#374151',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                เข้าใจแล้ว คุยต่อ 🌱
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -86,6 +86,7 @@ interface CompanionContextType {
     eggFeedback?: any;
     error?: string;
   }>;
+  isLoggedIn: boolean;
   saveDraft: (data: {
     conversationId: string;
     trigger?: string;
@@ -95,6 +96,72 @@ interface CompanionContextType {
     oldResponse?: string;
     newChoice?: string;
   }) => Promise<{ success: boolean }>;
+  createDraftTrace: (data: {
+    id?: string;
+    conversationId: string;
+    trigger?: string;
+    emotionOrBody?: string;
+    automaticStory?: string;
+    desires?: string;
+    facts?: string;
+    oldResponse?: string;
+    newChoice?: string;
+    insights?: string;
+    emotionTags?: string[];
+    skills?: any;
+  }) => Promise<{ success: boolean; trace?: any; traceId?: string; error?: string }>;
+  updateTrace: (
+    traceId: string,
+    data: {
+      title?: string;
+      summary?: string;
+      thoughtsOrFears?: string;
+      desires?: string;
+      oldResponse?: string;
+      newChoice?: string;
+      insights?: string;
+      emotionTags?: string[];
+      practicedSkills?: string[];
+      trigger?: string;
+      emotionOrBody?: string;
+      automaticStory?: string;
+      facts?: string;
+    }
+  ) => Promise<{ success: boolean; trace?: any; error?: string }>;
+  confirmTrace: (
+    traceId: string,
+    data: {
+      conversationId: string;
+      idempotencyKey: string;
+      trigger: string;
+      emotionOrBody?: string;
+      automaticStory?: string;
+      facts?: string;
+      oldResponse?: string;
+      newChoice?: string;
+      desires?: string;
+      insights?: string;
+      emotionTags?: string[];
+      skills: {
+        emotional_awareness?: number;
+        somatic_awareness?: number;
+        cognitive_clarity?: number;
+        conscious_action?: number;
+      };
+      isReview?: boolean;
+      isCrisis?: boolean;
+    }
+  ) => Promise<{
+    success: boolean;
+    alreadyProcessed?: boolean;
+    growthEvent?: any;
+    progressCount?: number;
+    reward?: any;
+    newlyHatched?: boolean;
+    hatchMilestoneReward?: any;
+    companion?: any;
+    error?: string;
+  }>;
   petCompanion: () => Promise<void>;
   hatchCompanion: () => Promise<{ success: boolean; companion?: CompanionData; snapshot?: any; error?: string }>;
   refreshCompanion: () => Promise<void>;
@@ -455,6 +522,247 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return { success: true };
   };
 
+  const createDraftTrace = async (data: {
+    id?: string;
+    conversationId: string;
+    trigger?: string;
+    emotionOrBody?: string;
+    automaticStory?: string;
+    desires?: string;
+    facts?: string;
+    oldResponse?: string;
+    newChoice?: string;
+    insights?: string;
+    emotionTags?: string[];
+    skills?: any;
+  }): Promise<{ success: boolean; trace?: any; traceId?: string; error?: string }> => {
+    if (isLoggedIn) {
+      try {
+        const res = await fetch('/api/loops/traces', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(data),
+          credentials: 'include',
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          return { success: false, error: json.error || 'Failed to create trace draft' };
+        }
+        return { success: true, trace: json.trace, traceId: json.trace?.id };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Network error' };
+      }
+    } else {
+      // Guest local draft with stable conversation ID
+      const guestTraceId = data.id || `guest_trc_${data.conversationId}`;
+      const localDraftItem: LoopTraceItem = {
+        id: guestTraceId,
+        trace_category: 'mindful_loop',
+        title: data.trigger || 'แบบร่างลูปสติ',
+        summary: data.emotionOrBody || '',
+        created_at: new Date().toISOString(),
+      };
+      return { success: true, trace: localDraftItem, traceId: guestTraceId };
+    }
+  };
+
+  const updateTrace = async (
+    traceId: string,
+    data: {
+      title?: string;
+      summary?: string;
+      thoughtsOrFears?: string;
+      desires?: string;
+      oldResponse?: string;
+      newChoice?: string;
+      insights?: string;
+      emotionTags?: string[];
+      practicedSkills?: string[];
+      trigger?: string;
+      emotionOrBody?: string;
+      automaticStory?: string;
+      facts?: string;
+    }
+  ): Promise<{ success: boolean; trace?: any; error?: string }> => {
+    if (isLoggedIn) {
+      const res = await fetch(`/api/loops/traces/${traceId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return { success: false, error: errJson.error || 'Failed to update trace' };
+      }
+      const resData = await res.json();
+      setTraces((prev) =>
+        prev.map((t) => (t.id === traceId ? { ...t, ...data, updated_at: new Date().toISOString() } : t))
+      );
+      return { success: true, trace: resData.trace };
+    } else {
+      // Guest local storage
+      const updatedTraces = traces.map((t) =>
+        t.id === traceId ? { ...t, ...data, updated_at: new Date().toISOString() } : t
+      );
+      setTraces(updatedTraces);
+      localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(updatedTraces));
+      return { success: true, trace: updatedTraces.find((t) => t.id === traceId) };
+    }
+  };
+
+  const confirmTrace = async (
+    traceId: string,
+    data: {
+      conversationId: string;
+      idempotencyKey: string;
+      trigger: string;
+      emotionOrBody?: string;
+      automaticStory?: string;
+      facts?: string;
+      oldResponse?: string;
+      newChoice?: string;
+      desires?: string;
+      insights?: string;
+      emotionTags?: string[];
+      skills: {
+        emotional_awareness?: number;
+        somatic_awareness?: number;
+        cognitive_clarity?: number;
+        conscious_action?: number;
+      };
+      isReview?: boolean;
+      isCrisis?: boolean;
+    }
+  ) => {
+    if (isLoggedIn) {
+      const res = await fetch(`/api/loops/traces/${traceId}/confirm`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data),
+        credentials: 'include',
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        return { success: false, error: result.error || 'Failed to confirm trace' };
+      }
+      if (result.progressCount !== undefined) {
+        setTraceCount(result.progressCount);
+      }
+      if (result.reward?.wallet) {
+        setWallet(result.reward.wallet);
+      }
+      if (result.companion) {
+        setCompanion(result.companion);
+      }
+      return result;
+    } else {
+      // Guest Local Storage with local idempotency key (Directive 6)
+      const IDEMP_STORE_KEY = 'deung_sati_idemp_keys_v2';
+      let idempKeys: string[] = [];
+      try {
+        const stored = localStorage.getItem(IDEMP_STORE_KEY);
+        if (stored) idempKeys = JSON.parse(stored);
+      } catch {}
+
+      if (idempKeys.includes(data.idempotencyKey) || idempKeys.includes(traceId)) {
+        return { success: true, alreadyProcessed: true, progressCount: traceCount };
+      }
+
+      const UNEXPLORED = 'ยังไม่ได้สำรวจ';
+      const isInvalid = (val?: any, minLen = 2) => {
+        if (!val || typeof val !== 'string') return true;
+        const trimmed = val.trim();
+        return (
+          trimmed.length < minLen ||
+          trimmed === UNEXPLORED ||
+          trimmed === 'วงจรสติ' ||
+          trimmed === 'แบบร่างลูปสติ' ||
+          trimmed === 'Loop Trace' ||
+          trimmed.startsWith('สิ่งที่เกิดขึ้น (บันทึกจากที่ได้คุยกัน')
+        );
+      };
+
+      const missingFields: string[] = [];
+      if (isInvalid(data.trigger, 3)) missingFields.push('จุดสะกิด (Trigger)');
+      if (isInvalid(data.emotionOrBody, 2)) missingFields.push('ความรู้สึก/สัญญาณร่างกาย (Emotion & Body)');
+      if (isInvalid(data.automaticStory, 3)) missingFields.push('ความคิดแวบแรก (Automatic Story)');
+      const hasResolution = !isInvalid(data.newChoice, 3) || !isInvalid(data.insights, 3);
+      if (!hasResolution) missingFields.push('ทางเลือกใหม่/บทเรียน (Micro-action / Reflection)');
+
+      if (missingFields.length > 0) {
+        return {
+          success: false,
+          error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
+          missingFields,
+        };
+      }
+
+      idempKeys.push(data.idempotencyKey);
+      idempKeys.push(traceId);
+      localStorage.setItem(IDEMP_STORE_KEY, JSON.stringify(idempKeys));
+
+      const newCount = traceCount + 1;
+      setTraceCount(newCount);
+
+      // Save confirmed trace into guest local traces so refresh keeps the count
+      const localTraceItem: LoopTraceItem = {
+        id: traceId,
+        trace_category: 'mindful_loop',
+        title: data.trigger || 'วงจรสติ',
+        summary: data.emotionOrBody || '',
+        created_at: new Date().toISOString(),
+      };
+      setTraces((prev) => [localTraceItem, ...prev.filter((t) => t.id !== traceId)]);
+      try {
+        const savedTraces = localStorage.getItem(LOCAL_STORAGE_TRACES_KEY);
+        const parsedSaved: LoopTraceItem[] = savedTraces ? JSON.parse(savedTraces) : [];
+        const filtered = parsedSaved.filter((t) => t.id !== traceId);
+        filtered.unshift(localTraceItem);
+        localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(filtered));
+      } catch (e) {
+        console.warn('Failed to save guest trace to storage:', e);
+      }
+
+      // Award +15 XP, +10 Shells per spec
+      const newWallet = {
+        ...wallet,
+        xp: wallet.xp + 15,
+        shells: wallet.shells + 10,
+      };
+      setWallet(newWallet);
+      localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(newWallet));
+
+      // Check 20-trace hatch for guest
+      let newlyHatched = false;
+      if (newCount >= 20 && companion?.stage === 0) {
+        newlyHatched = true;
+        const hatchedWallet = {
+          ...newWallet,
+          xp: newWallet.xp + 50,
+          shells: newWallet.shells + 25,
+        };
+        setWallet(hatchedWallet);
+        localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(hatchedWallet));
+
+        const hatchedComp: CompanionData = {
+          ...companion,
+          stage: 1,
+          unlocked_max_stage: 1,
+        };
+        setCompanion(hatchedComp);
+        localStorage.setItem(LOCAL_STORAGE_COMPANION_KEY, JSON.stringify(hatchedComp));
+      }
+
+      return {
+        success: true,
+        progressCount: newCount,
+        reward: { xp: 15, shells: 10, wallet: newWallet },
+        newlyHatched,
+      };
+    }
+  };
+
   // 4. Pet / Touch Companion (ANTI-FARMING: Zero points, zero progress granted)
   const petCompanion = async () => {
     if (isLoggedIn) {
@@ -531,7 +839,11 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         needsOnboarding,
         createCompanionFromOnboarding,
         recordTrace,
+        updateTrace,
+        confirmTrace,
         completeLoop,
+        isLoggedIn,
+        createDraftTrace,
         saveDraft,
         petCompanion,
         hatchCompanion,
