@@ -510,7 +510,16 @@ export default function App() {
           />
         )}
 
-        {screen === "companion" && (
+        {screen === "companion" && !companion && (
+          <section style={{ padding: "40px 24px", textAlign: "center" }}>
+            <h2>มาสร้างเพื่อนร่วมทางกัน 🌱</h2>
+            <p>เลือกสไตล์และตั้งชื่อน้อง เพื่อเริ่มดูแลและเติบโตไปด้วยกัน</p>
+            <button onClick={() => setOnboardingLifecycle("active")}>สร้างน้องของฉัน</button>
+            <button onClick={() => setScreen("home")}>กลับหน้าหลัก</button>
+          </section>
+        )}
+
+        {screen === "companion" && companion && (
           <CompanionRoom
             onBack={() => setScreen("home")}
             onOpenChat={() => setScreen("chat")}
