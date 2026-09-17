@@ -2,7 +2,10 @@
 -- Reuses completed_loops as the Immutable Growth Event table and currency_transactions as the Reward Ledger
 
 -- 1. Editable Loop Traces: add updated_at and structured section fields
-ALTER TABLE loop_traces ADD COLUMN updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+-- SQLite cannot add a non-constant default to a populated table.
+-- Trace writes set updated_at explicitly; backfill existing rows here.
+ALTER TABLE loop_traces ADD COLUMN updated_at TIMESTAMPTZ;
+UPDATE loop_traces SET updated_at = created_at WHERE updated_at IS NULL;
 ALTER TABLE loop_traces ADD COLUMN thoughts_or_fears TEXT;
 ALTER TABLE loop_traces ADD COLUMN desires TEXT;
 ALTER TABLE loop_traces ADD COLUMN old_response TEXT;
@@ -32,7 +35,8 @@ ALTER TABLE companions ADD COLUMN conscious_action_score INTEGER DEFAULT 0;
 ALTER TABLE companions ADD COLUMN hatch_milestone_awarded BOOLEAN DEFAULT FALSE;
 
 -- 4. Growth Events View for seamless schema compatibility
-CREATE VIEW IF NOT EXISTS growth_events AS
+-- The migration ledger guarantees one execution; plain CREATE VIEW supports both drivers.
+CREATE VIEW growth_events AS
 SELECT
   id,
   user_id,
