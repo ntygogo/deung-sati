@@ -650,10 +650,14 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               }}
               onConfirmed={(res) => {
                 refreshCompanion();
-                if (res.newlyHatchable || res.newlyHatched) {
-                  setDialogue('ว้าว! บันทึก Completed Loop ครบ 20 ครั้งแล้ว! ไข่พร้อมฟักแล้วนะ! ✨🥚');
+                if (res.newlyHatched) {
+                  setDialogue('ครบ 20 ลูปแล้ว! น้องฟักเป็นแอกโซลอทสหายสติแล้วนะ 🎉✨');
+                } else if (res.newlyHatchable && isEgg) {
+                  setDialogue('ครบ 20 ลูปแล้ว! ไข่พร้อมฟักแล้วนะ ✨🥚');
+                } else if (!isEgg) {
+                  setDialogue(`บันทึกลูปเรียบร้อย! สังเกตตัวเองแล้ว ${res.progressCount ?? traceCount} ครั้ง มาเติบโตไปด้วยกันนะ 🌱`);
                 } else {
-                  setDialogue(`บันทึก Completed Loop เรียบร้อย! สะสมพลังงานได้ ${res.progressCount || 1}/20 ลูป 🌱`);
+                  setDialogue(`บันทึกลูปเรียบร้อย! ความคืบหน้าการฟักไข่ ${Math.min(20, res.progressCount ?? traceCount)}/20 ลูป 🌱`);
                 }
               }}
             />
