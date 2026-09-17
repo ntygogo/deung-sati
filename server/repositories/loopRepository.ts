@@ -188,8 +188,8 @@ export class LoopRepository {
         oldResponse,
         newChoice,
         insights,
-        emotionTags,
-        practicedSkills,
+        emotionTags == null ? null : JSON.stringify(emotionTags),
+        practicedSkills == null ? null : JSON.stringify(practicedSkills),
       ]
     );
 
@@ -305,11 +305,11 @@ export class LoopRepository {
       updates.push(`insights = $${updateParams.length}`);
     }
     if (data.emotionTags !== undefined) {
-      updateParams.push(data.emotionTags);
+      updateParams.push(data.emotionTags == null ? null : JSON.stringify(data.emotionTags));
       updates.push(`emotion_tags_json = $${updateParams.length}`);
     }
     if (data.practicedSkills !== undefined) {
-      updateParams.push(data.practicedSkills);
+      updateParams.push(data.practicedSkills == null ? null : JSON.stringify(data.practicedSkills));
       updates.push(`practiced_skills_json = $${updateParams.length}`);
     }
 
@@ -544,7 +544,7 @@ export class LoopRepository {
           (data.oldResponse || '').trim(),
           (data.newChoice || '').trim(),
           (data.emotionTags?.[0] || 'calm'),
-          [],
+          JSON.stringify([]),
           isReviewOnly,
           progressCounted,
           rewardXp,
@@ -556,7 +556,7 @@ export class LoopRepository {
           snapshotData,
           (data.desires || '').trim(),
           (data.insights || '').trim(),
-          data.emotionTags || [],
+          JSON.stringify(data.emotionTags || []),
         ]
       );
 
@@ -803,7 +803,7 @@ export class LoopRepository {
           pattern.habitualResponse,
           pattern.typicalConsequences,
           pattern.newChoiceExperiment || null,
-          pattern.helpfulStrategies || [],
+          JSON.stringify(pattern.helpfulStrategies || []),
         ]
       );
 
@@ -872,7 +872,7 @@ export class LoopRepository {
         data.oldResponse.trim(),
         data.newChoice.trim(),
         data.emotionTag || 'calm',
-        data.learningTypes || [],
+        JSON.stringify(data.learningTypes || []),
         isReview,
         progressCounted,
         rewardXp,
