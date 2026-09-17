@@ -22,3 +22,4 @@ export * from './structuredOutputSchema.js';
 export * from './masterPrompt.js';
 export * from './exerciseCatalog.js';
 export * from './journeyStages.js';
+export * from '../loopPolicy.js';

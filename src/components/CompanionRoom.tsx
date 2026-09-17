@@ -16,12 +16,20 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
     wallet,
     petCompanion,
     hatchCompanion,
+    refreshCompanion,
   } = useCompanion();
 
   const [dialogue, setDialogue] = useState<string>('สวัสดีจ้ะ... วันนี้มีอะไรอยากชวนน้องคุย หรือมีเรื่องอะไรที่สังเกตเห็นไหม?');
   const [isInteracting, setIsInteracting] = useState<boolean>(false);
   const [showTraceModal, setShowTraceModal] = useState<boolean>(false);
   const [showHatchCelebration, setShowHatchCelebration] = useState<boolean>(false);
+  const [selectedResumeTrace, setSelectedResumeTrace] = useState<any | null>(null);
+
+  // Resume entry point for reviewing / continuing existing loop traces
+  const onResumeDraft = (trace: any) => {
+    setSelectedResumeTrace(trace);
+    setShowTraceModal(true);
+  };
 
   if (!companion) {
     return null;
@@ -365,7 +373,10 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               💖 ลูบหัวน้อง
             </button>
             <button
-              onClick={() => setShowTraceModal(true)}
+              onClick={() => {
+                setSelectedResumeTrace(null);
+                setShowTraceModal(true);
+              }}
               style={{
                 flex: 1,
                 padding: '14px',
@@ -434,17 +445,42 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               {traces.slice(0, 10).map((t, idx) => (
                 <div
                   key={`${t.id || 'trc'}_${idx}`}
+                  data-testid={`trace-item-${t.id || idx}`}
+                  onClick={() => onResumeDraft(t)}
                   style={{
                     background: 'rgba(0, 0, 0, 0.22)',
                     borderRadius: '14px',
                     padding: '12px 14px',
                     fontSize: '13px',
                     borderLeft: `4px solid ${theme.accent}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <strong style={{ color: '#FFF' }}>{t.title}</strong>
-                    <span style={{ fontSize: '11px', opacity: 0.6 }}>{t.trace_category}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', opacity: 0.6 }}>{t.trace_category}</span>
+                      <button
+                        type="button"
+                        data-testid="resume-draft-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onResumeDraft(t);
+                        }}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.15)',
+                          border: '1px solid rgba(255, 255, 255, 0.25)',
+                          color: '#FFF',
+                          borderRadius: '8px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ✏️ สานต่อ
+                      </button>
+                    </div>
                   </div>
                   <div style={{ opacity: 0.85, fontSize: '12.5px', lineHeight: 1.4 }}>{t.summary}</div>
                 </div>
@@ -482,14 +518,122 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
             }}
           >
             <LoopReviewCard
-              conversationId={`room_${Date.now()}`}
-              onClose={() => setShowTraceModal(false)}
-              onConfirmed={(res) => {
+              conversationId={selectedResumeTrace?.source_session_id || (selectedResumeTrace as any)?.conversationId || `room_${Date.now()}`}
+              traceId={selectedResumeTrace?.id}
+              initialData={
+                selectedResumeTrace
+                  ? (() => {
+                      let raw: any = {};
+                      if (typeof selectedResumeTrace.raw_data_json === 'string') {
+                        try {
+                          const parsed = JSON.parse(selectedResumeTrace.raw_data_json);
+                          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                            raw = parsed;
+                          }
+                        } catch {}
+                      } else if (typeof selectedResumeTrace.raw_data_json === 'object' && selectedResumeTrace.raw_data_json !== null && !Array.isArray(selectedResumeTrace.raw_data_json)) {
+                        raw = selectedResumeTrace.raw_data_json;
+                      }
+
+                      const exactTrigger = typeof raw.trigger === 'string'
+                        ? raw.trigger
+                        : (typeof (selectedResumeTrace as any).trigger === 'string' && (selectedResumeTrace as any).trigger !== 'แบบร่างลูปสติ'
+                            ? (selectedResumeTrace as any).trigger
+                            : '');
+
+                      const exactEmotion = typeof raw.emotionOrBody === 'string'
+                        ? raw.emotionOrBody
+                        : (typeof raw.emotion_or_body === 'string'
+                            ? raw.emotion_or_body
+                            : (typeof (selectedResumeTrace as any).emotion_or_body === 'string' && (selectedResumeTrace as any).emotion_or_body !== 'แบบร่างการเรียนรู้'
+                                ? (selectedResumeTrace as any).emotion_or_body
+                                : ''));
+
+                      const exactStory = typeof raw.automaticStory === 'string'
+                        ? raw.automaticStory
+                        : (typeof raw.automatic_story === 'string'
+                            ? raw.automatic_story
+                            : (typeof raw.thoughtsOrFears === 'string'
+                                ? raw.thoughtsOrFears
+                                : (typeof (selectedResumeTrace as any).automatic_story === 'string'
+                                    ? (selectedResumeTrace as any).automatic_story
+                                    : (typeof selectedResumeTrace.thoughts_or_fears === 'string'
+                                        ? selectedResumeTrace.thoughts_or_fears
+                                        : ''))));
+
+                      const exactFacts = typeof raw.facts === 'string'
+                        ? raw.facts
+                        : (typeof (selectedResumeTrace as any).facts === 'string' ? (selectedResumeTrace as any).facts : '');
+
+                      const exactNeeds = typeof raw.desires === 'string'
+                        ? raw.desires
+                        : (typeof raw.needs === 'string'
+                            ? raw.needs
+                            : (typeof selectedResumeTrace.desires === 'string'
+                                ? selectedResumeTrace.desires
+                                : (typeof (selectedResumeTrace as any).needs === 'string' ? (selectedResumeTrace as any).needs : '')));
+
+                      const exactOptions = typeof raw.oldResponse === 'string'
+                        ? raw.oldResponse
+                        : (typeof raw.old_response === 'string'
+                            ? raw.old_response
+                            : (typeof raw.options === 'string'
+                                ? raw.options
+                                : (typeof selectedResumeTrace.old_response === 'string'
+                                    ? selectedResumeTrace.old_response
+                                    : (typeof (selectedResumeTrace as any).options === 'string' ? (selectedResumeTrace as any).options : ''))));
+
+                      const exactMicroAction = typeof raw.newChoice === 'string'
+                        ? raw.newChoice
+                        : (typeof raw.new_choice === 'string'
+                            ? raw.new_choice
+                            : (typeof raw.microAction === 'string'
+                                ? raw.microAction
+                                : (typeof selectedResumeTrace.new_choice === 'string'
+                                    ? selectedResumeTrace.new_choice
+                                    : (typeof (selectedResumeTrace as any).microAction === 'string' ? (selectedResumeTrace as any).microAction : ''))));
+
+                      const exactReflection = typeof raw.insights === 'string'
+                        ? raw.insights
+                        : (typeof raw.reflection === 'string'
+                            ? raw.reflection
+                            : (typeof selectedResumeTrace.insights === 'string'
+                                ? selectedResumeTrace.insights
+                                : (typeof (selectedResumeTrace as any).reflection === 'string' ? (selectedResumeTrace as any).reflection : '')));
+
+                      const exactEmotionTags = Array.isArray(raw.emotionTags)
+                        ? raw.emotionTags
+                        : (Array.isArray((selectedResumeTrace as any).emotion_tags)
+                            ? (selectedResumeTrace as any).emotion_tags
+                            : (Array.isArray(selectedResumeTrace.emotion_tags_json)
+                                ? selectedResumeTrace.emotion_tags_json
+                                : []));
+
+                      return {
+                        trigger: exactTrigger,
+                        emotionOrBody: exactEmotion,
+                        automaticStory: exactStory,
+                        facts: exactFacts,
+                        needs: exactNeeds,
+                        options: exactOptions,
+                        microAction: exactMicroAction,
+                        reflection: exactReflection,
+                        emotionTags: exactEmotionTags,
+                        isConfirmed: Boolean(selectedResumeTrace.growth_event || selectedResumeTrace.xp_awarded),
+                      };
+                    })()
+                  : undefined
+              }
+              onClose={() => {
                 setShowTraceModal(false);
-                if (res.newlyHatchable) {
+                setSelectedResumeTrace(null);
+              }}
+              onConfirmed={(res) => {
+                refreshCompanion();
+                if (res.newlyHatchable || res.newlyHatched) {
                   setDialogue('ว้าว! บันทึก Completed Loop ครบ 20 ครั้งแล้ว! ไข่พร้อมฟักแล้วนะ! ✨🥚');
                 } else {
-                  setDialogue(`บันทึก Completed Loop เรียบร้อย! สะสมพลังงานได้ ${res.progressCount}/20 ลูป 🌱`);
+                  setDialogue(`บันทึก Completed Loop เรียบร้อย! สะสมพลังงานได้ ${res.progressCount || 1}/20 ลูป 🌱`);
                 }
               }}
             />

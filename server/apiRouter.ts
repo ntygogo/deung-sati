@@ -9,6 +9,7 @@ import { analyzeEmpathyLens } from './empathyLens.js';
 import { filterCommunicationMessage } from './communicationFilter.js';
 import { sessionStore } from './sessionStore.js';
 import type { ChatEngineTurnResponse } from '../src/shared/chat-protocol/index.js';
+import { validateLoopForConfirmation } from '../src/shared/chat-protocol/index.js';
 
 export const apiApp = express();
 
@@ -745,7 +746,7 @@ apiApp.get('/loops/traces/:traceId', requireAuth, async (req: AuthenticatedReque
   }
 });
 
-apiApp.put('/loops/traces/:traceId', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+const handleUpdateTrace = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const traceId = Array.isArray(req.params.traceId) ? req.params.traceId[0] : String(req.params.traceId);
     const updated = await loopRepository.updateTrace(req.userId!, traceId, req.body);
@@ -757,7 +758,10 @@ apiApp.put('/loops/traces/:traceId', requireAuth, async (req: AuthenticatedReque
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+};
+
+apiApp.put('/loops/traces/:traceId', requireAuth, handleUpdateTrace);
+apiApp.patch('/loops/traces/:traceId', requireAuth, handleUpdateTrace);
 
 apiApp.post('/loops/traces/:traceId/confirm', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -792,38 +796,27 @@ apiApp.post('/loops/traces/:traceId/confirm', requireAuth, async (req: Authentic
 
     const isAlreadyConfirmed = existingTrace.growth_event != null;
 
-    const UNEXPLORED = 'ยังไม่ได้สำรวจ';
-    const isInvalid = (val?: any, minLen = 2) => {
-      if (!val || typeof val !== 'string') return true;
-      const t = val.trim();
-      return (
-        t.length < minLen ||
-        t === UNEXPLORED ||
-        t === 'วงจรสติ' ||
-        t === 'แบบร่างลูปสติ' ||
-        t === 'Loop Trace' ||
-        t.startsWith('สิ่งที่เกิดขึ้น (บันทึกจากที่ได้คุยกัน')
-      );
-    };
-
     const resolvedTrigger = trigger || existingTrace.trigger || existingTrace.title || '';
     const resolvedEmotion = emotionOrBody || existingTrace.emotion_or_body || existingTrace.summary || '';
     const resolvedStory = automaticStory || existingTrace.automatic_story || existingTrace.thoughts_or_fears || '';
+    const resolvedFacts = facts || existingTrace.facts || (existingTrace.raw_data_json as any)?.facts || '';
     const resolvedChoice = newChoice || existingTrace.new_choice || '';
     const resolvedInsights = insights || existingTrace.insights || '';
 
-    const missingFields: string[] = [];
-    if (isInvalid(resolvedTrigger, 3)) missingFields.push('จุดสะกิด (Trigger)');
-    if (isInvalid(resolvedEmotion, 2)) missingFields.push('ความรู้สึก/สัญญาณร่างกาย (Emotion & Body)');
-    if (isInvalid(resolvedStory, 3)) missingFields.push('ความคิดแวบแรก (Automatic Story)');
-    const hasResolution = !isInvalid(resolvedChoice, 3) || !isInvalid(resolvedInsights, 3);
-    if (!hasResolution) missingFields.push('ทางเลือกใหม่/บทเรียน (Micro-action / Reflection)');
+    const validation = validateLoopForConfirmation({
+      trigger: resolvedTrigger,
+      emotionOrBody: resolvedEmotion,
+      automaticStory: resolvedStory,
+      facts: resolvedFacts,
+      newChoice: resolvedChoice,
+      insights: resolvedInsights,
+    });
 
-    if (!isAlreadyConfirmed && missingFields.length > 0) {
+    if (!isAlreadyConfirmed && !validation.isValid) {
       res.status(400).json({
-        error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
+        error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${validation.missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
         errorCode: 'VALIDATION_FAILED',
-        missingFields,
+        missingFields: validation.missingFields,
       });
       return;
     }
@@ -892,16 +885,27 @@ apiApp.post('/loops/traces', requireAuth, async (req: AuthenticatedRequest, res:
     const derivedSummary = (summary || emotionOrBody || automaticStory || 'แบบร่างการเรียนรู้').trim();
     const activeSessionId = sessionId || conversationId || null;
 
+    const initialRaw: any = typeof rawTurnData === 'object' && rawTurnData !== null ? { ...rawTurnData } : {};
+    if (trigger !== undefined) initialRaw.trigger = trigger;
+    if (emotionOrBody !== undefined) initialRaw.emotionOrBody = emotionOrBody;
+    if (automaticStory !== undefined) initialRaw.automaticStory = automaticStory;
+    if (facts !== undefined) initialRaw.facts = facts;
+    if (desires !== undefined) initialRaw.desires = desires;
+    if (oldResponse !== undefined) initialRaw.oldResponse = oldResponse;
+    if (newChoice !== undefined) initialRaw.newChoice = newChoice;
+    if (insights !== undefined) initialRaw.insights = insights;
+    if (emotionTags !== undefined) initialRaw.emotionTags = emotionTags;
+
     const trace = await loopRepository.createTrace(req.userId!, {
       id: id || traceId,
       category: derivedCategory,
       title: derivedTitle,
       summary: derivedSummary,
-      rawTurnData: rawTurnData || { facts: facts || '' },
+      rawTurnData: initialRaw,
       sessionId: activeSessionId,
       conversationId: activeSessionId,
-      trigger: trigger || (title ? derivedTitle : ''),
-      emotionOrBody: emotionOrBody || (summary ? derivedSummary : ''),
+      trigger: typeof trigger === 'string' ? trigger : (title && title !== 'แบบร่างลูปสติ' ? title : ''),
+      emotionOrBody: typeof emotionOrBody === 'string' ? emotionOrBody : (summary && summary !== 'แบบร่างการเรียนรู้' ? summary : ''),
       automaticStory: automaticStory || thoughtsOrFears,
       thoughtsOrFears: thoughtsOrFears || automaticStory,
       desires,

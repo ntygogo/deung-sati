@@ -1145,9 +1145,9 @@ function ChatScreen({
     const cleanClause = (value: string) =>
       value.trim().replace(/(?:และ|แล้วก็|แล้ว|แต่)\s*$/, "").trim();
     const splitStatement = (text: string) => {
-      const marker = /(?:^|\s+|[,.!?;\n]+|และ|แล้วก็|แต่|(?=ฉัน|ผม|เรา|หนู|ดิฉัน))(?:(ฉัน|ผม|เรา|หนู|ดิฉัน)\s*)?(รู้สึกเหมือน|รู้สึก|คิดว่า|กลัวว่า|ต้องการ|อยากให้|อยากรู้|อยากเข้าใจ|จะลอง|ตั้งใจจะ|ได้เรียนรู้ว่า)/gu;
+      const marker = /(?:^|\s+|[,.!?;\n]+|และ|แล้วก็|แต่|(?=ฉัน|ผม|เรา|หนู|ดิฉัน))(?:(ฉัน|ผม|เรา|หนู|ดิฉัน)\s*)?(รู้สึกเหมือน|รู้สึก|คิดว่า|กลัวว่า|ต้องการ|อยากให้|อยากรู้|อยากเข้าใจ|จะลอง|ตั้งใจจะ|จะทำ|จะเริ่ม|จะคุย|จะถาม|วางแผนจะ|เริ่มเห็นว่า|ได้เรียนรู้ว่า|เห็นว่า|เข้าใจว่า|ตระหนักว่า)/gu;
       const matches = [...text.matchAll(marker)];
-      const clauses: Partial<Record<"emotion" | "story" | "needs", string>> = {};
+      const clauses: Partial<Record<"emotion" | "story" | "needs" | "action" | "reflection", string>> = {};
       for (let i = 0; i < matches.length; i++) {
         const match = matches[i];
         const word = match[2];
@@ -1159,11 +1159,13 @@ function ChatScreen({
         if (word === "รู้สึก") clauses.emotion = value;
         if (["คิดว่า", "กลัวว่า", "รู้สึกเหมือน"].includes(word)) clauses.story = (match[1] || "") + word + value;
         if (["ต้องการ", "อยากให้", "อยากรู้", "อยากเข้าใจ"].includes(word)) clauses.needs = word + value;
+        if (["จะลอง", "ตั้งใจจะ", "จะทำ", "จะเริ่ม", "จะคุย", "จะถาม", "วางแผนจะ"].includes(word)) clauses.action = word + (value.startsWith(word) ? value.slice(word.length) : value);
+        if (["เริ่มเห็นว่า", "ได้เรียนรู้ว่า", "เห็นว่า", "เข้าใจว่า", "ตระหนักว่า"].includes(word)) clauses.reflection = value;
       }
       const prefix = cleanClause(text.slice(0, matches[0]?.index ?? text.length));
       const isReportedEvent =
         /(?:บอก|ขอให้|ให้แก้|ส่ง|อ่าน|โทร|นัด|ยกเลิก|ได้รับ|โดน|ถูก|ตำหนิ|ปฏิเสธ|ทะเลาะ|ตอบ|แก้งาน)/u.test(prefix) &&
-        !/(?:\?|ไหม|หรือเปล่า|ทำไม|หรือไม่|รึเปล่า|ถ้า|สมมติ|อาจ|น่าจะ|คงจะ|เพราะ|เกลียด|ไม่สนใจ|คิดว่า|กลัวว่า|รู้สึก|อยาก|ต้องการ)/u.test(prefix);
+        !/(?:\?|ไหม|หรือเปล่า|ทำไม|หรือไม่|รึเปล่า|ถ้า|สมมติ|อาจ|น่าจะ|คงจะ|เพราะ|เกลียด|ไม่สนใจ|คิดว่า|กลัวว่า|รู้สึก|อยาก|ต้องการ|จะ|วางแผน|ตั้งใจ|ต่อไป)/u.test(prefix);
       return { ...clauses, event: isReportedEvent ? prefix : "" };
     };
     const statements = substantiveUserMsgs.map((message) => ({
@@ -1179,7 +1181,7 @@ function ChatScreen({
     const hasUserContent = scopedStatements.length > 0;
     const fullUserText = scopedStatements.map((statement) => statement.text).join(" ");
     const eventText = eventIndex >= 0 ? statements[eventIndex].parts.event : "";
-    const latestClause = (key: "emotion" | "story" | "needs") =>
+    const latestClause = (key: "emotion" | "story" | "needs" | "action" | "reflection") =>
       [...scopedStatements].reverse().find((statement) => statement.parts[key])?.parts[key] || "";
     // Do not carry an extracted loop for an earlier topic into a newly stated event.
     const compact = (value: string) => value.replace(/\s+/g, "");
@@ -1210,12 +1212,11 @@ function ChatScreen({
     const factsText = eventText || scopedLoop?.facts?.trim() || UNEXPLORED;
 
     // 5. Needs (Core Needs / Desires)
-    let needsText = (
+    let needsText = latestClause("needs") || (
       scopedLoop?.needs ||
       (scopedLoop as any)?.desires ||
       ""
     ).trim();
-    if (!needsText) needsText = latestClause("needs");
     if (!needsText) {
       if (/อยากให้|ต้องการ|อยากรู้|อยากเข้าใจ/i.test(fullUserText)) {
         const needMatch = fullUserText.match(
@@ -1239,7 +1240,7 @@ function ChatScreen({
     }
 
     // 7. Micro-action (New choice / next small step)
-    let microActionText = (
+    let microActionText = latestClause("action") || (
       scopedLoop?.micro_action ||
       (scopedLoop as any)?.new_choice ||
       ""
@@ -1249,7 +1250,7 @@ function ChatScreen({
     }
 
     // 8. Reflection (Insights / key realization)
-    let reflectionText = (
+    let reflectionText = latestClause("reflection") || (
       scopedLoop?.reflection ||
       (scopedLoop as any)?.insights ||
       ""
@@ -1258,18 +1259,16 @@ function ChatScreen({
       reflectionText = UNEXPLORED;
     }
 
-    const isAllComplete = [
-      triggerText,
-      emotionOrBodyText,
-      automaticStoryText,
-      factsText,
-      needsText,
-      optionsText,
-      microActionText,
-      reflectionText,
-    ].every((val) => val && val !== UNEXPLORED);
+    const isFiveCoreComplete =
+      triggerText && triggerText !== UNEXPLORED &&
+      emotionOrBodyText && emotionOrBodyText !== UNEXPLORED &&
+      automaticStoryText && automaticStoryText !== UNEXPLORED &&
+      factsText && factsText !== UNEXPLORED &&
+      factsText.trim() !== automaticStoryText.trim() &&
+      ((microActionText && microActionText !== UNEXPLORED) ||
+       (reflectionText && reflectionText !== UNEXPLORED));
 
-    if (isAllComplete && hasUserContent) {
+    if (isFiveCoreComplete && hasUserContent) {
       conversationStatus = "complete_loop";
     }
 
@@ -1291,8 +1290,11 @@ function ChatScreen({
       detectedSkills: (scopedLoop as any)?.detected_skills || {
         emotional_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
         somatic_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
-        cognitive_clarity: Boolean(factsText && factsText !== UNEXPLORED),
-        conscious_action: Boolean(microActionText && microActionText !== UNEXPLORED),
+        cognitive_clarity: Boolean(factsText && factsText !== UNEXPLORED && factsText.trim() !== automaticStoryText.trim()),
+        conscious_action: Boolean(
+          (microActionText && microActionText !== UNEXPLORED) ||
+          (reflectionText && reflectionText !== UNEXPLORED)
+        ),
       },
     };
   };

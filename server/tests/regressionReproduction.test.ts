@@ -10,6 +10,7 @@ import { companionRepository } from '../repositories/companionRepository.js';
 import { loopRepository } from '../repositories/loopRepository.js';
 import { economyRepository } from '../repositories/economyRepository.js';
 import { sanitizeDeungSatiResponse } from '../aiProvider.js';
+import { calculateLoopProgress, validateLoopForConfirmation } from '../../src/shared/chat-protocol/index.js';
 
 /**
  * Verification test suite for the 2 user-reported regressions:
@@ -182,6 +183,55 @@ async function runVerificationTests() {
     assert.strictEqual(walletAfterInvalid.shells, initialWallet.shells, 'Shells must NOT increase on rejected confirm');
     console.log('  ✓ Zero leakage: completed_loops=0, growth_points=0, rewards unchanged');
 
+    // 1.5 Test Trigger-only and Emotion-only Drafts preserving blanks without title/summary leakage
+    console.log('\n[TEST 1.5] Testing Trigger-only and Emotion-only Blank Preservation & PATCH...');
+    const triggerOnlyDraftRes = await fetch(`${baseUrl}/loops/traces`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        trigger: 'วันนี้หัวหน้าบอกให้แก้งาน 2 จุด',
+      }),
+    });
+    const triggerOnlyJson = (await triggerOnlyDraftRes.json()) as any;
+    const triggerOnlyId = triggerOnlyJson.trace?.id;
+    assert(triggerOnlyId, 'Trigger-only draft must have id');
+    const triggerOnlyTrace = await loopRepository.getTraceById(triggerOnlyId, userId);
+    assert.strictEqual(triggerOnlyTrace?.trigger, 'วันนี้หัวหน้าบอกให้แก้งาน 2 จุด', 'Trigger must be exact');
+    assert.strictEqual(triggerOnlyTrace?.emotion_or_body, '', 'Emotion must remain blank for trigger-only draft');
+    console.log('  ✓ Trigger-only draft preserves empty emotion without summary leakage');
+
+    const emotionOnlyDraftRes = await fetch(`${baseUrl}/loops/traces`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        emotionOrBody: 'รู้สึกกังวลและใจหวิว',
+      }),
+    });
+    const emotionOnlyJson = (await emotionOnlyDraftRes.json()) as any;
+    const emotionOnlyId = emotionOnlyJson.trace?.id;
+    assert(emotionOnlyId, 'Emotion-only draft must have id');
+    const emotionOnlyTrace = await loopRepository.getTraceById(emotionOnlyId, userId);
+    assert.strictEqual(emotionOnlyTrace?.emotion_or_body, 'รู้สึกกังวลและใจหวิว', 'Emotion must be exact');
+    assert.strictEqual(emotionOnlyTrace?.trigger, '', 'Trigger must remain blank for emotion-only draft');
+    console.log('  ✓ Emotion-only draft preserves empty trigger without title leakage');
+
+    // 1.6 PATCH trace updates fields using the exact same ID
+    const patchRes = await fetch(`${baseUrl}/loops/traces/${emotionOnlyId}`, {
+      method: 'PATCH',
+      headers: authHeaders,
+      body: JSON.stringify({
+        trigger: 'มีสายโทรเข้าตอนดึก',
+        facts: 'มีเบอร์แปลกโทรเข้ามา 2 ครั้งเวลา 23:00',
+      }),
+    });
+    assert.strictEqual(patchRes.status, 200, 'PATCH trace must return 200');
+    const patchedTrace = await loopRepository.getTraceById(emotionOnlyId, userId);
+    assert.strictEqual(patchedTrace?.id, emotionOnlyId, 'Trace ID must be preserved after PATCH');
+    assert.strictEqual(patchedTrace?.trigger, 'มีสายโทรเข้าตอนดึก', 'Trigger updated via PATCH');
+    assert.strictEqual(patchedTrace?.facts, 'มีเบอร์แปลกโทรเข้ามา 2 ครั้งเวลา 23:00', 'Facts updated via PATCH');
+    assert.strictEqual(patchedTrace?.emotion_or_body, 'รู้สึกกังวลและใจหวิว', 'Existing emotion preserved');
+    console.log('  ✓ PATCH trace preserves same ID and updates fields correctly');
+
     // =========================================================================
     // TEST 2: Philosophical conversation ("คนเราเกิดมาทำไม")
     // =========================================================================
@@ -347,6 +397,179 @@ async function runVerificationTests() {
 
     console.log('  ✓ Idempotency verified: re-confirm does not grant duplicate points');
 
+    // =========================================================================
+    // TEST 3: 4-Stage Loop Progression, Confirmation Policies, and Security
+    // =========================================================================
+    console.log('\n[TEST 3] Testing 4-Stage Loop Progression, 5-Core Confirmation & Security...');
+
+    // 3.1 calculateLoopProgress and validateLoopForConfirmation unit checks
+    const v0 = validateLoopForConfirmation({});
+    assert.strictEqual(v0.isValid, false, 'Empty data cannot be valid for confirmation');
+    assert(v0.missingFields.length > 0, 'Must have missing fields for empty data');
+
+    const p0 = calculateLoopProgress({});
+    assert.strictEqual(p0.currentStage, 0, 'Empty data must be stage 0');
+    assert.strictEqual(p0.canSaveDraft, false, 'Empty data cannot save draft');
+    assert.strictEqual(p0.canConfirm, false, 'Empty data cannot confirm');
+
+    const p1 = calculateLoopProgress({ emotionOrBody: 'รู้สึกเหงา' });
+    assert.strictEqual(p1.currentStage, 1, 'Emotion only reaches stage 1');
+    assert.strictEqual(p1.canSaveDraft, true, 'Substantive emotion allows saving draft');
+    assert.strictEqual(p1.canConfirm, false, 'Stage 1 cannot confirm');
+
+    const p2 = calculateLoopProgress({ trigger: 'หัวหน้าเรียกคุย', emotionOrBody: 'รู้สึกกังวล' });
+    assert.strictEqual(p2.currentStage, 2, 'Trigger + emotion reaches stage 2');
+    assert.strictEqual(p2.canConfirm, false, 'Stage 2 cannot confirm');
+
+    const p3Same = calculateLoopProgress({
+      trigger: 'หัวหน้าเรียกคุย',
+      emotionOrBody: 'รู้สึกกังวล',
+      facts: 'หัวหน้าเรียกคุย',
+      automaticStory: 'หัวหน้าเรียกคุย',
+    });
+    assert.strictEqual(p3Same.currentStage, 2, 'Identical facts and story must NOT advance to stage 3');
+
+    const p3Distinct = calculateLoopProgress({
+      trigger: 'หัวหน้าเรียกคุย',
+      emotionOrBody: 'รู้สึกกังวล',
+      facts: 'หัวหน้าส่งอีเมลนัดเวลา 14:00',
+      automaticStory: 'คิดว่าเขาจะต่อว่าเรื่องผลงาน',
+    });
+    assert.strictEqual(p3Distinct.currentStage, 3, 'Distinct facts and story advance to stage 3');
+    assert.strictEqual(p3Distinct.canConfirm, false, 'Stage 3 cannot confirm without action or reflection');
+
+    // Action only (needs and options left empty/unexplored) -> qualifies for stage 4 & confirmation!
+    const p4Action = calculateLoopProgress({
+      trigger: 'หัวหน้าเรียกคุย',
+      emotionOrBody: 'รู้สึกกังวล',
+      facts: 'หัวหน้าส่งอีเมลนัดเวลา 14:00',
+      automaticStory: 'คิดว่าเขาจะต่อว่าเรื่องผลงาน',
+      microAction: 'จะเตรียมสรุปงานและเดินเข้าไปถามอย่างเปิดใจ',
+    });
+    assert.strictEqual(p4Action.currentStage, 4, 'Stage 3 + microAction reaches stage 4');
+    assert.strictEqual(p4Action.canConfirm, true, 'Stage 4 with action can confirm (needs/options optional)');
+
+    // Reflection only (needs and options left empty/unexplored) -> qualifies for stage 4 & confirmation!
+    const p4Reflection = calculateLoopProgress({
+      trigger: 'หัวหน้าเรียกคุย',
+      emotionOrBody: 'รู้สึกกังวล',
+      facts: 'หัวหน้าส่งอีเมลนัดเวลา 14:00',
+      automaticStory: 'คิดว่าเขาจะต่อว่าเรื่องผลงาน',
+      reflection: 'การเรียกคุยไม่ได้แปลว่าต้องเป็นเรื่องลบเสมอไป',
+    });
+    assert.strictEqual(p4Reflection.currentStage, 4, 'Stage 3 + reflection reaches stage 4');
+    assert.strictEqual(p4Reflection.canConfirm, true, 'Stage 4 with reflection can confirm (needs/options optional)');
+
+    // Stage 4 out of order: having action without previous stages must not qualify as stage 4
+    const pOutOfOrder = calculateLoopProgress({
+      microAction: 'จะไปวิ่งออกกำลังกาย',
+    });
+    assert.strictEqual(pOutOfOrder.stageStatus.stage4, false, 'Action alone cannot satisfy stage 4');
+    assert.strictEqual(pOutOfOrder.currentStage, 0, 'Cannot skip earlier stages');
+
+    const vValid = validateLoopForConfirmation({
+      trigger: 'หัวหน้าเรียกคุย',
+      emotionOrBody: 'รู้สึกกังวล',
+      facts: 'หัวหน้าส่งอีเมลนัดเวลา 14:00',
+      automaticStory: 'คิดว่าเขาจะต่อว่าเรื่องผลงาน',
+      microAction: 'จะเตรียมสรุปงานและเดินเข้าไปถามอย่างเปิดใจ',
+    });
+    assert.strictEqual(vValid.isValid, true, '5-core loop must be valid for confirmation');
+    assert.strictEqual(vValid.missingFields.length, 0, 'No missing fields for valid loop');
+
+    console.log('  ✓ 4-stage sequential progress and confirmation policy verified');
+
+    // 3.2 API Confirmation: Action-only (with needs/options empty) succeeds
+    const actionDraft = await loopRepository.createTrace(userId, {
+      category: 'mindful_loop',
+      title: 'เพื่อนยกเลิกนัดกะทันหัน',
+      trigger: 'เพื่อนยกเลิกนัดกะทันหัน',
+      emotionOrBody: 'รู้สึกนอยด์และใจแป้ว',
+      automaticStory: 'คิดว่าเขาไม่อยากมาเจอเรา',
+      facts: 'เพื่อนส่งข้อความมาบอกว่าติดงานด่วน',
+      newChoice: 'จะลองโทรไปถามด้วยความเป็นห่วง',
+    } as any);
+
+    const actionConfirmRes = await fetch(`${baseUrl}/loops/traces/${actionDraft.id}/confirm`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        idempotencyKey: `growth_${actionDraft.id}`,
+        trigger: 'เพื่อนยกเลิกนัดกะทันหัน',
+        emotionOrBody: 'รู้สึกนอยด์และใจแป้ว',
+        automaticStory: 'คิดว่าเขาไม่อยากมาเจอเรา',
+        facts: 'เพื่อนส่งข้อความมาบอกว่าติดงานด่วน',
+        newChoice: 'จะลองโทรไปถามด้วยความเป็นห่วง',
+      }),
+    });
+    const actionConfirmData = (await actionConfirmRes.json()) as any;
+    assert.strictEqual(actionConfirmRes.status, 200, 'Action-only confirm must succeed');
+    assert.strictEqual(actionConfirmData.progressCount, 2, 'progressCount must increment to 2');
+    console.log('  ✓ Action-only confirmation succeeded without needs/options (progressCount=2)');
+
+    // 3.3 API Confirmation: Reflection-only (with needs/options empty) succeeds
+    const reflectDraft = await loopRepository.createTrace(userId, {
+      category: 'mindful_loop',
+      title: 'ทำของหล่นแตกในครัว',
+      trigger: 'ทำของหล่นแตกในครัว',
+      emotionOrBody: 'รู้สึกตกใจและเสียดาย',
+      automaticStory: 'คิดว่าตัวเองซุ่มซ่ามทำอะไรก็พัง',
+      facts: 'แก้วน้ำหลุดมือตกลงบนพื้นกระเบื้องแตก',
+      insights: 'ความผิดพลาดเกิดขึ้นได้ สิ่งสำคัญคือเก็บกวาดให้ปลอดภัย',
+    } as any);
+
+    const reflectConfirmRes = await fetch(`${baseUrl}/loops/traces/${reflectDraft.id}/confirm`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        idempotencyKey: `growth_${reflectDraft.id}`,
+        trigger: 'ทำของหล่นแตกในครัว',
+        emotionOrBody: 'รู้สึกตกใจและเสียดาย',
+        automaticStory: 'คิดว่าตัวเองซุ่มซ่ามทำอะไรก็พัง',
+        facts: 'แก้วน้ำหลุดมือตกลงบนพื้นกระเบื้องแตก',
+        insights: 'ความผิดพลาดเกิดขึ้นได้ สิ่งสำคัญคือเก็บกวาดให้ปลอดภัย',
+      }),
+    });
+    const reflectConfirmData = (await reflectConfirmRes.json()) as any;
+    assert.strictEqual(reflectConfirmRes.status, 200, 'Reflection-only confirm must succeed');
+    assert.strictEqual(reflectConfirmData.progressCount, 3, 'progressCount must increment to 3');
+    console.log('  ✓ Reflection-only confirmation succeeded without needs/options (progressCount=3)');
+
+    // 3.4 API Security: Another user cannot confirm someone else's trace
+    const regRes2 = await fetch(`${baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Another User',
+        email: `other_${Date.now()}@sati.app`,
+        password: 'Password123!',
+      }),
+    });
+    const regData2 = (await regRes2.json()) as any;
+    const token2 = regData2.token;
+    const authHeaders2 = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token2}`,
+    };
+
+    const crossUserRes = await fetch(`${baseUrl}/loops/traces/${actionDraft.id}/confirm`, {
+      method: 'POST',
+      headers: authHeaders2,
+      body: JSON.stringify({
+        idempotencyKey: `growth_hack_${actionDraft.id}`,
+        trigger: 'เพื่อนยกเลิกนัดกะทันหัน',
+        emotionOrBody: 'รู้สึกนอยด์และใจแป้ว',
+        automaticStory: 'คิดว่าเขาไม่อยากมาเจอเรา',
+        facts: 'เพื่อนส่งข้อความมาบอกว่าติดงานด่วน',
+        newChoice: 'จะลองโทรไปถามด้วยความเป็นห่วง',
+      }),
+    });
+    assert(
+      crossUserRes.status === 404 || crossUserRes.status === 403,
+      'Cross-user trace confirm must be rejected with 404/403'
+    );
+    console.log('  ✓ Cross-user trace unauthorized access blocked safely (status: ' + crossUserRes.status + ')');
+
     // Run the real App.tsx review function; never test a duplicated simulation.
     {
       const source = readFileSync(new URL('../../src/App.tsx', import.meta.url), 'utf8');
@@ -451,7 +674,24 @@ async function runVerificationTests() {
       test('Negated feeling is not changed to positive feeling', () => {
         assert.equal(run(['ฉันไม่ได้รู้สึกเสียใจ']).emotionOrBody, unknown);
       });
-      
+      test('Multi-turn continuation regression (Turn 1 + Turn 2)', () => {
+        const turn1 = 'วันนี้หัวหน้าบอกให้งานฉันแก้ 2 จุด ฉันรู้สึกเสียใจ และคิดว่าตัวเองไม่เก่ง';
+        const turn2 = 'ฉันอยากรู้ว่าต้องแก้ตรงไหนให้ดีขึ้น จะลองถามหัวหน้าให้ชัด และเริ่มเห็นว่าการแก้งานไม่ได้แปลว่าฉันไม่เก่ง';
+        const data = run([turn1, turn2]);
+        assert.equal(data.trigger, 'วันนี้หัวหน้าบอกให้งานฉันแก้ 2 จุด');
+        assert.equal(data.facts, 'วันนี้หัวหน้าบอกให้งานฉันแก้ 2 จุด');
+        assert.equal(data.emotionOrBody, 'เสียใจ');
+        assert.equal(data.automaticStory, 'คิดว่าตัวเองไม่เก่ง');
+        assert.equal(data.needs, 'อยากรู้ว่าต้องแก้ตรงไหนให้ดีขึ้น');
+        assert.equal(data.microAction, 'จะลองถามหัวหน้าให้ชัด');
+        assert.equal(data.reflection, 'การแก้งานไม่ได้แปลว่าฉันไม่เก่ง');
+        assert.equal(data.options, unknown);
+        assert.equal(data.conversationStatus, 'complete_loop');
+      });
+      test('Future plans are not promoted to facts', () => {
+        const data = run(['พรุ่งนี้จะไปคุยกับหัวหน้า ฉันรู้สึกกังวล']);
+        assert.equal(data.facts, unknown);
+      });
     }
 
     console.log('\n================================================================');

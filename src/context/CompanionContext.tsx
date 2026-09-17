@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { validateLoopForConfirmation } from '../shared/chat-protocol';
 
 export interface GrowthDnaData {
   primary_pink_shade: string;
@@ -33,6 +34,22 @@ export interface LoopTraceItem {
   title: string;
   summary: string;
   created_at: string;
+  updated_at?: string;
+  trigger?: string;
+  emotion_or_body?: string;
+  automatic_story?: string;
+  thoughts_or_fears?: string;
+  facts?: string;
+  desires?: string;
+  old_response?: string;
+  new_choice?: string;
+  insights?: string;
+  emotion_tags?: string[];
+  growth_event?: any;
+  xp_awarded?: boolean;
+  source_session_id?: string;
+  conversationId?: string;
+  raw_data_json?: any;
 }
 
 export interface WalletData {
@@ -548,6 +565,15 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (!res.ok) {
           return { success: false, error: json.error || 'Failed to create trace draft' };
         }
+        if (json.trace) {
+          setTraces((prev) => {
+            const exists = prev.some((t) => t.id === json.trace.id);
+            if (exists) {
+              return prev.map((t) => (t.id === json.trace.id ? { ...t, ...json.trace } : t));
+            }
+            return [json.trace, ...prev];
+          });
+        }
         return { success: true, trace: json.trace, traceId: json.trace?.id };
       } catch (err: any) {
         return { success: false, error: err.message || 'Network error' };
@@ -560,8 +586,25 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         trace_category: 'mindful_loop',
         title: data.trigger || 'แบบร่างลูปสติ',
         summary: data.emotionOrBody || '',
+        trigger: data.trigger || '',
+        emotion_or_body: data.emotionOrBody || '',
+        automatic_story: data.automaticStory || '',
+        facts: data.facts || '',
+        desires: data.desires || '',
+        old_response: data.oldResponse || '',
+        new_choice: data.newChoice || '',
+        insights: data.insights || '',
+        emotion_tags: data.emotionTags || [],
         created_at: new Date().toISOString(),
       };
+      setTraces((prev) => {
+        const exists = prev.some((t) => t.id === guestTraceId);
+        const next = exists
+          ? prev.map((t) => (t.id === guestTraceId ? { ...t, ...localDraftItem } : t))
+          : [localDraftItem, ...prev];
+        localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(next));
+        return next;
+      });
       return { success: true, trace: localDraftItem, traceId: guestTraceId };
     }
   };
@@ -586,7 +629,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   ): Promise<{ success: boolean; trace?: any; error?: string }> => {
     if (isLoggedIn) {
       const res = await fetch(`/api/loops/traces/${traceId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
         credentials: 'include',
@@ -597,7 +640,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       const resData = await res.json();
       setTraces((prev) =>
-        prev.map((t) => (t.id === traceId ? { ...t, ...data, updated_at: new Date().toISOString() } : t))
+        prev.map((t) => (t.id === traceId ? { ...t, ...data, ...(resData.trace || {}), updated_at: new Date().toISOString() } : t))
       );
       return { success: true, trace: resData.trace };
     } else {
@@ -669,32 +712,22 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return { success: true, alreadyProcessed: true, progressCount: traceCount };
       }
 
-      const UNEXPLORED = 'ยังไม่ได้สำรวจ';
-      const isInvalid = (val?: any, minLen = 2) => {
-        if (!val || typeof val !== 'string') return true;
-        const trimmed = val.trim();
-        return (
-          trimmed.length < minLen ||
-          trimmed === UNEXPLORED ||
-          trimmed === 'วงจรสติ' ||
-          trimmed === 'แบบร่างลูปสติ' ||
-          trimmed === 'Loop Trace' ||
-          trimmed.startsWith('สิ่งที่เกิดขึ้น (บันทึกจากที่ได้คุยกัน')
-        );
-      };
+      const validation = validateLoopForConfirmation({
+        trigger: data.trigger,
+        emotionOrBody: data.emotionOrBody,
+        automaticStory: data.automaticStory,
+        facts: data.facts,
+        newChoice: data.newChoice,
+        insights: data.insights,
+        desires: data.desires,
+        oldResponse: data.oldResponse,
+      });
 
-      const missingFields: string[] = [];
-      if (isInvalid(data.trigger, 3)) missingFields.push('จุดสะกิด (Trigger)');
-      if (isInvalid(data.emotionOrBody, 2)) missingFields.push('ความรู้สึก/สัญญาณร่างกาย (Emotion & Body)');
-      if (isInvalid(data.automaticStory, 3)) missingFields.push('ความคิดแวบแรก (Automatic Story)');
-      const hasResolution = !isInvalid(data.newChoice, 3) || !isInvalid(data.insights, 3);
-      if (!hasResolution) missingFields.push('ทางเลือกใหม่/บทเรียน (Micro-action / Reflection)');
-
-      if (missingFields.length > 0) {
+      if (!validation.isValid) {
         return {
           success: false,
-          error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
-          missingFields,
+          error: `ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event (ยังขาด: ${validation.missingFields.join(', ')}) กรุณาระบุข้อมูลให้ครบถ้วน หรือบันทึกเป็นแบบร่างไว้ก่อน`,
+          missingFields: validation.missingFields,
         };
       }
 

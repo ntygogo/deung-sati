@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { db } from '../db/database.js';
 import type { IDatabaseAdapter } from '../db/types.js';
 import { companionRepository } from './companionRepository.js';
+import { validateLoopForConfirmation } from '../../src/shared/chat-protocol/index.js';
 
 export interface LoopTraceRecord {
   id: string;
@@ -148,7 +149,18 @@ export class LoopRepository {
     const category = data.category || 'mindful_loop';
     const title = (data.title || data.trigger || 'แบบร่างลูปสติ').trim();
     const summary = (data.summary || data.emotionOrBody || data.automaticStory || 'แบบร่างการเรียนรู้').trim();
-    const rawData = data.rawTurnData || { facts: data.facts || '' };
+    const rawData: any = typeof data.rawTurnData === 'object' && data.rawTurnData !== null
+      ? { ...data.rawTurnData }
+      : {};
+    if (data.trigger !== undefined) rawData.trigger = data.trigger;
+    if (data.emotionOrBody !== undefined) rawData.emotionOrBody = data.emotionOrBody;
+    if (data.automaticStory !== undefined) rawData.automaticStory = data.automaticStory;
+    if (data.facts !== undefined) rawData.facts = data.facts;
+    if (data.desires !== undefined) rawData.desires = data.desires;
+    if (data.oldResponse !== undefined) rawData.oldResponse = data.oldResponse;
+    if (data.newChoice !== undefined) rawData.newChoice = data.newChoice;
+    if (data.insights !== undefined) rawData.insights = data.insights;
+    if (data.emotionTags !== undefined) rawData.emotionTags = data.emotionTags;
     const thoughtsOrFears = data.thoughtsOrFears || data.automaticStory || null;
     const desires = data.desires || null;
     const oldResponse = data.oldResponse || null;
@@ -199,23 +211,31 @@ export class LoopRepository {
     let rawData: any = {};
     if (typeof trace.raw_data_json === 'string') {
       try {
-        rawData = JSON.parse(trace.raw_data_json);
+        const parsed = JSON.parse(trace.raw_data_json);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          rawData = parsed;
+        }
       } catch {}
-    } else if (typeof trace.raw_data_json === 'object' && trace.raw_data_json !== null) {
+    } else if (typeof trace.raw_data_json === 'object' && trace.raw_data_json !== null && !Array.isArray(trace.raw_data_json)) {
       rawData = trace.raw_data_json;
     }
 
+    const trigger = typeof rawData.trigger === 'string' ? rawData.trigger : '';
+    const emotionOrBody = typeof rawData.emotionOrBody === 'string'
+      ? rawData.emotionOrBody
+      : (typeof rawData.emotion_or_body === 'string' ? rawData.emotion_or_body : '');
+
     return {
       ...trace,
-      trigger: trace.title,
-      emotion_or_body: trace.summary,
-      automatic_story: trace.thoughts_or_fears || rawData.automaticStory || '',
-      desires: trace.desires || '',
+      trigger,
+      emotion_or_body: emotionOrBody,
+      automatic_story: trace.thoughts_or_fears || rawData.automaticStory || rawData.automatic_story || '',
+      desires: trace.desires || rawData.desires || rawData.needs || '',
       facts: rawData.facts || '',
-      old_response: trace.old_response || '',
-      new_choice: trace.new_choice || '',
-      insights: trace.insights || '',
-      emotion_tags: trace.emotion_tags_json || [],
+      old_response: trace.old_response || rawData.oldResponse || rawData.options || '',
+      new_choice: trace.new_choice || rawData.newChoice || rawData.microAction || '',
+      insights: trace.insights || rawData.insights || rawData.reflection || '',
+      emotion_tags: trace.emotion_tags_json || rawData.emotionTags || [],
       growth_event: growthEvent || null,
     };
   }
@@ -293,6 +313,45 @@ export class LoopRepository {
       updates.push(`practiced_skills_json = $${updateParams.length}`);
     }
 
+    if (
+      data.trigger !== undefined ||
+      data.emotionOrBody !== undefined ||
+      data.automaticStory !== undefined ||
+      data.facts !== undefined ||
+      data.desires !== undefined ||
+      data.oldResponse !== undefined ||
+      data.newChoice !== undefined ||
+      data.insights !== undefined ||
+      data.emotionTags !== undefined ||
+      data.rawTurnData !== undefined
+    ) {
+      let currentRaw: any = {};
+      if (typeof trace.raw_data_json === 'string') {
+        try {
+          const parsed = JSON.parse(trace.raw_data_json);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            currentRaw = parsed;
+          }
+        } catch {}
+      } else if (typeof trace.raw_data_json === 'object' && trace.raw_data_json !== null && !Array.isArray(trace.raw_data_json)) {
+        currentRaw = { ...trace.raw_data_json };
+      }
+      if (data.trigger !== undefined) currentRaw.trigger = data.trigger;
+      if (data.emotionOrBody !== undefined) currentRaw.emotionOrBody = data.emotionOrBody;
+      if (data.automaticStory !== undefined) currentRaw.automaticStory = data.automaticStory;
+      if (data.facts !== undefined) currentRaw.facts = data.facts;
+      if (data.desires !== undefined) currentRaw.desires = data.desires;
+      if (data.oldResponse !== undefined) currentRaw.oldResponse = data.oldResponse;
+      if (data.newChoice !== undefined) currentRaw.newChoice = data.newChoice;
+      if (data.insights !== undefined) currentRaw.insights = data.insights;
+      if (data.emotionTags !== undefined) currentRaw.emotionTags = data.emotionTags;
+      if (data.rawTurnData && typeof data.rawTurnData === 'object' && !Array.isArray(data.rawTurnData)) {
+        Object.assign(currentRaw, data.rawTurnData);
+      }
+      updateParams.push(currentRaw);
+      updates.push(`raw_data_json = $${updateParams.length}`);
+    }
+
     const whereIdIdx = updateParams.length + 1;
     const whereUserIdx = updateParams.length + 2;
     const allParams = [...updateParams, traceId, userId];
@@ -345,14 +404,27 @@ export class LoopRepository {
         throw new Error('Loop trace not found or unauthorized');
       }
 
+      let rawData: any = {};
+      if (typeof trace.raw_data_json === 'string') {
+        try {
+          const parsed = JSON.parse(trace.raw_data_json);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            rawData = parsed;
+          }
+        } catch {}
+      } else if (typeof trace.raw_data_json === 'object' && trace.raw_data_json !== null && !Array.isArray(trace.raw_data_json)) {
+        rawData = trace.raw_data_json;
+      }
+
       // Auto-fill any missing fields from trace record
-      if (!data.trigger) data.trigger = trace.title || 'Loop Trace';
-      if (!data.emotionOrBody) data.emotionOrBody = trace.summary || '';
-      if (!data.automaticStory) data.automaticStory = trace.thoughts_or_fears || '';
-      if (!data.desires) data.desires = trace.desires || '';
-      if (!data.oldResponse) data.oldResponse = trace.old_response || '';
-      if (!data.newChoice) data.newChoice = trace.new_choice || '';
-      if (!data.insights) data.insights = trace.insights || '';
+      if (!data.trigger) data.trigger = rawData.trigger || trace.title || 'Loop Trace';
+      if (!data.emotionOrBody) data.emotionOrBody = rawData.emotionOrBody || rawData.emotion_or_body || trace.summary || '';
+      if (!data.automaticStory) data.automaticStory = trace.thoughts_or_fears || rawData.automaticStory || '';
+      if (!data.facts) data.facts = (trace as any).facts || rawData.facts || '';
+      if (!data.desires) data.desires = trace.desires || rawData.desires || '';
+      if (!data.oldResponse) data.oldResponse = trace.old_response || rawData.oldResponse || '';
+      if (!data.newChoice) data.newChoice = trace.new_choice || rawData.newChoice || '';
+      if (!data.insights) data.insights = trace.insights || rawData.insights || '';
       if (!data.emotionTags) data.emotionTags = trace.emotion_tags_json || [];
       if (!data.conversationId) data.conversationId = trace.source_session_id || 'conv_default';
 
@@ -379,23 +451,22 @@ export class LoopRepository {
         };
       }
 
-      // Validate that trace has substantive trigger and is not an empty/unexplored draft
-      const UNEXPLORED = 'ยังไม่ได้สำรวจ';
-      const isInvalid = (val?: any, minLen = 2) => {
-        if (!val || typeof val !== 'string') return true;
-        const trimmed = val.trim();
-        return (
-          trimmed.length < minLen ||
-          trimmed === UNEXPLORED ||
-          trimmed === 'วงจรสติ' ||
-          trimmed === 'แบบร่างลูปสติ' ||
-          trimmed === 'Loop Trace' ||
-          trimmed.startsWith('สิ่งที่เกิดขึ้น (บันทึกจากที่ได้คุยกัน')
-        );
-      };
+      // Validate that trace meets confirmation criteria:
+      // trigger + emotion/body + facts + automatic_story + (new_choice / microAction OR insights / reflection)
+      // and facts != automatic_story
+      const validation = validateLoopForConfirmation({
+        trigger: data.trigger,
+        emotionOrBody: data.emotionOrBody,
+        automaticStory: data.automaticStory,
+        facts: data.facts,
+        newChoice: data.newChoice,
+        insights: data.insights,
+        desires: data.desires,
+        oldResponse: data.oldResponse,
+      });
 
-      if (isInvalid(data.trigger, 3)) {
-        throw new Error('ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event: ต้องระบุจุดสะกิด (Trigger อย่างน้อย 3 ตัวอักษร)');
+      if (!validation.isValid) {
+        throw new Error(`ข้อมูลไม่ครบถ้วนสำหรับการยืนยัน Growth Event: ขาด ${validation.missingFields.join(', ')}`);
       }
 
       // 3. Normalized skills (each 0 or 1 only)
@@ -622,10 +693,40 @@ export class LoopRepository {
   }
 
   async getTraces(userId: string, limit: number = 50): Promise<LoopTraceRecord[]> {
-    return await this.adapter.query<LoopTraceRecord>(
+    const rows = await this.adapter.query<LoopTraceRecord>(
       'SELECT * FROM loop_traces WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
       [userId, limit]
     );
+    return rows.map((trace) => {
+      let rawData: any = {};
+      if (typeof trace.raw_data_json === 'string') {
+        try {
+          const parsed = JSON.parse(trace.raw_data_json);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            rawData = parsed;
+          }
+        } catch {}
+      } else if (typeof trace.raw_data_json === 'object' && trace.raw_data_json !== null && !Array.isArray(trace.raw_data_json)) {
+        rawData = trace.raw_data_json;
+      }
+      const trigger = typeof rawData.trigger === 'string' ? rawData.trigger : '';
+      const emotionOrBody = typeof rawData.emotionOrBody === 'string'
+        ? rawData.emotionOrBody
+        : (typeof rawData.emotion_or_body === 'string' ? rawData.emotion_or_body : '');
+
+      return {
+        ...trace,
+        trigger,
+        emotion_or_body: emotionOrBody,
+        automatic_story: trace.thoughts_or_fears || rawData.automaticStory || rawData.automatic_story || '',
+        desires: trace.desires || rawData.desires || rawData.needs || '',
+        facts: rawData.facts || '',
+        old_response: trace.old_response || rawData.oldResponse || rawData.options || '',
+        new_choice: trace.new_choice || rawData.newChoice || rawData.microAction || '',
+        insights: trace.insights || rawData.insights || rawData.reflection || '',
+        emotion_tags: trace.emotion_tags_json || rawData.emotionTags || [],
+      };
+    });
   }
 
   async getTraceCount(userId: string): Promise<number> {
