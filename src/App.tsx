@@ -1204,8 +1204,15 @@ function ChatScreen({
       scopedStatements[0]?.text || UNEXPLORED;
 
     // 2. Emotion / Body: extract only the feeling clause, including open vocabulary.
+    const explicitEmotion = [...scopedStatements].reverse().map(({ text }) => {
+      // Keep literal self-reports; do not infer feelings from tags, questions,
+      // negation, hypothetical situations, or reports about another person.
+      if (/(?:เขา|เธอ|เพื่อน|แฟน|หัวหน้า|ไม่|ไม่ได้|หาย|ถ้า|สมมติ|อาจ|ไหม|หรือเปล่า|\?)/u.test(text)) return "";
+      return text.match(/(?:^(?:(?:วันนี้|ตอนนี้)\s*)?(?:(?:ฉัน|ผม|เรา|หนู|ดิฉัน)\s*)?|จน)(กังวล|เครียด|เสียใจ|เศร้า|เหนื่อย|เหงา|โกรธ|ดีใจ|โล่งใจ)(?=\s|[,.!?]|มาก|จัง|เลย|นิด|แล้ว|และ|แต่|$)/u)?.[1] || "";
+    }).find(Boolean) || "";
     const emotionOrBodyText = latestClause("emotion") ||
       scopedLoop?.emotion_or_body?.trim() ||
+      explicitEmotion ||
       fullUserText.match(/แน่นหน้าอก|ใจสั่น|หายใจไม่ทั่ว|เกร็ง|ปวดหัว/u)?.[0] || UNEXPLORED;
 
     // 3. Automatic Story: never copy the event and emotion into this field.

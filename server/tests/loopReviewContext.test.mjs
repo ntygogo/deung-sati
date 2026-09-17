@@ -34,4 +34,9 @@ assert.equal(newTopic.conversationStatus, 'partial_loop');
 const firstFacts = review([user('ข้อเท็จจริงคือหัวหน้าส่งงานกลับมา ฉันรู้สึกเศร้า')]);
 assert.match(firstFacts.trigger, /หัวหน้าส่งงานกลับมา/);
 assert.equal(firstFacts.emotionOrBody, 'เศร้า');
+assert.equal(review([user('วันนี้งานเยอะจนกังวล อยากค่อย ๆ เริ่มทีละอย่าง')]).emotionOrBody, 'กังวล');
+assert.equal(review([user('ตอนนี้ฉันเครียดมาก')]).emotionOrBody, 'เครียด');
+for (const text of ['เพื่อนงานเยอะจนกังวล', 'วันนี้ไม่กังวลแล้ว', 'ถ้างานเยอะจนกังวลจะทำอย่างไร', 'กังวลไหม']) {
+  assert.equal(review([user(text)]).emotionOrBody, 'ยังไม่ได้สำรวจ', text);
+}
 console.log('PASS: factual clarification retains prior emotion/story; new topic stays isolated; first factual turn works.');
