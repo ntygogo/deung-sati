@@ -1175,7 +1175,8 @@ function ChatScreen({
     // A newly reported event starts a new review scope. Short follow-ups enrich it.
     let eventIndex = -1;
     statements.forEach((statement, index) => {
-      if (statement.parts.event) eventIndex = index;
+      const clarifiesCurrentEvent = /^(?:ขอคุยต่อก่อน\s*)?(?:ข้อเท็จจริง|ความจริงคือ|ที่เกิดขึ้นจริง|เรื่องเดิม|ต่อจากเมื่อกี้)/u.test(statement.text);
+      if (statement.parts.event && (eventIndex < 0 || !clarifiesCurrentEvent)) eventIndex = index;
     });
     const scopedStatements = statements.slice(Math.max(eventIndex, 0));
     const hasUserContent = scopedStatements.length > 0;
@@ -1209,7 +1210,8 @@ function ChatScreen({
       (scopedLoop as any)?.thoughts_or_fears?.trim() || UNEXPLORED;
 
     // 4. Facts are reported by the user, not independently verified.
-    const factsText = eventText || scopedLoop?.facts?.trim() || UNEXPLORED;
+    const latestReportedFact = [...scopedStatements].reverse().find((statement) => statement.parts.event)?.parts.event;
+    const factsText = latestReportedFact || scopedLoop?.facts?.trim() || UNEXPLORED;
 
     // 5. Needs (Core Needs / Desires)
     let needsText = latestClause("needs") || (
