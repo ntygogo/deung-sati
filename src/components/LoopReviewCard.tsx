@@ -160,11 +160,16 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [draftSavedToast, setDraftSavedToast] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = useState<string | null>(null);
   const [updateSuccessToast, setUpdateSuccessToast] = useState(false);
   const [successResult, setSuccessResult] = useState<any | null>(null);
 
   // UX Requirement 4: Guided 4-stage progressive disclosure state (default guided)
-  const [guidedStep, setGuidedStep] = useState<number>(1);
+  const [guidedStep, setGuidedStep] = useState<number>(() => {
+    const progress = calculateLoopProgress(initialData || {});
+    return progress.currentStage < 2 ? 1 : progress.currentStage < 3 ? 2 : 4;
+  });
   const [showAllFields, setShowAllFields] = useState<boolean>(false);
 
   // Sync state if initialData is provided or updated (e.g. onResumeDraft)
@@ -227,6 +232,10 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
     insights,
     reflection: insights,
   });
+
+  const draftSnapshot = JSON.stringify({ trigger, emotionOrBody, automaticStory, facts, desires, oldResponse, newChoice, insights, emotionTags });
+  const draftIsSaved = savedDraftSnapshot === draftSnapshot;
+  const nextHelpfulStep = progressEval.currentStage < 2 ? 1 : progressEval.currentStage < 3 ? 2 : 4;
 
   // Validate required fields before Growth Event confirmation
   const validateBeforeConfirm = (): { isValid: boolean; missingFields: string[] } => {
@@ -406,6 +415,8 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
   };
 
   const handleSaveDraft = async () => {
+    if (isSavingDraft || !progressEval.canSaveDraft) return;
+    setIsSavingDraft(true);
     setErrorMsg(null);
     try {
       const cleanField = (val?: string) => (val === 'ยังไม่ได้สำรวจ' ? '' : val || '');
@@ -423,6 +434,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
         });
         if (res.success) {
           setDraftSavedToast(true);
+          setSavedDraftSnapshot(draftSnapshot);
           setTimeout(() => setDraftSavedToast(false), 2500);
         } else {
           setErrorMsg(res.error || 'ไม่สามารถบันทึกแบบร่างได้ กรุณาลองใหม่อีกครั้ง');
@@ -445,12 +457,15 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
       if (res.success && res.traceId) {
         setTraceId(res.traceId);
         setDraftSavedToast(true);
+          setSavedDraftSnapshot(draftSnapshot);
         setTimeout(() => setDraftSavedToast(false), 2500);
       } else {
         setErrorMsg(res.error || 'ไม่สามารถสร้างแบบร่างได้ กรุณาลองใหม่อีกครั้ง');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการบันทึกแบบร่าง');
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -690,10 +705,10 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
         >
           <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>📝</span>
-            <span>บทสนทนามีประเด็นแต่ยังไม่ครบลูป</span>
+            <span>เก็บสิ่งที่สังเกตได้วันนี้ไว้ก่อนได้</span>
           </div>
           <div style={{ marginTop: '4px', fontSize: '11.5px' }}>
-            ระบบดึงประเด็นที่คุยไว้ให้แล้ว ช่องที่ยังไม่ได้คุยแสดงเป็น &ldquo;ยังไม่ได้สำรวจ&rdquo; คุณสามารถแตะแก้ไขให้ครบเพื่อยืนยันลูป หรือกด &ldquo;บันทึกแบบร่าง&rdquo; ไว้ก่อนได้ 🌱
+            ไม่ต้องตอบครบ 8 ช่องในครั้งเดียว บันทึกเท่าที่รู้ตอนนี้ แล้วกลับมาสานต่อเมื่อพร้อมได้ 🌱
           </div>
         </div>
       )}
@@ -714,10 +729,10 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
         >
           <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>ℹ️</span>
-            <span>ยังไม่มีข้อมูลลูปจากบทสนทนา</span>
+            <span>เริ่มจากเรื่องเดียวก็พอ</span>
           </div>
           <div style={{ marginTop: '4px', fontSize: '11.5px' }}>
-            คุณสามารถกรอกสำรวจสติ 8 ส่วนนี้ด้วยตนเอง หรือบันทึกเป็นแบบร่างเก็บไว้ก่อนได้
+            ตอนนี้รู้สึกอย่างไร หรือมีอะไรเกิดขึ้น? เขียนสั้น ๆ เพียงช่องเดียวก็บันทึกไว้ได้
           </div>
         </div>
       )}
@@ -803,6 +818,22 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
           )}
         </div>
       </div>
+
+      {!isConfirmed && (
+        <div style={{ margin: '0 0 14px', color: '#6B4B42', fontSize: '12px' }}>
+          <div role="progressbar" aria-label="ความคืบหน้าการสำรวจลูป" aria-valuemin={0} aria-valuemax={4} aria-valuenow={progressEval.currentStage}
+            style={{ height: '8px', background: '#FCE7F3', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ width: `${progressEval.currentStage * 25}%`, height: '100%', background: '#DB2777', transition: 'width 0.2s' }} />
+          </div>
+          <p style={{ margin: '6px 0' }}>บันทึกความคืบหน้าไว้ได้ทุกช่วง · ยืนยันเมื่อพร้อมจึงนับ 1 ลูปให้น้อง</p>
+          {draftIsSaved && (
+            <div role="status" style={{ padding: '12px', background: '#ECFDF5', borderRadius: '12px', color: '#065F46' }}>
+              ✓ เก็บสิ่งที่สังเกตไว้แล้ว วันนี้แค่นี้ก็ได้ กลับมาที่ประวัติแล้วกด “สานต่อ” เมื่อพร้อม
+              <button type="button" onClick={onClose} style={{ display: 'block', marginTop: '8px', padding: '8px 12px' }}>พักไว้แค่นี้ก่อน</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Guided Mode vs Show All 8 Fields Toggle Bar */}
       <div
@@ -1249,6 +1280,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
           type="button"
           data-testid="save-draft-btn"
           onClick={handleSaveDraft}
+          disabled={isSavingDraft || !progressEval.canSaveDraft}
           style={{
             flex: 1,
             padding: '11px 8px',
@@ -1262,7 +1294,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
           }}
           title="เช็กอินใจ / บันทึกลูปที่กำลังสำรวจไว้ก่อนได้ตลอดเวลา"
         >
-          {draftSavedToast ? '✓ บันทึกไว้แล้ว' : '🌱 บันทึกไว้ก่อน'}
+          {isSavingDraft ? 'กำลังเก็บบันทึก...' : draftIsSaved || draftSavedToast ? '✓ บันทึกไว้แล้ว' : '🌱 บันทึกไว้ก่อน'}
         </button>
 
         {isConfirmed ? (
@@ -1289,7 +1321,10 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={handleRequestConfirm}
+            onClick={() => {
+              if (progressEval.canConfirm) handleRequestConfirm();
+              else { setShowAllFields(false); setGuidedStep(nextHelpfulStep); }
+            }}
             style={{
               flex: 2,
               padding: '11px 12px',
@@ -1303,7 +1338,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
               boxShadow: '0 4px 12px rgba(225, 29, 72, 0.25)',
             }}
           >
-            {isSubmitting ? 'กำลังตรวจสอบ...' : '✨ ยืนยันลูปของฉัน (+1 ลูป)'}
+            {isSubmitting ? 'กำลังตรวจสอบ...' : progressEval.canConfirm ? '✨ ยืนยันลูปของฉัน (+1 ลูป)' : 'สำรวจต่อเมื่อพร้อม →'}
           </button>
         )}
       </div>
