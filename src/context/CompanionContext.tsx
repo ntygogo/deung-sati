@@ -47,6 +47,7 @@ export interface LoopTraceItem {
   emotion_tags?: string[];
   growth_event?: any;
   xp_awarded?: boolean;
+  is_confirmed?: boolean;
   source_session_id?: string;
   conversationId?: string;
   raw_data_json?: any;
@@ -187,6 +188,7 @@ interface CompanionContextType {
 const LOCAL_STORAGE_COMPANION_KEY = 'deung_sati_companion_v2';
 const LOCAL_STORAGE_TRACES_KEY = 'deung_sati_traces_v2';
 const LOCAL_STORAGE_WALLET_KEY = 'deung_sati_wallet_v2';
+const LOCAL_STORAGE_COMPLETED_LOOPS_KEY = 'deung_sati_completed_loops_v2';
 
 const CompanionContext = createContext<CompanionContextType | undefined>(undefined);
 
@@ -258,12 +260,35 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const savedComp = localStorage.getItem(LOCAL_STORAGE_COMPANION_KEY);
           if (savedComp) setCompanion(JSON.parse(savedComp));
 
+          let loadedTraces: LoopTraceItem[] = [];
           const savedTraces = localStorage.getItem(LOCAL_STORAGE_TRACES_KEY);
           if (savedTraces) {
-            const parsed = JSON.parse(savedTraces);
-            setTraces(parsed);
-            setTraceCount(parsed.length);
+            try {
+              const parsed = JSON.parse(savedTraces);
+              if (Array.isArray(parsed)) {
+                loadedTraces = parsed;
+                setTraces(loadedTraces);
+              }
+            } catch (e) {
+              console.warn('Failed to parse local traces', e);
+            }
           }
+
+          // Authoritative count is the number of confirmed completed loops ONLY (never unconfirmed drafts)
+          let canonicalCount = 0;
+          const savedCompleted = localStorage.getItem(LOCAL_STORAGE_COMPLETED_LOOPS_KEY);
+          if (savedCompleted) {
+            try {
+              const parsedCompleted = JSON.parse(savedCompleted);
+              if (Array.isArray(parsedCompleted)) {
+                canonicalCount = parsedCompleted.filter((cl: any) => cl.progress_counted !== false).length;
+              }
+            } catch {}
+          } else {
+            // Backward-compat fallback: filter traces that are confirmed
+            canonicalCount = loadedTraces.filter((t) => Boolean(t.growth_event || t.xp_awarded || (t as any).is_confirmed)).length;
+          }
+          setTraceCount(canonicalCount);
 
           const savedWallet = localStorage.getItem(LOCAL_STORAGE_WALLET_KEY);
           if (savedWallet) setWallet(JSON.parse(savedWallet));
@@ -581,6 +606,17 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } else {
       // Guest local draft with stable conversation ID
       const guestTraceId = data.id || `guest_trc_${data.conversationId}`;
+      const rawTurnData = {
+        trigger: data.trigger || '',
+        emotionOrBody: data.emotionOrBody || '',
+        automaticStory: data.automaticStory || '',
+        facts: data.facts || '',
+        desires: data.desires || '',
+        oldResponse: data.oldResponse || '',
+        newChoice: data.newChoice || '',
+        insights: data.insights || '',
+        emotionTags: data.emotionTags || [],
+      };
       const localDraftItem: LoopTraceItem = {
         id: guestTraceId,
         trace_category: 'mindful_loop',
@@ -595,6 +631,10 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         new_choice: data.newChoice || '',
         insights: data.insights || '',
         emotion_tags: data.emotionTags || [],
+        growth_event: null,
+        xp_awarded: false,
+        is_confirmed: false,
+        raw_data_json: rawTurnData,
         created_at: new Date().toISOString(),
       };
       setTraces((prev) => {
@@ -645,9 +685,49 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { success: true, trace: resData.trace };
     } else {
       // Guest local storage
-      const updatedTraces = traces.map((t) =>
-        t.id === traceId ? { ...t, ...data, updated_at: new Date().toISOString() } : t
-      );
+      const updatedTraces = traces.map((t) => {
+        if (t.id !== traceId) return t;
+        const currentRaw = (typeof t.raw_data_json === 'object' && t.raw_data_json !== null) ? { ...t.raw_data_json } : {};
+        const nextTrigger = data.trigger !== undefined ? data.trigger : (data.title !== undefined ? data.title : t.trigger);
+        const nextEmotion = data.emotionOrBody !== undefined ? data.emotionOrBody : (data.summary !== undefined ? data.summary : t.emotion_or_body);
+        const nextStory = data.automaticStory !== undefined ? data.automaticStory : (data.thoughtsOrFears !== undefined ? data.thoughtsOrFears : t.automatic_story);
+        const nextFacts = data.facts !== undefined ? data.facts : t.facts;
+        const nextDesires = data.desires !== undefined ? data.desires : t.desires;
+        const nextOldResponse = data.oldResponse !== undefined ? data.oldResponse : t.old_response;
+        const nextNewChoice = data.newChoice !== undefined ? data.newChoice : t.new_choice;
+        const nextInsights = data.insights !== undefined ? data.insights : t.insights;
+        const nextTags = data.emotionTags !== undefined ? data.emotionTags : t.emotion_tags;
+
+        const nextRaw = {
+          ...currentRaw,
+          trigger: nextTrigger || '',
+          emotionOrBody: nextEmotion || '',
+          automaticStory: nextStory || '',
+          facts: nextFacts || '',
+          desires: nextDesires || '',
+          oldResponse: nextOldResponse || '',
+          newChoice: nextNewChoice || '',
+          insights: nextInsights || '',
+          emotionTags: nextTags || [],
+        };
+
+        return {
+          ...t,
+          title: nextTrigger || t.title,
+          summary: nextEmotion || t.summary,
+          trigger: nextTrigger,
+          emotion_or_body: nextEmotion,
+          automatic_story: nextStory,
+          facts: nextFacts,
+          desires: nextDesires,
+          old_response: nextOldResponse,
+          new_choice: nextNewChoice,
+          insights: nextInsights,
+          emotion_tags: nextTags,
+          raw_data_json: nextRaw,
+          updated_at: new Date().toISOString(),
+        };
+      });
       setTraces(updatedTraces);
       localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(updatedTraces));
       return { success: true, trace: updatedTraces.find((t) => t.id === traceId) };
@@ -698,6 +778,30 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (result.companion) {
         setCompanion(result.companion);
       }
+      setTraces((prev) =>
+        prev.map((t) =>
+          t.id === traceId
+            ? {
+                ...t,
+                title: data.trigger.trim() || t.title,
+                summary: (data.emotionOrBody || '').trim() || t.summary,
+                trigger: data.trigger.trim(),
+                emotion_or_body: (data.emotionOrBody || '').trim(),
+                automatic_story: (data.automaticStory || '').trim(),
+                facts: (data.facts || '').trim(),
+                desires: (data.desires || '').trim(),
+                old_response: (data.oldResponse || '').trim(),
+                new_choice: (data.newChoice || '').trim(),
+                insights: (data.insights || '').trim(),
+                emotion_tags: data.emotionTags || [],
+                growth_event: result.growthEvent,
+                xp_awarded: true,
+                is_confirmed: true,
+                updated_at: new Date().toISOString(),
+              }
+            : t
+        )
+      );
       return result;
     } else {
       // Guest Local Storage with local idempotency key (Directive 6)
@@ -708,8 +812,24 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (stored) idempKeys = JSON.parse(stored);
       } catch {}
 
-      if (idempKeys.includes(data.idempotencyKey) || idempKeys.includes(traceId)) {
-        return { success: true, alreadyProcessed: true, progressCount: traceCount };
+      let savedCompleted: any[] = [];
+      try {
+        const sc = localStorage.getItem(LOCAL_STORAGE_COMPLETED_LOOPS_KEY);
+        if (sc) savedCompleted = JSON.parse(sc);
+      } catch {}
+
+      const existingRecord = savedCompleted.find(
+        (cl: any) => cl.loop_trace_id === traceId || cl.idempotency_key === data.idempotencyKey
+      );
+      const currentConfirmedCount = savedCompleted.filter((cl: any) => cl.progress_counted !== false).length;
+
+      if (idempKeys.includes(data.idempotencyKey) || idempKeys.includes(traceId) || existingRecord) {
+        return {
+          success: true,
+          alreadyProcessed: true,
+          progressCount: currentConfirmedCount,
+          growthEvent: existingRecord,
+        };
       }
 
       const validation = validateLoopForConfirmation({
@@ -735,27 +855,84 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       idempKeys.push(traceId);
       localStorage.setItem(IDEMP_STORE_KEY, JSON.stringify(idempKeys));
 
-      const newCount = traceCount + 1;
+      // Authoritative count is based strictly on completed loops count + 1 (never unconfirmed drafts)
+      const newCount = currentConfirmedCount + 1;
       setTraceCount(newCount);
 
-      // Save confirmed trace into guest local traces so refresh keeps the count
-      const localTraceItem: LoopTraceItem = {
-        id: traceId,
-        trace_category: 'mindful_loop',
-        title: data.trigger || 'วงจรสติ',
-        summary: data.emotionOrBody || '',
+      const completedLoopId = `guest_cloop_${Date.now()}`;
+      const completedLoopRecord = {
+        id: completedLoopId,
+        user_id: 'guest',
+        conversation_id: data.conversationId,
+        loop_trace_id: traceId,
+        idempotency_key: data.idempotencyKey,
+        trigger: data.trigger.trim(),
+        emotion_or_body: (data.emotionOrBody || '').trim(),
+        automatic_story: (data.automaticStory || '').trim(),
+        facts: (data.facts || '').trim(),
+        old_response: (data.oldResponse || '').trim(),
+        new_choice: (data.newChoice || '').trim(),
+        desires: (data.desires || '').trim(),
+        insights: (data.insights || '').trim(),
+        emotion_tags: data.emotionTags || [],
+        progress_counted: !data.isReview,
+        reward_xp: 15,
+        reward_shells: 10,
         created_at: new Date().toISOString(),
       };
-      setTraces((prev) => [localTraceItem, ...prev.filter((t) => t.id !== traceId)]);
+      savedCompleted.unshift(completedLoopRecord);
+      localStorage.setItem(LOCAL_STORAGE_COMPLETED_LOOPS_KEY, JSON.stringify(savedCompleted));
+
+      const rawTurnData = {
+        trigger: data.trigger.trim(),
+        emotionOrBody: (data.emotionOrBody || '').trim(),
+        automaticStory: (data.automaticStory || '').trim(),
+        facts: (data.facts || '').trim(),
+        desires: (data.desires || '').trim(),
+        oldResponse: (data.oldResponse || '').trim(),
+        newChoice: (data.newChoice || '').trim(),
+        insights: (data.insights || '').trim(),
+        emotionTags: data.emotionTags || [],
+      };
+
+      // Save confirmed trace with full fields preserved and is_confirmed = true
+      let existingTrace: LoopTraceItem | undefined;
       try {
         const savedTraces = localStorage.getItem(LOCAL_STORAGE_TRACES_KEY);
         const parsedSaved: LoopTraceItem[] = savedTraces ? JSON.parse(savedTraces) : [];
-        const filtered = parsedSaved.filter((t) => t.id !== traceId);
-        filtered.unshift(localTraceItem);
-        localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(filtered));
-      } catch (e) {
-        console.warn('Failed to save guest trace to storage:', e);
-      }
+        existingTrace = parsedSaved.find((t) => t.id === traceId);
+      } catch {}
+
+      const confirmedTraceItem: LoopTraceItem = {
+        id: traceId,
+        trace_category: 'mindful_loop',
+        title: data.trigger.trim() || 'วงจรสติ',
+        summary: (data.emotionOrBody || '').trim(),
+        trigger: data.trigger.trim(),
+        emotion_or_body: (data.emotionOrBody || '').trim(),
+        automatic_story: (data.automaticStory || '').trim(),
+        facts: (data.facts || '').trim(),
+        desires: (data.desires || '').trim(),
+        old_response: (data.oldResponse || '').trim(),
+        new_choice: (data.newChoice || '').trim(),
+        insights: (data.insights || '').trim(),
+        emotion_tags: data.emotionTags || [],
+        growth_event: completedLoopRecord,
+        xp_awarded: true,
+        is_confirmed: true,
+        raw_data_json: rawTurnData,
+        created_at: existingTrace?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      setTraces((prev) => {
+        const exists = prev.some((t) => t.id === traceId);
+        const next = exists
+          ? prev.map((t) => (t.id === traceId ? confirmedTraceItem : t))
+          : [confirmedTraceItem, ...prev];
+        localStorage.setItem(LOCAL_STORAGE_TRACES_KEY, JSON.stringify(next));
+        return next;
+      });
 
       // Award +15 XP, +10 Shells per spec
       const newWallet = {
@@ -792,6 +969,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         progressCount: newCount,
         reward: { xp: 15, shells: 10, wallet: newWallet },
         newlyHatched,
+        growthEvent: completedLoopRecord,
       };
     }
   };

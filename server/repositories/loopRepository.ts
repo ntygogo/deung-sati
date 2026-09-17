@@ -560,6 +560,14 @@ export class LoopRepository {
         ]
       );
 
+      // Update underlying loop_traces record so xp_awarded = TRUE and confirmed
+      if (data.loopTraceId) {
+        await tx.execute(
+          'UPDATE loop_traces SET xp_awarded = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2',
+          [data.loopTraceId, userId]
+        );
+      }
+
       // 5. Update wallet & record in currency_transactions ledger with unique idempotency_key
       let walletRecord = null;
       if (rewardXp > 0 || rewardShells > 0) {
@@ -697,6 +705,17 @@ export class LoopRepository {
       'SELECT * FROM loop_traces WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
       [userId, limit]
     );
+    const completedRows = await this.adapter.query<CompletedLoopRecord>(
+      'SELECT * FROM completed_loops WHERE user_id = $1',
+      [userId]
+    );
+    const growthEventByTraceId = new Map<string, CompletedLoopRecord>();
+    for (const cl of completedRows) {
+      if (cl.loop_trace_id) {
+        growthEventByTraceId.set(cl.loop_trace_id, cl);
+      }
+    }
+
     return rows.map((trace) => {
       let rawData: any = {};
       if (typeof trace.raw_data_json === 'string') {
@@ -714,6 +733,7 @@ export class LoopRepository {
         ? rawData.emotionOrBody
         : (typeof rawData.emotion_or_body === 'string' ? rawData.emotion_or_body : '');
 
+      const ge = growthEventByTraceId.get(trace.id) || null;
       return {
         ...trace,
         trigger,
@@ -725,6 +745,8 @@ export class LoopRepository {
         new_choice: trace.new_choice || rawData.newChoice || rawData.microAction || '',
         insights: trace.insights || rawData.insights || rawData.reflection || '',
         emotion_tags: trace.emotion_tags_json || rawData.emotionTags || [],
+        growth_event: ge,
+        xp_awarded: Boolean(trace.xp_awarded || ge),
       };
     });
   }

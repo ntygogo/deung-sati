@@ -232,6 +232,207 @@ async function runVerificationTests() {
     assert.strictEqual(patchedTrace?.emotion_or_body, 'รู้สึกกังวลและใจหวิว', 'Existing emotion preserved');
     console.log('  ✓ PATCH trace preserves same ID and updates fields correctly');
 
+    // 1.7 Save Emotion-only -> Reload/Hydrate -> Count 0, Confirm -> Count 1 (not 2)
+    console.log('\n[TEST 1.7] Testing Emotion-only Draft Hydration Count & Guest Fallback Persistence...');
+
+    // 1.7.1 API Path: Create separate user to test count isolation
+    const regRes17 = await fetch(`${baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Guest Tester',
+        email: `test_guest_pers_${Date.now()}@example.com`,
+        password: 'Password123!',
+      }),
+    });
+    const regData17 = (await regRes17.json()) as any;
+    const authHeaders17 = {
+      'Content-Type': 'application/json',
+      'X-DeungSati-Client': 'true',
+      Authorization: `Bearer ${regData17.token}`,
+    };
+
+    // Save emotion-only draft
+    const draft17Res = await fetch(`${baseUrl}/loops/traces`, {
+      method: 'POST',
+      headers: authHeaders17,
+      body: JSON.stringify({
+        emotionOrBody: 'รู้สึกกังวลและใจหวิว',
+      }),
+    });
+    assert.strictEqual(draft17Res.status, 200);
+    const draft17Data = (await draft17Res.json()) as any;
+    const draft17Id = draft17Data.trace?.id;
+    assert(draft17Id, 'Draft ID must exist');
+
+    // Query traces on "reload": totalCount MUST be 0 (drafts never count toward egg/completed loops)
+    const tracesList17 = await fetch(`${baseUrl}/loops/traces`, {
+      headers: authHeaders17,
+    });
+    const tracesList17Data = (await tracesList17.json()) as any;
+    assert.strictEqual(tracesList17Data.totalCount, 0, 'totalCount after emotion-only draft reload MUST be 0, not 1');
+    assert.strictEqual(tracesList17Data.traces.length, 1, 'Traces list should contain 1 draft');
+    assert.strictEqual(tracesList17Data.traces[0].xp_awarded, false, 'Draft trace xp_awarded must be false');
+    assert.strictEqual(tracesList17Data.traces[0].growth_event, null, 'Draft trace growth_event must be null');
+    console.log('  ✓ API draft reload totalCount = 0 (draft does NOT inflate count to 1)');
+
+    // Now confirm that same draft with full required fields
+    const confirm17Res = await fetch(`${baseUrl}/loops/traces/${draft17Id}/confirm`, {
+      method: 'POST',
+      headers: authHeaders17,
+      body: JSON.stringify({
+        idempotencyKey: `growth_${draft17Id}`,
+        trigger: 'หัวหน้าขอแก้งานสองจุด',
+        emotionOrBody: 'รู้สึกกังวลและใจหวิว',
+        automaticStory: 'คิดว่าตัวเองทำงานไม่ดีพอ',
+        facts: 'หัวหน้าส่งข้อความขอแก้เอกสาร 2 จุด',
+        newChoice: 'ถามให้แน่ชัดว่าจุดที่ต้องแก้คืออะไร',
+        insights: 'การแก้งานคือเรื่องปกติของการพัฒนา',
+        skills: { cognitive_clarity: 1, conscious_action: 1 },
+      }),
+    });
+    assert.strictEqual(confirm17Res.status, 200);
+    const confirm17Data = (await confirm17Res.json()) as any;
+    assert.strictEqual(confirm17Data.progressCount, 1, 'Confirmation progressCount must be 1, NOT 2');
+    console.log('  ✓ API confirmation progressCount = 1 (NOT 2)');
+
+    // Query traces again: totalCount MUST now be 1, and trace marked xp_awarded: true
+    const tracesListAfterConfirm = await fetch(`${baseUrl}/loops/traces`, {
+      headers: authHeaders17,
+    });
+    const tracesListAfterData = (await tracesListAfterConfirm.json()) as any;
+    assert.strictEqual(tracesListAfterData.totalCount, 1, 'totalCount after confirmation MUST be 1');
+    assert.strictEqual(tracesListAfterData.traces[0].xp_awarded, true, 'Confirmed trace xp_awarded must be true');
+    assert(tracesListAfterData.traces[0].growth_event != null, 'Confirmed trace growth_event must be populated');
+
+    // 1.7.2 Guest / Offline LocalStorage Simulation
+    // Emulate localStorage state transitions exactly as implemented in CompanionContext
+    const mockLocalStorage: Record<string, string> = {};
+    const LOCAL_STORAGE_TRACES_KEY = 'deung_sati_traces_v2';
+    const LOCAL_STORAGE_COMPLETED_LOOPS_KEY = 'deung_sati_completed_loops_v2';
+
+    // Step A: Guest saves emotion-only draft
+    const guestTraceId = 'guest_trc_conv_test_1';
+    const guestDraftItem = {
+      id: guestTraceId,
+      trace_category: 'mindful_loop',
+      title: 'แบบร่างลูปสติ',
+      summary: 'รู้สึกกังวลและใจหวิว',
+      trigger: '',
+      emotion_or_body: 'รู้สึกกังวลและใจหวิว',
+      automatic_story: '',
+      facts: '',
+      desires: '',
+      old_response: '',
+      new_choice: '',
+      insights: '',
+      emotion_tags: [],
+      growth_event: null,
+      xp_awarded: false,
+      is_confirmed: false,
+      raw_data_json: {
+        trigger: '',
+        emotionOrBody: 'รู้สึกกังวลและใจหวิว',
+        automaticStory: '',
+        facts: '',
+      },
+      created_at: new Date().toISOString(),
+    };
+    mockLocalStorage[LOCAL_STORAGE_TRACES_KEY] = JSON.stringify([guestDraftItem]);
+
+    // Step B: Guest reloads page -> refreshCompanion hydration
+    const hydrateGuestCount = (storage: Record<string, string>) => {
+      let loadedTraces: any[] = [];
+      const savedTraces = storage[LOCAL_STORAGE_TRACES_KEY];
+      if (savedTraces) {
+        try { loadedTraces = JSON.parse(savedTraces); } catch {}
+      }
+      let canonicalCount = 0;
+      const savedCompleted = storage[LOCAL_STORAGE_COMPLETED_LOOPS_KEY];
+      if (savedCompleted) {
+        try {
+          const parsedCompleted = JSON.parse(savedCompleted);
+          if (Array.isArray(parsedCompleted)) {
+            canonicalCount = parsedCompleted.filter((cl: any) => cl.progress_counted !== false).length;
+          }
+        } catch {}
+      } else {
+        canonicalCount = loadedTraces.filter((t) => Boolean(t.growth_event || t.xp_awarded || t.is_confirmed)).length;
+      }
+      return { canonicalCount, loadedTraces };
+    };
+
+    const hydrationBeforeConfirm = hydrateGuestCount(mockLocalStorage);
+    assert.strictEqual(
+      hydrationBeforeConfirm.canonicalCount,
+      0,
+      'Guest hydration count for emotion-only draft MUST be 0 (egg stays 0/20, completed loops total 0)'
+    );
+    assert.strictEqual(
+      Boolean(hydrationBeforeConfirm.loadedTraces[0].is_confirmed),
+      false,
+      'Draft trace must NOT be confirmed'
+    );
+    console.log('  ✓ Guest storage draft reload canonicalCount = 0 (egg stays 0/20, completed loops total 0)');
+
+    // Step C: Guest confirms the draft
+    const savedCompleted: any[] = [];
+    const completedLoopRecord = {
+      id: 'guest_cloop_123',
+      user_id: 'guest',
+      conversation_id: 'conv_test_1',
+      loop_trace_id: guestTraceId,
+      idempotency_key: `growth_${guestTraceId}`,
+      trigger: 'หัวหน้าขอแก้งานสองจุด',
+      emotion_or_body: 'รู้สึกกังวลและใจหวิว',
+      automatic_story: 'คิดว่าตัวเองทำงานไม่ดีพอ',
+      facts: 'หัวหน้าส่งข้อความขอแก้เอกสาร 2 จุด',
+      new_choice: 'ถามให้แน่ชัดว่าจุดที่ต้องแก้คืออะไร',
+      progress_counted: true,
+      reward_xp: 15,
+      reward_shells: 10,
+    };
+    savedCompleted.unshift(completedLoopRecord);
+    mockLocalStorage[LOCAL_STORAGE_COMPLETED_LOOPS_KEY] = JSON.stringify(savedCompleted);
+
+    // Save confirmed trace with ALL 8 fields and is_confirmed = true
+    const confirmedGuestTraceItem = {
+      ...guestDraftItem,
+      title: 'หัวหน้าขอแก้งานสองจุด',
+      summary: 'รู้สึกกังวลและใจหวิว',
+      trigger: 'หัวหน้าขอแก้งานสองจุด',
+      emotion_or_body: 'รู้สึกกังวลและใจหวิว',
+      automatic_story: 'คิดว่าตัวเองทำงานไม่ดีพอ',
+      facts: 'หัวหน้าส่งข้อความขอแก้เอกสาร 2 จุด',
+      new_choice: 'ถามให้แน่ชัดว่าจุดที่ต้องแก้คืออะไร',
+      growth_event: completedLoopRecord,
+      xp_awarded: true,
+      is_confirmed: true,
+      raw_data_json: {
+        trigger: 'หัวหน้าขอแก้งานสองจุด',
+        emotionOrBody: 'รู้สึกกังวลและใจหวิว',
+        automaticStory: 'คิดว่าตัวเองทำงานไม่ดีพอ',
+        facts: 'หัวหน้าส่งข้อความขอแก้เอกสาร 2 จุด',
+        newChoice: 'ถามให้แน่ชัดว่าจุดที่ต้องแก้คืออะไร',
+      },
+    };
+    mockLocalStorage[LOCAL_STORAGE_TRACES_KEY] = JSON.stringify([confirmedGuestTraceItem]);
+
+    // Step D: Guest reloads page after confirmation
+    const hydrationAfterConfirm = hydrateGuestCount(mockLocalStorage);
+    assert.strictEqual(
+      hydrationAfterConfirm.canonicalCount,
+      1,
+      'Guest hydration count after confirmation MUST be 1 (egg stays 1/20)'
+    );
+    const reloadedTrace = hydrationAfterConfirm.loadedTraces[0];
+    assert.strictEqual(reloadedTrace.is_confirmed, true, 'Reloaded trace is_confirmed must be true');
+    assert.strictEqual(reloadedTrace.xp_awarded, true, 'Reloaded trace xp_awarded must be true');
+    assert.strictEqual(reloadedTrace.trigger, 'หัวหน้าขอแก้งานสองจุด', 'Trigger must be preserved after reload');
+    assert.strictEqual(reloadedTrace.emotion_or_body, 'รู้สึกกังวลและใจหวิว', 'Emotion must be preserved after reload');
+    assert.strictEqual(reloadedTrace.facts, 'หัวหน้าส่งข้อความขอแก้เอกสาร 2 จุด', 'Facts must be preserved after reload');
+    console.log('  ✓ Guest storage reload after confirmation preserves all fields and is_confirmed = true');
+
     // =========================================================================
     // TEST 2: Philosophical conversation ("คนเราเกิดมาทำไม")
     // =========================================================================

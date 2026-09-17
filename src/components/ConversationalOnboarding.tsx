@@ -499,8 +499,8 @@ export const ConversationalOnboarding: React.FC<ConversationalOnboardingProps> =
               </div>
               <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: '#6E5D53', lineHeight: 1.6 }}>
                 <li>ไข่ใบนี้จะไม่ฟักด้วยเวลา แต่จะฟักด้วย <strong>การรู้ตัวจริง</strong></li>
-                <li>ทุกครั้งที่บันทึก Loop Trace (เช่น แยกความคิด/ความจริง หรือรู้ทันอารมณ์) จะสะสม <strong>1 Trace</strong></li>
-                <li>เมื่อสะสมครบ <strong>20 Trace (0/20)</strong> ไข่จะฟักเป็นมาสคอตแอกโซลอทตัวแรกของคุณ!</li>
+                <li>ทุกครั้งที่ยืนยัน Completed Loop ที่สังเกตตนเองครบถ้วน จะสะสม <strong>1 แต้มการเติบโต</strong> (บันทึกแบบร่างจะไม่นับแต้มจนกว่าจะยืนยัน)</li>
+                <li>เมื่อสะสมครบ <strong>20 ลูปที่ยืนยันแล้ว (0/20)</strong> ไข่จะฟักเป็นมาสคอตแอกโซลอทตัวแรกของคุณ!</li>
               </ul>
             </div>
 

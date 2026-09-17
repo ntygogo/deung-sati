@@ -438,53 +438,73 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
           {traces.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 10px', opacity: 0.6, fontSize: '13px' }}>
               ยังไม่มี Completed Loop ที่ยืนยัน<br />
-              ลองคุยกับน้องในแชต หรือกดปุ่มบันทึกเพื่อเริ่มตรวจทานลูปสติ 6 ส่วน
+              ลองคุยกับน้องในแชต หรือกดปุ่มบันทึกเพื่อเริ่มตรวจทานลูปสติ 8 ส่วน
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '260px', overflowY: 'auto' }}>
-              {traces.slice(0, 10).map((t, idx) => (
-                <div
-                  key={`${t.id || 'trc'}_${idx}`}
-                  data-testid={`trace-item-${t.id || idx}`}
-                  onClick={() => onResumeDraft(t)}
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.22)',
-                    borderRadius: '14px',
-                    padding: '12px 14px',
-                    fontSize: '13px',
-                    borderLeft: `4px solid ${theme.accent}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <strong style={{ color: '#FFF' }}>{t.title}</strong>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', opacity: 0.6 }}>{t.trace_category}</span>
-                      <button
-                        type="button"
-                        data-testid="resume-draft-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onResumeDraft(t);
-                        }}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.15)',
-                          border: '1px solid rgba(255, 255, 255, 0.25)',
-                          color: '#FFF',
-                          borderRadius: '8px',
-                          padding: '3px 8px',
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        ✏️ สานต่อ
-                      </button>
+              {traces.slice(0, 10).map((t, idx) => {
+                const isConfirmed = Boolean(t.growth_event || t.xp_awarded || (t as any).is_confirmed);
+                return (
+                  <div
+                    key={`${t.id || 'trc'}_${idx}`}
+                    data-testid={`trace-item-${t.id || idx}`}
+                    onClick={() => onResumeDraft(t)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.22)',
+                      borderRadius: '14px',
+                      padding: '12px 14px',
+                      fontSize: '13px',
+                      borderLeft: `4px solid ${isConfirmed ? '#34D399' : theme.accent}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <strong style={{ color: '#FFF' }}>{t.title}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', opacity: 0.6 }}>{t.trace_category}</span>
+                        {isConfirmed ? (
+                          <span
+                            data-testid={`confirmed-badge-${t.id || idx}`}
+                            style={{
+                              background: 'rgba(52, 211, 153, 0.2)',
+                              color: '#34D399',
+                              border: '1px solid rgba(52, 211, 153, 0.4)',
+                              borderRadius: '8px',
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ ยืนยันแล้ว
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            data-testid="resume-draft-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResumeDraft(t);
+                            }}
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.15)',
+                              border: '1px solid rgba(255, 255, 255, 0.25)',
+                              color: '#FFF',
+                              borderRadius: '8px',
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            ✏️ สานต่อ
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    <div style={{ opacity: 0.85, fontSize: '12.5px', lineHeight: 1.4 }}>{t.summary}</div>
                   </div>
-                  <div style={{ opacity: 0.85, fontSize: '12.5px', lineHeight: 1.4 }}>{t.summary}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -619,7 +639,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
                         microAction: exactMicroAction,
                         reflection: exactReflection,
                         emotionTags: exactEmotionTags,
-                        isConfirmed: Boolean(selectedResumeTrace.growth_event || selectedResumeTrace.xp_awarded),
+                        isConfirmed: Boolean(selectedResumeTrace.growth_event || selectedResumeTrace.xp_awarded || (selectedResumeTrace as any).is_confirmed),
                       };
                     })()
                   : undefined

@@ -796,8 +796,8 @@ apiApp.post('/loops/traces/:traceId/confirm', requireAuth, async (req: Authentic
 
     const isAlreadyConfirmed = existingTrace.growth_event != null;
 
-    const resolvedTrigger = trigger || existingTrace.trigger || existingTrace.title || '';
-    const resolvedEmotion = emotionOrBody || existingTrace.emotion_or_body || existingTrace.summary || '';
+    const resolvedTrigger = trigger || existingTrace.trigger || '';
+    const resolvedEmotion = emotionOrBody || existingTrace.emotion_or_body || '';
     const resolvedStory = automaticStory || existingTrace.automatic_story || existingTrace.thoughts_or_fears || '';
     const resolvedFacts = facts || existingTrace.facts || (existingTrace.raw_data_json as any)?.facts || '';
     const resolvedChoice = newChoice || existingTrace.new_choice || '';
