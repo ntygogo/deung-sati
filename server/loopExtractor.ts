@@ -1,5 +1,5 @@
-import { config } from './config.ts';
-import { LOOP_EXTRACTOR_PROMPT } from './prompts.ts';
+import { config } from './config.js';
+import { LOOP_EXTRACTOR_PROMPT } from './prompts.js';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ExtractedLoopResult {

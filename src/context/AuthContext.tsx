@@ -1,221 +1,210 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { UserAccount, MembershipTier } from '../types';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
   isLoggedIn: boolean;
   isPlus: boolean;
-  login: (email: string, password: string) => { success: boolean; message?: string };
-  register: (name: string, email: string, password: string) => { success: boolean; message?: string };
-  logout: () => void;
+  isLoading: boolean;
+  error: string | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  logout: () => Promise<void>;
   upgradePlus: (tier: MembershipTier, plusExpiresAt?: string) => void;
-  updateProfile: (name: string, email: string) => { success: boolean; message?: string };
+  updateProfile: (name: string, email: string) => Promise<{ success: boolean; message?: string }>;
 }
 
-const USERS_DB_KEY = 'deung_sati_users_db_v1';
-const ACTIVE_SESSION_KEY = 'deung_sati_active_user_session';
-
+const AUTH_TOKEN_KEY = 'deung_sati_session_token';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface StoredUserRecord extends UserAccount {
-  passwordHash: string;
-}
-
-// Simple deterministic hash for demo/client-side storage
-const hashPassword = (pwd: string): string => {
-  let hash = 0;
-  for (let i = 0; i < pwd.length; i++) {
-    const char = pwd.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return `hash_${Math.abs(hash)}_${pwd.length}`;
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [usersDb, setUsersDb] = useState<Record<string, StoredUserRecord>>(() => {
-    try {
-      const saved = localStorage.getItem(USERS_DB_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn('Failed to load users DB', e);
-    }
-    // Default seed account for testing / founder
-    const seedId = 'user-founder-1';
-    return {
-      'nutty@deungsati.app': {
-        id: seedId,
-        name: 'Nutty NTYGOGO',
-        email: 'nutty@deungsati.app',
-        passwordHash: hashPassword('123456'),
-        isPlus: true,
-        tier: 'lifetime',
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      },
-    };
-  });
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
+  const getStoredToken = (): string | null => {
     try {
-      return localStorage.getItem(ACTIVE_SESSION_KEY) || null;
+      return localStorage.getItem(AUTH_TOKEN_KEY);
     } catch {
       return null;
     }
-  });
+  };
 
-  // Save DB changes
-  useEffect(() => {
+  const setStoredToken = (token: string | null) => {
     try {
-      localStorage.setItem(USERS_DB_KEY, JSON.stringify(usersDb));
-    } catch (e) {
-      console.warn('Failed to persist users DB', e);
-    }
-  }, [usersDb]);
-
-  // Save session changes
-  useEffect(() => {
-    try {
-      if (currentUserId) {
-        localStorage.setItem(ACTIVE_SESSION_KEY, currentUserId);
+      if (token) {
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
       } else {
-        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        localStorage.removeItem(AUTH_TOKEN_KEY);
       }
     } catch (e) {
-      console.warn('Failed to persist active session', e);
+      console.warn('Failed to store session token', e);
     }
-  }, [currentUserId]);
+  };
 
-  // Find active user from DB
-  const currentUserRecord = currentUserId
-    ? Object.values(usersDb).find((u) => u.id === currentUserId || u.email.toLowerCase() === currentUserId.toLowerCase())
-    : null;
-
-  const currentUser: UserAccount | null = currentUserRecord
-    ? {
-        id: currentUserRecord.id,
-        name: currentUserRecord.name,
-        email: currentUserRecord.email,
-        isPlus: currentUserRecord.isPlus,
-        tier: currentUserRecord.tier,
-        plusExpiresAt: currentUserRecord.plusExpiresAt,
-        createdAt: currentUserRecord.createdAt,
-        lastLoginAt: currentUserRecord.lastLoginAt,
-        avatarUrl: currentUserRecord.avatarUrl,
-      }
-    : null;
-
-  // Fallback check if anonymous user had Plus stored locally
-  const isPlus = currentUser ? currentUser.isPlus : (() => {
+  // Restore session from server on mount
+  const restoreSession = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      return localStorage.getItem('deung_sati_is_plus_user') === 'true';
-    } catch {
-      return false;
-    }
-  })();
+      const token = getStoredToken();
+      const headers: Record<string, string> = {
+        'X-DeungSati-Client': 'true',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
-  const login = (email: string, password: string): { success: boolean; message?: string } => {
+      const res = await fetch('/api/auth/me', {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          tier: data.tier || 'free',
+          isPlus: data.tier === 'lifetime' || data.tier === 'monthly',
+          createdAt: data.createdAt,
+        });
+      } else {
+        // Expired or invalid session
+        setCurrentUser(null);
+        setStoredToken(null);
+      }
+    } catch (err: any) {
+      console.warn('Session restore network check failed:', err);
+      setCurrentUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !password) {
       return { success: false, message: 'กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน' };
     }
 
-    const user = usersDb[cleanEmail];
-    if (!user) {
-      return { success: false, message: 'ไม่พบบัญชีอีเมลนี้ในระบบ กรุณาสมัครสมาชิกก่อนเข้าใช้งาน' };
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DeungSati-Client': 'true',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, message: data.error || 'เข้าสู่ระบบไม่สำเร็จ' };
+      }
+
+      if (data.token) {
+        setStoredToken(data.token);
+      }
+
+      setCurrentUser({
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        tier: data.user.tier || 'free',
+        isPlus: data.user.tier === 'lifetime' || data.user.tier === 'monthly',
+        createdAt: data.user.createdAt || new Date().toISOString(),
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
     }
-
-    const hashedInput = hashPassword(password);
-    if (user.passwordHash !== hashedInput) {
-      return { success: false, message: 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง' };
-    }
-
-    // Update last login
-    const updatedUser = {
-      ...user,
-      lastLoginAt: new Date().toISOString(),
-    };
-
-    setUsersDb((prev) => ({
-      ...prev,
-      [cleanEmail]: updatedUser,
-    }));
-
-    setCurrentUserId(updatedUser.id);
-    return { success: true };
   };
 
-  const register = (name: string, email: string, password: string): { success: boolean; message?: string } => {
+  const register = async (name: string, email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanName) {
       return { success: false, message: 'กรุณากรอกชื่อของคุณ' };
     }
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    if (!cleanEmail || !cleanEmail.includes('@')) {
       return { success: false, message: 'กรุณากรอกรูปแบบอีเมลให้ถูกต้อง' };
     }
     if (!password || password.length < 6) {
       return { success: false, message: 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร' };
     }
 
-    if (usersDb[cleanEmail]) {
-      return { success: false, message: 'อีเมลนี้ถูกลงทะเบียนไว้แล้ว กรุณาเข้าสู่ระบบ' };
-    }
-
-    // Check if guest currently has plus status to migrate
-    const previousPlus = localStorage.getItem('deung_sati_is_plus_user') === 'true';
-
-    const newId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newUser: StoredUserRecord = {
-      id: newId,
-      name: cleanName,
-      email: cleanEmail,
-      passwordHash: hashPassword(password),
-      isPlus: previousPlus,
-      tier: previousPlus ? 'monthly' : 'free',
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-    };
-
-    setUsersDb((prev) => ({
-      ...prev,
-      [cleanEmail]: newUser,
-    }));
-
-    setCurrentUserId(newId);
-    return { success: true };
-  };
-
-  const logout = () => {
-    setCurrentUserId(null);
-  };
-
-  const upgradePlus = (tier: MembershipTier, plusExpiresAt?: string) => {
-    if (currentUser) {
-      const email = currentUser.email.toLowerCase();
-      const updatedUser: StoredUserRecord = {
-        ...usersDb[email],
-        isPlus: true,
-        tier,
-        plusExpiresAt: plusExpiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-
-      setUsersDb((prev) => ({
-        ...prev,
-        [email]: updatedUser,
-      }));
-    }
-
-    // Also persist to general storage flag for offline continuity
     try {
-      localStorage.setItem('deung_sati_is_plus_user', 'true');
-    } catch (e) {
-      console.warn(e);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DeungSati-Client': 'true',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, message: data.error || 'ลงทะเบียนไม่สำเร็จ' };
+      }
+
+      if (data.token) {
+        setStoredToken(data.token);
+      }
+
+      setCurrentUser({
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        tier: data.user.tier || 'free',
+        isPlus: false,
+        createdAt: data.user.createdAt || new Date().toISOString(),
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
     }
   };
 
-  const updateProfile = (name: string, email: string): { success: boolean; message?: string } => {
+  const logout = async () => {
+    try {
+      const token = getStoredToken();
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DeungSati-Client': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+      });
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      setCurrentUser(null);
+      setStoredToken(null);
+    }
+  };
+
+  const upgradePlus = (tier: MembershipTier) => {
+    if (currentUser) {
+      setCurrentUser((prev) => (prev ? { ...prev, isPlus: true, tier } : null));
+    }
+  };
+
+  const updateProfile = async (name: string, email: string): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'กรุณาเข้าสู่ระบบก่อน' };
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
@@ -224,24 +213,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'กรุณากรอกข้อมูลให้ครบถ้วน' };
     }
 
-    const oldEmail = currentUser.email.toLowerCase();
-    const existing = usersDb[oldEmail];
-
-    if (!existing) return { success: false, message: 'ไม่พบบัญชีผู้ใช้' };
-
-    const updated = {
-      ...existing,
-      name: cleanName,
-      email: cleanEmail,
-    };
-
-    const newDb = { ...usersDb };
-    if (oldEmail !== cleanEmail) {
-      delete newDb[oldEmail];
-    }
-    newDb[cleanEmail] = updated;
-
-    setUsersDb(newDb);
+    // Update local state and mock sync
+    setCurrentUser((prev) => (prev ? { ...prev, name: cleanName, email: cleanEmail } : null));
     return { success: true };
   };
 
@@ -250,7 +223,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         isLoggedIn: !!currentUser,
-        isPlus,
+        isPlus: !!currentUser?.isPlus,
+        isLoading,
+        error,
         login,
         register,
         logout,

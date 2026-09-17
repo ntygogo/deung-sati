@@ -1,0 +1,90 @@
+/**
+ * Structured AI Output Contract for Deung Sati V1 (Authoritative SSOT)
+ */
+
+import type { SafetyState, CbtConversationStage } from './conversationTypes.js';
+import type { UserCognitiveCapacity } from './capacityRules.js';
+import type { ConversationMode } from './modeRules.js';
+import type { UserConversationIntent } from './conversationIntents.js';
+import type { KnownFieldDimension } from './knownFields.js';
+import type { SuggestedIntervention } from './interventionRules.js';
+import type { ReadinessLevel, RecommendedExercise, CandidateLoop, EvidenceCandidate } from './conversationTypes.js';
+
+export type CheckinConsentState =
+  | 'idle'
+  | 'offered'
+  | 'accepted'
+  | 'ambiguous'
+  | 'declined';
+
+export interface CandidatePattern {
+  trigger?: string;
+  emotion?: string;
+  interpretation?: string;
+  habitual_action?: string;
+  consequence?: string;
+  new_choice?: string;
+}
+
+export type LoopReadinessStatus = 'collecting' | 'ready';
+
+export interface Extracted6PartLoop {
+  trigger?: string;
+  emotion_or_body?: string;
+  automatic_story?: string;
+  facts?: string;
+  needs?: string;
+  options?: string;
+  micro_action?: string;
+  reflection?: string;
+  // Aliases for compatibility
+  desires?: string;
+  old_response?: string;
+  new_choice?: string;
+  insights?: string;
+}
+
+/**
+ * Unified Deung Sati AI Response Contract (V1 SSOT)
+ */
+export interface DeungSatiAIResponse {
+  safety: SafetyState;
+  capacity: UserCognitiveCapacity;
+  mode: ConversationMode;
+  intent: UserConversationIntent;
+  stage?: CbtConversationStage;
+  readiness: ReadinessLevel;
+  knownFields: KnownFieldDimension[];
+  checkinConsent: CheckinConsentState;
+  candidatePattern: CandidatePattern | null;
+  suggestedIntervention: SuggestedIntervention;
+  assistantMessage: string;
+  quickReplies: string[];
+  recommendedExercise?: RecommendedExercise | null;
+  evidenceCandidate?: EvidenceCandidate | null;
+  loopReadiness?: LoopReadinessStatus;
+  extracted6PartLoop?: Extracted6PartLoop | null;
+}
+
+/**
+ * Backward compatibility interface for existing components & API endpoints
+ */
+export interface ChatEngineTurnResponse {
+  assistant_message: string;
+  safety_state: SafetyState;
+  mode: ConversationMode;
+  capacity: UserCognitiveCapacity;
+  user_intent: UserConversationIntent;
+  stage?: CbtConversationStage;
+  intensity?: number;
+  readiness: ReadinessLevel;
+  recommended_exercise?: RecommendedExercise | null;
+  quick_replies?: string[];
+  candidate_loop?: CandidateLoop | null;
+  evidence_candidate?: EvidenceCandidate | null;
+  known_fields?: KnownFieldDimension[];
+  checkin_consent?: CheckinConsentState;
+  suggested_intervention?: SuggestedIntervention;
+  loop_readiness?: LoopReadinessStatus;
+  extracted_loop?: Extracted6PartLoop | null;
+}

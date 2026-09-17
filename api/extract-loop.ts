@@ -1,4 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+type VercelRequest = any;
+type VercelResponse = any;
 import { GoogleGenAI } from '@google/genai';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -8,7 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { messages } = req.body || {};
   const apiKey =
-    process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY || '';
 
    try {
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });

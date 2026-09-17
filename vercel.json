@@ -1,8 +1,12 @@
 {
   "rewrites": [
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/auth/:path*", "destination": "/api" },
+    { "source": "/api/companion/:path*", "destination": "/api" },
+    { "source": "/api/loops/:path*", "destination": "/api" },
+    { "source": "/api/wallet/:path*", "destination": "/api" },
+    { "source": "/api/missions/:path*", "destination": "/api" },
+    { "source": "/api/user/:path*", "destination": "/api" },
+    { "source": "/api/health", "destination": "/api" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

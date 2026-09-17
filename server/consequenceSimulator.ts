@@ -1,4 +1,4 @@
-import { config } from './config.ts';
+import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ConsequenceSimulationResponse {

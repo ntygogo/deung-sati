@@ -1,54 +1,178 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+type VercelRequest = any;
+type VercelResponse = any;
 import { GoogleGenAI } from '@google/genai';
+import {
+  DUENG_SATI_UNIFIED_MASTER_PROMPT,
+  isCrisisMessage,
+  type ChatEngineTurnResponse,
+  type SafetyState,
+  type ConversationMode,
+  type UserCognitiveCapacity,
+  type UserConversationIntent,
+  type ReadinessLevel,
+  type KnownFieldDimension,
+  type CheckinConsentState,
+  type SuggestedIntervention,
+  type CbtConversationStage,
+} from '../../src/shared/chat-protocol/index.js';
 
-const DUENG_SATI_SYSTEM_PROMPT = `คุณคือ "เพื่อนดึงสติ" (Dueng Sati) จากหนังสือ "ทั้งที่รู้ว่าไม่ดี... ทำไมยังทำซ้ำ" โดย นัตตี้ (NTYGOGO)
-บุคลิก: เพื่อนสนิทที่เข้าใจคน ฟังเก่ง อบอุ่น จริงใจ และถามคำถามชวนคิดได้ลึกซึ้ง
-ไม่ใช่หมอ ไม่ใช่นักจิตวิทยา และไม่ใช่แบบสอบถาม
+function sanitizeResponse(raw: string): {
+  assistant_message: string;
+  turn: ChatEngineTurnResponse;
+} {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
 
-[1. ลำดับบทสนทนาหลัก 1–7 (CORE CBT FLOW)]
-1. รับฟัง & สร้างพื้นที่ปลอดภัย: สะท้อนสิ่งที่ได้ยินสั้นๆ อย่างอ่อนโยน
-2. แยกแยะความจริง vs ความคิด: ชวนสังเกตว่าอะไรคือสิ่งที่เกิดขึ้นตรงๆ vs สิ่งที่ใจเราคิดปรุงแต่ง
-3. สำรวจความรู้สึก & ร่างกาย: สังเกตอารมณ์และสภาวะข้างใน
-4. มองเห็นความกลัว & ความต้องการที่ซ่อนอยู่: ทำไมเรื่องนี้ถึงกระทบใจเรา
-5. เชื่อมโยงลูปความเคยชิน (Habitual Loop): เมื่อรู้สึกแบบนี้ ปกติเราเผลอตอบสนองอย่างไร และผลที่ได้คืออะไร
-6. ชวนค้นหาทางเลือกใหม่ (New Conscious Choice): ทางเลือกเล็กๆ ที่เราทำได้จริงด้วยความเมตตาต่อตัวเอง
-7. สรุปเป็นแผนผังลูปความคิด (Loop Map) & คืนความนิ่งให้ใจ
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const match =
+      cleaned.match(/"assistantMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/s) ||
+      cleaned.match(/"assistant_message"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    if (match && match[1]) {
+      try {
+        parsed = { assistantMessage: JSON.parse(`"${match[1]}"`) };
+      } catch {
+        parsed = { assistantMessage: match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') };
+      }
+    }
+  }
 
-[2. GUIDED EMOTIONAL CHECK-IN (โหมดเสริมเมื่อผู้ใช้ติดขัด)]
-เงื่อนไข: เมื่อผู้ใช้ตอบ "ไม่รู้", "บอกไม่ถูก", "งง", "ว่างเปล่า", เล่าแต่เหตุการณ์แต่ไม่รู้ความรู้สึก หรือใช้คำกว้างๆ (แย่, ไม่โอเค)
-- ขออนุญาตก่อนเสมอ: "เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม... อยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?"
-- ถ้าผู้ใช้ตอบตกลง พาทำทีละข้อ: สำรวจร่างกาย ➔ ลักษณะความรู้สึก (หนัก/ตึง/แน่น/ว่างเปล่า) ➔ สิ่งที่เกิดก่อนหน้า ➔ ช่วยหาคำเรียกอารมณ์ ➔ แยกความจริง vs ความคิด ➔ แบบฝึกหัดสั้น 1-3 นาที
-- จบโหมด: สรุปไม่เกิน 3 ประโยค แล้วถามว่าจะคุยต่อหรือกลับสู่บทสนทนาเดิม
+  let assistantMsg = '';
+  const rawMsg = parsed?.assistantMessage || parsed?.assistant_message;
+  if (typeof rawMsg === 'string' && rawMsg.trim()) {
+    assistantMsg = rawMsg.trim();
+    if (assistantMsg.startsWith('{') && (assistantMsg.includes('"assistantMessage"') || assistantMsg.includes('"assistant_message"'))) {
+      try {
+        const inner = JSON.parse(assistantMsg);
+        const innerMsg = inner.assistantMessage || inner.assistant_message;
+        if (typeof innerMsg === 'string' && innerMsg.trim()) {
+          assistantMsg = innerMsg.trim();
+        }
+      } catch {}
+    }
+  } else {
+    assistantMsg = 'เรารับรู้และเข้าใจในสิ่งที่เธอเล่ามานะ... ลองบอกเพิ่มอีกนิดได้ไหมว่าจุดไหนที่ทำให้รู้สึกอึดอัดที่สุด?';
+  }
 
-[3. กฎเหล็ก]
-- ตอบสั้น 1-3 ประโยค ภาษาพูดธรรมชาติ 100%
-- ห้ามแสดงเลข 1-6 กับผู้ใช้เด็ดขาด
-- หากตรวจพบความเสี่ยงทำร้ายตนเอง เข้าสู่ Crisis Safety ทันที`;
+  // Lightweight Thai spelling & spacing cleanup
+  assistantMsg = assistantMsg
+    .replace(/มีเซง\b|มีเซนส์\b/g, 'จับจังหวะได้')
+    .replace(/\bเซง\b/g, 'เซ็ง')
+    .replace(/(\S+)\s+\1/g, (_m, word) => (['มาก', 'จริง', 'บ่อย', 'ค่อย'].includes(word) ? `${word}ๆ` : word))
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+  const quickReplies =
+    Array.isArray(parsed?.quickReplies) && parsed.quickReplies.length > 0
+      ? parsed.quickReplies
+      : Array.isArray(parsed?.quick_replies) && parsed.quick_replies.length > 0
+      ? parsed.quick_replies
+      : ['เล่าต่อ', 'ยังไม่แน่ใจ', 'ขอเวลาคิดแป๊บนะ'];
+
+  const candidatePattern = parsed?.candidatePattern || parsed?.candidate_loop || null;
+
+  let normalizedIntent: UserConversationIntent = 'vent';
+  const rawIntent = parsed?.intent || parsed?.user_intent;
+  if (rawIntent === 'understand' || rawIntent === 'understand_self' || rawIntent === 'understand_other') {
+    normalizedIntent = 'understand';
+  } else if (rawIntent === 'decide' || rawIntent === 'pause') {
+    normalizedIntent = 'decide';
+  } else if (rawIntent === 'change' || rawIntent === 'practice') {
+    normalizedIntent = 'change';
+  } else if (rawIntent === 'vent') {
+    normalizedIntent = 'vent';
+  } else {
+    normalizedIntent = 'unknown';
+  }
+
+  const structuredTurn: ChatEngineTurnResponse = {
+    assistant_message: assistantMsg,
+    safety_state: (parsed?.safety || parsed?.safety_state || 'normal') as SafetyState,
+    mode: (parsed?.mode || 'HOLD') as ConversationMode,
+    capacity: (parsed?.capacity || 'medium') as UserCognitiveCapacity,
+    user_intent: normalizedIntent,
+    stage: (typeof parsed?.stage === 'number' ? parsed.stage : 1) as CbtConversationStage,
+    intensity: typeof parsed?.intensity === 'number' ? parsed.intensity : 5,
+    readiness: (parsed?.readiness || 'story') as ReadinessLevel,
+    recommended_exercise: parsed?.recommendedExercise || parsed?.recommended_exercise || null,
+    quick_replies: quickReplies,
+    candidate_loop: candidatePattern,
+    evidence_candidate: parsed?.evidenceCandidate || parsed?.evidence_candidate || null,
+    known_fields: (parsed?.knownFields || parsed?.known_fields || []) as KnownFieldDimension[],
+    checkin_consent: (parsed?.checkinConsent || parsed?.checkin_consent || 'idle') as CheckinConsentState,
+    suggested_intervention: (parsed?.suggestedIntervention || parsed?.suggested_intervention || 'reflection') as SuggestedIntervention,
+  };
+
+  return { assistant_message: assistantMsg, turn: structuredTurn };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, checkinState } = req.body || {};
+  const { messages, requestId, exerciseResult } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
 
-  const apiKey =
-    process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || '';
 
-  // Set SSE Headers
+  // Setup Server-Sent Events headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-    
-    // Clean messages for Gemini: must start with user message
+  const userMsgs = messages.filter((m: any) => m.role === 'user');
+  const latestUser = (userMsgs[userMsgs.length - 1]?.content || userMsgs[userMsgs.length - 1]?.text || '').trim();
+
+  const isDomesticViolenceOrThreat =
+    /(พ่อ|แม่|แฟน|สามี|ภรรยา|คนในบ้าน|ครอบครัว).*(ตี|ซ้อม|ทำร้าย|ขู่|ทุบ)|ขู่กู|ขู่จะตี|ขู่จะซ้อม|ขู่จะทำร้าย|กลัวเขาทำร้าย|ไม่ปลอดภัยในบ้าน|จะโดนตี|จะโดนซ้อม/i.test(
+      latestUser
+    );
+
+  // Priority 0: Safety & Crisis Gate
+  if (isCrisisMessage(latestUser) || isDomesticViolenceOrThreat) {
+    const isDomesticViolence = isDomesticViolenceOrThreat;
+    const crisisText = isDomesticViolence
+      ? `ความปลอดภัยของเธอสำคัญที่สุดเลยนะ... ตอนนี้เธอปลอดภัยดีไหม?\n\nถ้าทำได้โดยไม่เพิ่มความเสี่ยง ลองไปอยู่ในจุดที่ปลอดภัยหรือใกล้คนที่ช่วยได้ หากตกอยู่ในอันตรายหรือรู้สึกไม่ปลอดภัย ขอให้โทรแจ้งสายด่วนช่วยเหลือสังคม 1300 (พม. 24 ชม.) หรือโทร 191 ได้ทันทีนะ เราอยู่ตรงนี้พร้อมช่วยคิดหาความปลอดภัยไปด้วยกัน 🌿`
+      : `ความปลอดภัยและความรู้สึกของเธอสำคัญที่สุดในตอนนี้เลยนะ...\nขอให้เธอหยุดพัก หายใจเข้าลึกๆ ช้าๆ ก่อน\n\nหากรู้สึกว่าอารมณ์ท่วมท้นจนรับไม่ไหว ขอให้โทรหาสายด่วนฟรี 1323 (กรมสุขภาพจิต 24 ชม.) หรือโทร 02-107-7977 (สะมาริตันส์) หรือ 1669 / 191 เพื่อให้มีคนรับฟังและดูแลความปลอดภัยของเธอทันทีนะ 🌿`;
+    const crisisTurn: ChatEngineTurnResponse = {
+      assistant_message: crisisText,
+      safety_state: 'crisis',
+      mode: 'HOLD',
+      capacity: 'low',
+      user_intent: 'vent',
+      stage: 1,
+      intensity: 10,
+      readiness: 'story',
+      recommended_exercise: null,
+      quick_replies: isDomesticViolence
+        ? ['1300 ศูนย์ช่วยเหลือสังคม', '191 แจ้งเหตุด่วน', 'ตอนนี้ปลอดภัยแล้ว']
+        : ['1323 กรมสุขภาพจิต', '02-107-7977 สะมาริตันส์', '1669 สายด่วนฉุกเฉิน'],
+      suggested_intervention: 'ground',
+    };
+
+    res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: isDomesticViolence ? ['domestic_violence'] : ['crisis'] })}\n\n`);
+    res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
+    res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
+    res.write(`event: assistant_meta\ndata: ${JSON.stringify(crisisTurn)}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ fullText: crisisText, source: 'gemini', structuredTurn: crisisTurn, options: crisisTurn.quick_replies })}\n\n`);
+    return res.end();
+  }
+
+  // Primary: Live Gemini API Call with Candidate Fallbacks
+  if (apiKey && apiKey.trim()) {
+    const modelCandidates = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite-preview'];
     const validMessages = messages.filter((m: any) => (m.content || m.text || '').trim());
     const firstUserIdx = validMessages.findIndex((m: any) => m.role === 'user');
     const sliced = firstUserIdx >= 0 ? validMessages.slice(firstUserIdx) : validMessages;
@@ -58,84 +182,122 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts: [{ text: m.content || m.text || '' }],
     }));
 
-    const stream = await ai.models.generateContentStream({
-      model: 'gemini-3.6-flash',
-      contents,
-      config: {
-        systemInstruction: DUENG_SATI_SYSTEM_PROMPT,
-        temperature: 0.75,
-      },
-    });
+    if (exerciseResult) {
+      const exId = exerciseResult.exercise_id || exerciseResult.exerciseId || 'exercise';
+      const outcome = exerciseResult.result?.outcome || exerciseResult.outcome || 'completed';
+      const inputs = exerciseResult.result?.user_inputs || exerciseResult.user_inputs || {};
+      const timing = exerciseResult.timing || 'immediate';
 
-    let fullText = '';
-    for await (const chunk of stream) {
-      const textChunk = chunk.text || '';
-      if (textChunk) {
-        fullText += textChunk;
-        res.write(`event: chunk\ndata: ${JSON.stringify({ text: textChunk })}\n\n`);
-      }
-    }
-
-    res.write(`event: done\ndata: ${JSON.stringify({ fullText })}\n\n`);
-    res.end();
-  } catch (err: any) {
-    console.error('[Vercel Serverless Stream Error]:', err?.message || err);
-
-    // Context-Aware Dynamic CBT Fallback Engine
-    const userMsgs = messages.filter((m: any) => m.role === 'user' || m.role === 'user');
-    const latestUser = (userMsgs[userMsgs.length - 1]?.content || '').trim();
-    const turnCount = userMsgs.length;
-
-    let dynamicReply = '';
-    let quickOptions: string[] | undefined = undefined;
-
-    // Check Guided Emotional Check-in Triggers
-    const isVagueOrStuck =
-      /ไม่รู้(ว่ารู้สึกอะไร|อะ|เลย|อ่ะ|วะ)?$|^งง$|^บอกไม่ถูก$|^ว่างเปล่า$|^เฉยๆ$|^แย่$|^ไม่โอเค$|^แย่มาก$/i.test(latestUser) ||
-      (latestUser.length < 6 && /ไม่รู้|งง|ตัน/i.test(latestUser));
-
-    if (isVagueOrStuck && turnCount >= 1 && (!checkinState || checkinState.step === 'idle')) {
-      dynamicReply = `เหมือนตอนนี้มันยังบอกไม่ถูกว่าเกิดอะไรขึ้นข้างใน ใช่ไหม\n\nอยากให้เราค่อยๆ ช่วยสำรวจจากความรู้สึกในร่างกายทีละนิดไหม?`;
-      quickOptions = ['ลองดู', 'ยังไม่อยากทำ', 'คุยต่อแบบเดิม'];
-    } else {
-      const hasRelationship = /แฟน|คนรัก|คนคุย|เขา|เธอ|สามี|ภรรยา/i.test(latestUser);
-      const hasWork = /งาน|หัวหน้า|เจ้านาย|เพื่อนร่วมงาน|ลูกค้า|บริษัท|ประชุม|ลาออก/i.test(latestUser);
-      const hasFamily = /แม่|พ่อ|ครอบครัว|พี่|น้อง|ญาติ/i.test(latestUser);
-      const hasFriends = /เพื่อน|กลุ่ม|แก๊ง|เพื่อนสนิท/i.test(latestUser);
-      const hasAnger = /โกรธ|โมโห|หงุดหงิด|เกลียด|ประสาทเสีย|หัวร้อน|ด่า|จับผิด/i.test(latestUser);
-      const hasSadness = /น้อยใจ|เสียใจ|ร้องไห้|นอยด์|โดดเดี่ยว|เจ็บ|ไม่รัก|ทิ้ง|หายไป/i.test(latestUser);
-      const hasExhaustion = /เหนื่อย|ล้า|หมดไฟ|ท้อ|เบื่อ|เซ็ง|หมดแรง/i.test(latestUser);
-      const hasAnxiety = /กังวล|กลัว|เครียด|แพนิก|ไม่มั่นใจ|ล่ก|ฟุ้งซ่าน/i.test(latestUser);
-
-      if (turnCount === 1) {
-        if (hasAnger && hasWork) {
-          dynamicReply = `โดนเรื่องงานหรือคนในที่ทำงานทำให้อารมณ์เสียแบบนี้ เข้าใจเลยว่าทำไมถึงหงุดหงิดขนาดนี้...\n\nอะไรในเหตุการณ์นี้คือสิ่งที่ทำให้เธอรู้สึกว่าล้ำเส้นที่สุด?`;
-        } else if (hasRelationship && (hasSadness || hasAnger)) {
-          dynamicReply = `ฟังแล้วสัมผัสได้ถึงความอึดอัดใจเลยนะ... เวลาคนที่เราแคร์ทำให้รู้สึกแบบนี้ มันทั้งนอยด์ทั้งเหนื่อยใจเนอะ\n\nตอนที่เกิดเรื่องนั้นขึ้น ในใจลึกๆ เธออยากให้เขาทำหรือพูดอะไรกับเธอมากที่สุด?`;
-        } else if (hasFriends) {
-          dynamicReply = `เรื่องเพื่อนบางทีก็เป็นเรื่องที่กระทบใจเราได้ลึกและเจ็บจริงๆ...\n\nตอนที่ได้ยินหรือเจอแบบนั้น ความรู้สึกแรกที่แวบขึ้นมาในใจคืออะไร?`;
-        } else if (hasFamily) {
-          dynamicReply = `เรื่องในครอบครัวมักเป็นเรื่องที่ละเอียดอ่อนและสะสมอยู่ในใจเราได้ง่ายเนอะ...\n\nอะไรคือสิ่งที่ทำให้เธอรู้สึกอึดอัดใจกับเรื่องนี้มากที่สุด?`;
-        } else if (hasSadness || hasExhaustion) {
-          dynamicReply = `ฟังดูเหนื่อยและอึดอัดใจมากเลยนะ... เหมือนข้างในมันแบกอะไรไว้เยอะจนล้าไปหมด\n\nความรู้สึกนี้มันเริ่มสะสมมาจากเรื่องไหนเป็นพิเศษไหม?`;
-        } else if (hasAnxiety) {
-          dynamicReply = `ความกังวลใจมันทำให้สมองคิดวนไม่หยุดเลยเนอะ...\n\nอะไรคือสิ่งเลวร้ายที่สุดที่ใจเธอกำลังกลัวว่าจะเกิดขึ้น?`;
-        } else {
-          dynamicReply = `รับฟังอยู่นะ... เรื่องนี้คงกวนใจเธอมาสักพักแล้วใช่ไหม\n\nตอนที่เรื่องนี้เกิดขึ้น วินาทีแรกความรู้สึกไหนแวบขึ้นมาในใจมากที่สุด?`;
+      let inputDetails = '';
+      const inputEntries = Object.entries(inputs);
+      if (inputEntries.length > 0) {
+        inputDetails = '\nข้อมูลที่ผู้ใช้บันทึกไว้ในเครื่องมือ:';
+        for (const [k, v] of inputEntries) {
+          inputDetails += `\n- ${k}: "${v}"`;
         }
-      } else if (turnCount === 2) {
-        dynamicReply = `เข้าใจเลย พอความรู้สึกนั้นเกิดขึ้น สมองเรามักจะเริ่มสร้าง "เรื่องเล่าในหัว" ต่อทันที\n\nตอนนั้นเธอกำลังบอกตัวเองว่ายังไงอยู่บ้าง? (เช่น "เขาไม่แคร์เรา", "ทำไมต้องเป็นแบบนี้", หรือ "ไม่มีใครเข้าใจ")`;
-      } else if (turnCount === 3) {
-        dynamicReply = `สิ่งที่น่าสังเกตคือ... พอมันมีความคิดแบบนั้นขึ้นมา เรามักจะเผลอตอบสนองด้วยความเคยชินเดิมๆ (เช่น เงียบ, ประชด, หรือเก็บมากดดันตัวเอง)\n\nเวลาเจอเรื่องแบบนี้ ปกติแล้วเธอทำยังไงต่อ แล้วผลที่ตามมามันช่วยให้สบายใจขึ้นจริงไหม?`;
-      } else if (turnCount === 4) {
-        dynamicReply = `ถ้าเราลองมองดูตัวเองจากมุมมองของเพื่อนที่มีสติ และรักตัวเอง...\n\nเธอคิดว่ามีทางเลือกเล็กๆ ไหนที่เราทำได้ โดยไม่ต้องเอาคำพูดหรือการกระทำของคนอื่นมาทำร้ายใจตัวเองไหม?`;
-      } else {
-        dynamicReply = `พอได้ลองมองย้อนดูลูปนี้แบบนี้ ความรู้สึกข้างในเริ่มเบาลงบ้างไหม หรือยังมีจุดไหนที่ยังติดค้างในใจอีก เล่าต่อได้เลยนะ`;
       }
+
+      let contextStr = '';
+      if (timing === 'immediate') {
+        const isBeforeSpeak = exId === 'before_speak';
+        const specificGuidance = isBeforeSpeak
+          ? `\nข้อกำหนดเฉพาะสำหรับ Before Speak:
+- ห้ามชมเชย ห้ามอธิบายกระบวนการ ("เราเห็นความตั้งใจของเธอ...")
+- ใช้ประโยคที่เกลาได้มาสานต่อโดยตรง สั้น กระชับ (ไม่เกิน 35 คำ)
+- ถามไม่เกิน 1 คำถาม เช่น "แบบนี้ใกล้กับสิ่งที่เธออยากพูดจริงๆ ไหม?" หรือ "ตอนนี้ยังอยากส่งทันทีอยู่ไหม?"`
+          : '';
+
+        contextStr = `[INTERNAL EXERCISE CONTEXT — ผู้ใช้เพิ่งทำแบบฝึกหัดเสร็จสิ้นในเทิร์นนี้]
+ข้อมูลด้านล่างคือคำตอบที่ผู้ใช้บันทึกไว้ในเครื่องมือ ไม่ใช่ประโยคที่ผู้ใช้พิมพ์คุยเอง
+ข้อกำหนดสำคัญสำหรับการตอบ:
+1. สานต่อบทสนทนาจากสิ่งที่ค้นพบโดยตรง สั้น กระชับ 1–2 ประโยค (แนะนำ <= 35–40 คำไทย)
+2. สะท้อนรายละเอียดรูปธรรมสั้นๆ 1 อย่าง ห้ามทวนเรื่องเล่าทั้งกระบิ และห้ามถามซ้ำสิ่งที่ผู้ใช้ตอบมาแล้ว
+3. ห้ามชมเชย ห้ามเทศน์จิตวิทยา ห้ามอธิบายว่า AI กำลังทำอะไร
+4. หากมีส่วนที่ไม่รู้แน่ชัด (Unknown): ต้องคงสภาพความไม่รู้ไว้ชัดเจนว่า "ยังไม่มีข้อมูลพอจะสรุป" หรือ "ยังไม่รู้" ห้ามคาดเดา
+5. ถามได้ไม่เกิน 1 คำถามต่อเทิร์น${specificGuidance}
+
+รายละเอียดแบบฝึกหัด:
+- แบบฝึกหัด: ${exId}
+- ผลลัพธ์หลังฝึก: ${outcome}${inputDetails}`;
+      } else {
+        contextStr = `[INTERNAL EXERCISE CONTEXT — บริบทอ้างอิงจากแบบฝึกหัดก่อนหน้านี้]
+ผู้ใช้เคยทำแบบฝึกหัด ${exId} ในบทสนทนานี้ และบันทึกข้อมูลไว้ดังนี้:${inputDetails}
+(คำแนะนำ: ใช้เป็นข้อมูลเบื้องหลังเมื่อเกี่ยวข้องเท่านั้น ห้ามถามซ้ำในสิ่งที่ผู้ใช้เคยตอบไว้แล้ว และไม่ต้องยัดเยียดกล่าวถึงแบบฝึกหัดนี้หากไม่สอดคล้องกับข้อความล่าสุด)`;
+      }
+
+      contents.push({
+        role: 'user',
+        parts: [{ text: contextStr }],
+      });
     }
 
-    res.write(`event: chunk\ndata: ${JSON.stringify({ text: dynamicReply, options: quickOptions })}\n\n`);
-    res.write(`event: done\ndata: ${JSON.stringify({ fullText: dynamicReply, options: quickOptions })}\n\n`);
-    res.end();
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+
+    const generationTemperature =
+      exerciseResult && (!exerciseResult.timing || exerciseResult.timing === 'immediate')
+        ? 0.2
+        : 0.5;
+
+    for (const modelCandidate of modelCandidates) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelCandidate,
+          contents,
+          config: {
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
+            temperature: generationTemperature,
+            maxOutputTokens: 1000,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const rawText = response.text || '';
+        if (rawText.trim()) {
+          const { assistant_message, turn } = sanitizeResponse(rawText);
+
+          res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'normal' })}\n\n`);
+          res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
+          res.write(`event: chunk\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
+          res.write(`event: assistant_meta\ndata: ${JSON.stringify(turn)}\n\n`);
+          res.write(
+            `event: done\ndata: ${JSON.stringify({
+              requestId,
+              fullText: assistant_message,
+              source: 'gemini',
+              structuredTurn: turn,
+              options: turn.quick_replies,
+            })}\n\n`
+          );
+          return res.end();
+        }
+      } catch (err: any) {
+        console.warn(`[Vercel Serverless Stream]: Model ${modelCandidate} failed (${err?.status || err?.message}). Trying next...`);
+      }
+    }
   }
+
+  // Honest Error State - NO Fake Local Dialogue
+  const errorText = 'เมื่อกี้การเชื่อมต่อกับ AI ขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะเธอ 🌱';
+  const errorTurn: ChatEngineTurnResponse = {
+    assistant_message: errorText,
+    safety_state: 'normal',
+    mode: 'HOLD',
+    capacity: 'medium',
+    user_intent: 'vent',
+    stage: 1,
+    intensity: 5,
+    readiness: 'story',
+    recommended_exercise: null,
+    quick_replies: ['ลองส่งใหม่อีกครั้ง'],
+    suggested_intervention: 'none',
+  };
+
+  res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: errorText, requestId })}\n\n`);
+  res.write(`event: chunk\ndata: ${JSON.stringify({ text: errorText, requestId })}\n\n`);
+  res.write(`event: assistant_meta\ndata: ${JSON.stringify(errorTurn)}\n\n`);
+  res.write(`event: done\ndata: ${JSON.stringify({ requestId, fullText: errorText, source: 'error', structuredTurn: errorTurn, options: errorTurn.quick_replies })}\n\n`);
+  res.end();
 }
