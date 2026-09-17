@@ -1,5 +1,7 @@
 import assert from 'assert';
 import http from 'http';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
 import { SqliteDatabaseAdapter } from '../db/sqliteAdapter.js';
 import { setTestDatabase } from '../db/database.js';
 import { runMigrations } from '../db/migrator.js';
@@ -345,126 +347,112 @@ async function runVerificationTests() {
 
     console.log('  ✓ Idempotency verified: re-confirm does not grant duplicate points');
 
-    // =========================================================================
-    // TEST 4: Codex prepareLoopReviewData Unit Regressions (10/10 Cases)
-    // =========================================================================
-    console.log('\n[TEST 4] Testing prepareLoopReviewData Regressions (10/10 Cases)...');
-
-    function simulatePrepareLoopReview(messages: Array<{ role: string; text?: string }>, serverExtractedLoop?: any) {
-      const UNEXPLORED = 'ยังไม่ได้สำรวจ';
-      const controlKeywords = [
-        "บันทึกลูปนี้", "บันทึกเรื่องนี้", "เก็บเรื่องนี้ไว้", "สรุปแล้วบันทึกให้หน่อย",
-        "สรุปแล้วบันทึก", "บันทึกลูปที่คุย", "บันทึกสิ่งที่คุย", "บันทึกลูป", "เก็บบันทึก",
-        "บันทึกไว้", "สรุปให้หน่อย", "ไว้คราวหน้า", "พอแค่นี้ก่อน", "พอแค่นี้", "ขอบคุณนะ", "บาย"
-      ];
-      const substantiveUserMsgs = messages.filter((m): m is { role: string; text: string } => {
-        if (m.role !== "user" || !m.text || !m.text.trim()) return false;
-        const clean = m.text.trim();
-        return !controlKeywords.some((k) => clean === k);
+    // Run the real App.tsx review function; never test a duplicated simulation.
+    {
+      const source = readFileSync(new URL('../../src/App.tsx', import.meta.url), 'utf8');
+      const start = source.indexOf('  const prepareLoopReviewData = () => {');
+      const end = source.indexOf('  const handleOpenLoopReview =', start);
+      assert.ok(start >= 0 && end > start, 'Review function must exist');
+      const code = stripTypeScriptTypes(source.slice(start, end));
+      const review = new Function('messages', 'serverExtractedLoop', 'UNEXPLORED', code + '\nreturn prepareLoopReviewData();');
+      const test = (label: string, check: () => void) => { check(); console.log('  ✓', label); };
+      const unknown = 'ยังไม่ได้สำรวจ';
+      const run = (texts: string[], extracted: any = null) => review(texts.map(text => ({role: 'user', text})), extracted, unknown);
+      const fields = ['trigger', 'emotionOrBody', 'automaticStory', 'facts', 'needs', 'options', 'microAction', 'reflection'];
+      
+      for (const question of ['คนเราเกิดมาทำไม', 'ความหมายของชีวิตคืออะไร', 'มีชีวิตอยู่ทำไม', 'มีเราทำไม', 'ทำงานไปเพื่ออะไร']) {
+        test('No invented story or facts: ' + question, () => {
+          const data = run([question, 'สรุปแล้วบันทึกให้หน่อย']);
+          assert.equal(data.trigger, question);
+          for (const field of fields.slice(1)) assert.equal(data[field], unknown, field);
+          assert.equal(data.conversationStatus, 'partial_loop');
+          assert.equal(data.detectedSkills.cognitive_clarity, false);
+        });
+      }
+      test('Preserve supplied extracted facts and story even on philosophical topics', () => {
+        const data = run(['คนเราเกิดมาทำไม', 'เขาอ่านแล้วไม่ตอบ', 'ฉันคิดว่าเขาไม่สนใจ'], {
+          facts: 'เขาอ่านแล้วไม่ตอบ', automatic_story: 'ฉันคิดว่าเขาไม่สนใจ'
+        });
+        assert.equal(data.facts, 'เขาอ่านแล้วไม่ตอบ');
+        assert.equal(data.automaticStory, 'ฉันคิดว่าเขาไม่สนใจ');
       });
-
-      const hasUserContent = substantiveUserMsgs.length > 0;
-      let conversationStatus: "no_data" | "partial_loop" | "complete_loop" = "no_data";
-      if (hasUserContent) {
-        conversationStatus = "partial_loop";
+      test('Preserve explicit user thought verbatim', () => {
+        assert.equal(run(['คนเราเกิดมาทำไม', 'ฉันคิดว่าตัวเองไม่มีคุณค่า']).automaticStory, 'ฉันคิดว่าตัวเองไม่มีคุณค่า');
+      });
+      test('Do not classify follow-up why question as automatic story', () => {
+        assert.equal(run(['เขาอ่านแล้วไม่ตอบ', 'ทำไมเขาเงียบ']).automaticStory, unknown);
+      });
+      test('Control-only conversation has no data', () => {
+        const data = run(['สรุปแล้วบันทึกให้หน่อย']);
+        for (const field of fields) assert.equal(data[field], unknown);
+        assert.equal(data.conversationStatus, 'no_data');
+      });
+      test('Preserve legacy thoughts field', () => {
+        assert.equal(run(['มีเรื่อง'], { thoughts_or_fears: 'กลัวว่าเขาจะไม่กลับมา' }).automaticStory, 'กลัวว่าเขาจะไม่กลับมา');
+      });
+      
+      const event = 'วันนี้หัวหน้าบอกให้งานฉันแก้ 2 จุด';
+      const reported = event + ' ฉันรู้สึกเสียใจ และคิดว่าตัวเองไม่เก่ง';
+      test('User screenshot regression: latest event, emotion, story and facts are separate', () => {
+        const data = run(['คนเราเกิดมาทำไม', 'สรุปแล้วบันทึกให้หน่อย', reported, 'สรุปแล้วบันทึกให้หน่อย']);
+        assert.equal(data.trigger, event);
+        assert.equal(data.facts, event);
+        assert.equal(data.emotionOrBody, 'เสียใจ');
+        assert.equal(data.automaticStory, 'คิดว่าตัวเองไม่เก่ง');
+        for (const field of ['needs', 'options', 'microAction', 'reflection']) assert.equal(data[field], unknown);
+        assert.equal(data.conversationStatus, 'partial_loop');
+      });
+      test('Mixed statement works even as first turn', () => {
+        const data = run([reported]);
+        assert.equal(data.facts, event);
+        assert.equal(data.automaticStory, 'คิดว่าตัวเองไม่เก่ง');
+      });
+      test('Thai without spaces between explicit clauses', () => {
+        const data = run([event + 'ฉันรู้สึกเสียใจและคิดว่าตัวเองไม่เก่ง']);
+        assert.equal(data.trigger, event);
+        assert.equal(data.emotionOrBody, 'เสียใจ');
+        assert.equal(data.automaticStory, 'คิดว่าตัวเองไม่เก่ง');
+      });
+      test('Follow-up feelings retain current event and do not absorb thoughts', () => {
+        const data = run(['คนเราเกิดมาทำไม', event, 'ฉันรู้สึกผิดหวัง และคิดว่าฉันทำไม่ได้']);
+        assert.equal(data.facts, event);
+        assert.equal(data.emotionOrBody, 'ผิดหวัง');
+        assert.equal(data.automaticStory, 'คิดว่าฉันทำไม่ได้');
+      });
+      test('New concrete topic does not inherit extracted fields or rewards evidence', () => {
+        const data = run(['คนเราเกิดมาทำไม', reported], {
+          trigger: 'คนเราเกิดมาทำไม', emotion_or_body: 'เหงา', facts: 'เรื่องเก่า',
+          needs: 'ต้องการเพื่อน', micro_action: 'โทรหาเพื่อน', reflection: 'บทเรียนเก่า',
+          detected_skills: { conscious_action: true }
+        });
+        assert.equal(data.trigger, event);
+        assert.equal(data.facts, event);
+        assert.equal(data.emotionOrBody, 'เสียใจ');
+        assert.equal(data.microAction, unknown);
+        assert.equal(data.needs, unknown);
+        assert.equal(data.reflection, unknown);
+        assert.equal(data.detectedSkills.conscious_action, false);
+      });
+      test('Second explicit event starts a fresh topic', () => {
+        const data = run([reported, 'วันนี้แฟนยกเลิกนัด ฉันรู้สึกน้อยใจ']);
+        assert.equal(data.trigger, 'วันนี้แฟนยกเลิกนัด');
+        assert.equal(data.facts, 'วันนี้แฟนยกเลิกนัด');
+        assert.equal(data.emotionOrBody, 'น้อยใจ');
+        assert.equal(data.automaticStory, unknown);
+      });
+      for (const text of ['ฉันกลัวว่าหัวหน้าจะไล่ออก', 'ถ้าหัวหน้าบอกให้แก้งาน ฉันรู้สึกกังวล', 'เขาไม่ตอบเพราะเขาเกลียดฉัน', 'หัวหน้าบอกให้แก้งานไหม']) {
+        test('Do not promote uncertain or hypothetical text to facts: ' + text, () => {
+          assert.equal(run([text]).facts, unknown);
+        });
       }
-
-      let triggerText = (serverExtractedLoop?.trigger || "").trim();
-      if (!triggerText) {
-        triggerText = substantiveUserMsgs[0]?.text.trim() || UNEXPLORED;
-      }
-
-      let automaticStoryText = (
-        serverExtractedLoop?.automatic_story ||
-        (serverExtractedLoop as any)?.thoughts_or_fears ||
-        ""
-      ).trim();
-      if (!automaticStoryText) {
-        const thoughtMsg = substantiveUserMsgs.find((m) => /คิดว่า|กลัวว่า|รู้สึกเหมือน|คงจะ/i.test(m.text));
-        automaticStoryText = thoughtMsg && thoughtMsg.text.trim() !== triggerText ? thoughtMsg.text.trim() : UNEXPLORED;
-      }
-
-      let factsText = (serverExtractedLoop?.facts || "").trim();
-      if (!factsText) factsText = UNEXPLORED;
-
-      return {
-        trigger: triggerText,
-        automaticStory: automaticStoryText,
-        facts: factsText,
-        conversationStatus,
-      };
+      test('Do not turn someone else\'s reported emotion into user emotion', () => {
+        assert.equal(run(['เพื่อนบอกว่า รู้สึกเสียใจ']).emotionOrBody, unknown);
+      });
+      test('Negated feeling is not changed to positive feeling', () => {
+        assert.equal(run(['ฉันไม่ได้รู้สึกเสียใจ']).emotionOrBody, unknown);
+      });
+      
     }
-
-    // 4.1 Single philosophical questions: MUST NOT fabricate Story or Facts
-    const philoQuestions = [
-      'คนเราเกิดมาทำไม',
-      'ความหมายของชีวิตคืออะไร',
-      'มีชีวิตอยู่ทำไม',
-      'มีเราทำไม',
-      'ทำงานไปเพื่ออะไร',
-    ];
-    for (const q of philoQuestions) {
-      const res = simulatePrepareLoopReview([{ role: 'user', text: q }]);
-      assert.strictEqual(res.trigger, q, `Trigger must be preserved for: ${q}`);
-      assert.strictEqual(res.automaticStory, UNEXPLORED, `Story must be UNEXPLORED for: ${q}`);
-      assert.strictEqual(res.facts, UNEXPLORED, `Facts must be UNEXPLORED for: ${q}`);
-      assert.strictEqual(res.conversationStatus, 'partial_loop');
-    }
-    console.log('  ✓ 4.1 Single questions (5 cases) do not fabricate Story or Facts');
-
-    // 4.2 Follow-up question: "ทำไมเขาเงียบ" MUST NOT become Story
-    const followUpRes = simulatePrepareLoopReview([
-      { role: 'user', text: 'เขานอกใจหรือเปล่า' },
-      { role: 'user', text: 'ทำไมเขาเงียบ' },
-    ]);
-    assert.strictEqual(followUpRes.automaticStory, UNEXPLORED, 'ทำไมเขาเงียบ must NOT become Story');
-    assert.strictEqual(followUpRes.facts, UNEXPLORED, 'Facts must remain UNEXPLORED');
-    console.log('  ✓ 4.2 Follow-up question "ทำไมเขาเงียบ" does not become Story');
-
-    // 4.3 Verbatim thought message: "ฉันคิดว่าตัวเองไม่มีคุณค่า" MUST be kept verbatim
-    const verbatimThoughtRes = simulatePrepareLoopReview([
-      { role: 'user', text: 'โดนปฏิเสธงาน' },
-      { role: 'user', text: 'ฉันคิดว่าตัวเองไม่มีคุณค่า' },
-    ]);
-    assert.strictEqual(verbatimThoughtRes.trigger, 'โดนปฏิเสธงาน');
-    assert.strictEqual(verbatimThoughtRes.automaticStory, 'ฉันคิดว่าตัวเองไม่มีคุณค่า', 'Must keep verbatim thought');
-    assert.strictEqual(verbatimThoughtRes.facts, UNEXPLORED);
-    console.log('  ✓ 4.3 Thought message "ฉันคิดว่าตัวเองไม่มีคุณค่า" is preserved verbatim');
-
-    // 4.4 Real extracted facts/story from server MUST be preserved
-    const serverExtractedRes = simulatePrepareLoopReview(
-      [{ role: 'user', text: 'เครียดมาก' }],
-      {
-        trigger: 'หัวหน้าตำหนิงาน',
-        automatic_story: 'คิดว่าตัวเองทำงานไม่ดีพอ',
-        facts: 'ส่งเอกสารช้ากว่ากำหนด 1 วัน',
-      }
-    );
-    assert.strictEqual(serverExtractedRes.trigger, 'หัวหน้าตำหนิงาน');
-    assert.strictEqual(serverExtractedRes.automaticStory, 'คิดว่าตัวเองทำงานไม่ดีพอ');
-    assert.strictEqual(serverExtractedRes.facts, 'ส่งเอกสารช้ากว่ากำหนด 1 วัน');
-    console.log('  ✓ 4.4 Real extracted facts and story from server are preserved');
-
-    // 4.5 Legacy thoughts_or_fears from server MUST be preserved
-    const legacyThoughtRes = simulatePrepareLoopReview(
-      [{ role: 'user', text: 'เครียดมาก' }],
-      {
-        trigger: 'ต้องขึ้นพูดบนเวที',
-        thoughts_or_fears: 'กลัวคนอื่นมองว่าไม่เก่ง',
-      }
-    );
-    assert.strictEqual(legacyThoughtRes.trigger, 'ต้องขึ้นพูดบนเวที');
-    assert.strictEqual(legacyThoughtRes.automaticStory, 'กลัวคนอื่นมองว่าไม่เก่ง');
-    console.log('  ✓ 4.5 Legacy thoughts_or_fears from server is preserved');
-
-    // 4.6 Control-only messages: MUST be no_data
-    const controlOnlyRes = simulatePrepareLoopReview([
-      { role: 'user', text: 'บันทึกลูปนี้' },
-      { role: 'user', text: 'ขอบคุณนะ' },
-      { role: 'user', text: 'บาย' },
-    ]);
-    assert.strictEqual(controlOnlyRes.conversationStatus, 'no_data', 'Control-only messages must be no_data');
-    console.log('  ✓ 4.6 Control-only messages produce no_data status');
 
     console.log('\n================================================================');
     console.log('🎉 ALL REGRESSION VERIFICATION TESTS PASSED SUCCESSFULLY!');

@@ -1140,60 +1140,82 @@ function ChatScreen({
       return !controlKeywords.some((k) => clean === k);
     });
 
-    const hasUserContent = substantiveUserMsgs.length > 0;
-    const fullUserText = substantiveUserMsgs.map((m) => m.text.trim()).join(" ");
-
-    // Determine status: "บทสนทนามีประเด็นแต่ยังไม่ครบลูป" vs "ไม่มีข้อมูล"
-    let conversationStatus: "no_data" | "partial_loop" | "complete_loop" = "no_data";
-    if (hasUserContent) {
-      conversationStatus = "partial_loop";
-    }
-
-    // 1. Trigger
-    let triggerText = (serverExtractedLoop?.trigger || "").trim();
-    if (!triggerText) {
-      if (hasUserContent) {
-        triggerText = substantiveUserMsgs[0].text.trim();
-      } else {
-        triggerText = UNEXPLORED;
+    // Conservative, verbatim fallback for partial turns. Never treat questions,
+    // predictions, or another person's feelings as facts about the user.
+    const cleanClause = (value: string) =>
+      value.trim().replace(/(?:และ|แล้วก็|แล้ว|แต่)\s*$/, "").trim();
+    const splitStatement = (text: string) => {
+      const marker = /(?:^|\s+|[,.!?;\n]+|และ|แล้วก็|แต่|(?=ฉัน|ผม|เรา|หนู|ดิฉัน))(?:(ฉัน|ผม|เรา|หนู|ดิฉัน)\s*)?(รู้สึกเหมือน|รู้สึก|คิดว่า|กลัวว่า|ต้องการ|อยากให้|อยากรู้|อยากเข้าใจ|จะลอง|ตั้งใจจะ|ได้เรียนรู้ว่า)/gu;
+      const matches = [...text.matchAll(marker)];
+      const clauses: Partial<Record<"emotion" | "story" | "needs", string>> = {};
+      for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const word = match[2];
+        const prefix = text.slice(0, match.index).trim();
+        // Bare markers following reported speech do not establish the user's state.
+        if (!match[1] && /(?:เขา|เธอ|หัวหน้า|เพื่อน|แฟน).*(?:บอกว่า|พูดว่า)\s*$/.test(prefix)) continue;
+        const value = cleanClause(text.slice(match.index! + match[0].length, matches[i + 1]?.index ?? text.length));
+        if (!value) continue;
+        if (word === "รู้สึก") clauses.emotion = value;
+        if (["คิดว่า", "กลัวว่า", "รู้สึกเหมือน"].includes(word)) clauses.story = (match[1] || "") + word + value;
+        if (["ต้องการ", "อยากให้", "อยากรู้", "อยากเข้าใจ"].includes(word)) clauses.needs = word + value;
       }
-    }
+      const prefix = cleanClause(text.slice(0, matches[0]?.index ?? text.length));
+      const isReportedEvent =
+        /(?:บอก|ขอให้|ให้แก้|ส่ง|อ่าน|โทร|นัด|ยกเลิก|ได้รับ|โดน|ถูก|ตำหนิ|ปฏิเสธ|ทะเลาะ|ตอบ|แก้งาน)/u.test(prefix) &&
+        !/(?:\?|ไหม|หรือเปล่า|ทำไม|หรือไม่|รึเปล่า|ถ้า|สมมติ|อาจ|น่าจะ|คงจะ|เพราะ|เกลียด|ไม่สนใจ|คิดว่า|กลัวว่า|รู้สึก|อยาก|ต้องการ)/u.test(prefix);
+      return { ...clauses, event: isReportedEvent ? prefix : "" };
+    };
+    const statements = substantiveUserMsgs.map((message) => ({
+      text: message.text.trim(),
+      parts: splitStatement(message.text.trim()),
+    }));
+    // A newly reported event starts a new review scope. Short follow-ups enrich it.
+    let eventIndex = -1;
+    statements.forEach((statement, index) => {
+      if (statement.parts.event) eventIndex = index;
+    });
+    const scopedStatements = statements.slice(Math.max(eventIndex, 0));
+    const hasUserContent = scopedStatements.length > 0;
+    const fullUserText = scopedStatements.map((statement) => statement.text).join(" ");
+    const eventText = eventIndex >= 0 ? statements[eventIndex].parts.event : "";
+    const latestClause = (key: "emotion" | "story" | "needs") =>
+      [...scopedStatements].reverse().find((statement) => statement.parts[key])?.parts[key] || "";
+    // Do not carry an extracted loop for an earlier topic into a newly stated event.
+    const compact = (value: string) => value.replace(/\s+/g, "");
+    const extractedTrigger = serverExtractedLoop?.trigger?.trim() || "";
+    const sameEvent = !eventText || (extractedTrigger &&
+      (compact(eventText).includes(compact(extractedTrigger)) ||
+       compact(extractedTrigger).includes(compact(eventText))));
+    const scopedLoop = hasUserContent && sameEvent ? serverExtractedLoop : null;
 
-    // 2. Emotion / Body
-    let emotionOrBodyText = (serverExtractedLoop?.emotion_or_body || "").trim();
-    if (!emotionOrBodyText) {
-      const emoMatch = fullUserText.match(
-        /รู้สึก(แย่|เครียด|กลัว|กังวล|เคว้ง|ว่างเปล่า|เหงา|เศร้า|เหนื่อย|ท้อ|อึดอัด|เจ็บปวด|สับสน|โกรธ|หงุดหงิด|ไม่มั่นใจ)|แน่นหน้าอก|ใจสั่น|หายใจไม่ทั่ว|เกร็ง|ปวดหัว/i
-      );
-      if (emoMatch) {
-        emotionOrBodyText = emoMatch[0];
-      } else {
-        emotionOrBodyText = UNEXPLORED;
-      }
-    }
+    let conversationStatus: "no_data" | "partial_loop" | "complete_loop" =
+      hasUserContent ? "partial_loop" : "no_data";
 
-    // 3. Automatic Story / Thoughts
-    let automaticStoryText = (
-      serverExtractedLoop?.automatic_story ||
-      (serverExtractedLoop as any)?.thoughts_or_fears ||
-      ""
-    ).trim();
-    // Automatic Story fallback (เก็บ serverExtractedLoop automatic_story / thoughts_or_fears เดิม)
-    if (!automaticStoryText) {
-      const thoughtMsg = substantiveUserMsgs.find((m) => /คิดว่า|กลัวว่า|รู้สึกเหมือน|คงจะ/i.test(m.text));
-      automaticStoryText = thoughtMsg && thoughtMsg.text.trim() !== triggerText ? thoughtMsg.text.trim() : UNEXPLORED;
-    }
+    // 1. Trigger: prefer the user's current concrete event, not the first chat turn.
+    const triggerText = eventText || scopedLoop?.trigger?.trim() ||
+      scopedStatements[0]?.text || UNEXPLORED;
 
-    // 4. Facts: ไม่สร้างข้อเท็จจริงจากหัวข้อสนทนา
-    let factsText = (serverExtractedLoop?.facts || "").trim();
-    if (!factsText) factsText = UNEXPLORED;
+    // 2. Emotion / Body: extract only the feeling clause, including open vocabulary.
+    const emotionOrBodyText = latestClause("emotion") ||
+      scopedLoop?.emotion_or_body?.trim() ||
+      fullUserText.match(/แน่นหน้าอก|ใจสั่น|หายใจไม่ทั่ว|เกร็ง|ปวดหัว/u)?.[0] || UNEXPLORED;
+
+    // 3. Automatic Story: never copy the event and emotion into this field.
+    const automaticStoryText = latestClause("story") ||
+      scopedLoop?.automatic_story?.trim() ||
+      (scopedLoop as any)?.thoughts_or_fears?.trim() || UNEXPLORED;
+
+    // 4. Facts are reported by the user, not independently verified.
+    const factsText = eventText || scopedLoop?.facts?.trim() || UNEXPLORED;
 
     // 5. Needs (Core Needs / Desires)
     let needsText = (
-      serverExtractedLoop?.needs ||
-      (serverExtractedLoop as any)?.desires ||
+      scopedLoop?.needs ||
+      (scopedLoop as any)?.desires ||
       ""
     ).trim();
+    if (!needsText) needsText = latestClause("needs");
     if (!needsText) {
       if (/อยากให้|ต้องการ|อยากรู้|อยากเข้าใจ/i.test(fullUserText)) {
         const needMatch = fullUserText.match(
@@ -1208,8 +1230,8 @@ function ChatScreen({
 
     // 6. Options (Habitual or perspective options)
     let optionsText = (
-      serverExtractedLoop?.options ||
-      (serverExtractedLoop as any)?.old_response ||
+      scopedLoop?.options ||
+      (scopedLoop as any)?.old_response ||
       ""
     ).trim();
     if (!optionsText) {
@@ -1218,8 +1240,8 @@ function ChatScreen({
 
     // 7. Micro-action (New choice / next small step)
     let microActionText = (
-      serverExtractedLoop?.micro_action ||
-      (serverExtractedLoop as any)?.new_choice ||
+      scopedLoop?.micro_action ||
+      (scopedLoop as any)?.new_choice ||
       ""
     ).trim();
     if (!microActionText) {
@@ -1228,8 +1250,8 @@ function ChatScreen({
 
     // 8. Reflection (Insights / key realization)
     let reflectionText = (
-      serverExtractedLoop?.reflection ||
-      (serverExtractedLoop as any)?.insights ||
+      scopedLoop?.reflection ||
+      (scopedLoop as any)?.insights ||
       ""
     ).trim();
     if (!reflectionText) {
@@ -1266,7 +1288,7 @@ function ChatScreen({
       newChoice: microActionText,
       insights: reflectionText,
       conversationStatus,
-      detectedSkills: (serverExtractedLoop as any)?.detected_skills || {
+      detectedSkills: (scopedLoop as any)?.detected_skills || {
         emotional_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
         somatic_awareness: Boolean(emotionOrBodyText && emotionOrBodyText !== UNEXPLORED),
         cognitive_clarity: Boolean(factsText && factsText !== UNEXPLORED),
