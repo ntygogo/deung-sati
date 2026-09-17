@@ -28,6 +28,7 @@ import { CompanionRoom } from "./components/CompanionRoom";
 import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
+import { AuthModal } from "./components/AuthModal";
 
 const SvgIcon = ({
   name,
@@ -367,6 +368,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [showEvidence, setShowEvidence] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [evidence, setEvidence] = useState<EvidenceType[]>([
     "หยุดก่อน",
     "เลือกใหม่",
@@ -463,8 +465,9 @@ export default function App() {
   const globalRequestId = useRef(0);
   const isDebugMode = typeof window !== "undefined" && window.location.search.includes("debug=1");
 
-  const handleDrawerSelect = (_routeId: DrawerMenuItemId) => {
+  const handleDrawerSelect = (routeId: DrawerMenuItemId) => {
     setIsDrawerOpen(false);
+    if (routeId === 'account' || routeId === 'membership_status') setIsAuthOpen(true);
   };
 
   const handleStartChatFromHome = (textToSend: string) => {
@@ -563,6 +566,7 @@ export default function App() {
         )}
 
         {/* Right-side Sliding Hamburger App Drawer */}
+        {isAuthOpen && <AuthModal isOpen onClose={() => setIsAuthOpen(false)} />}
         <AppDrawer
           isOpen={isDrawerOpen}
           onClose={() => setIsDrawerOpen(false)}

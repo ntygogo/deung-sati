@@ -26,7 +26,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'login',
   onSuccess,
 }) => {
-  const { login, register } = useAuth();
+  const { login, register, currentUser, logout } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
 
   // Form fields
@@ -41,6 +41,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
+
+  if (currentUser) return (
+    <div className="jar-modal-overlay" onClick={onClose}>
+      <div className="jar-modal-card auth-modal-card" role="dialog" aria-modal="true" aria-label="บัญชีของฉัน" onClick={(e) => e.stopPropagation()}>
+        <h3>บัญชีของฉัน</h3>
+        <p>{currentUser.name}</p>
+        <p>{currentUser.email}</p>
+        <p>สถานะสมาชิก: {currentUser.isPlus ? 'Plus' : 'Free'}</p>
+        <button type="button" className="btn-auth-submit" disabled={isLoading} onClick={async () => {
+          setIsLoading(true);
+          await logout();
+          onClose();
+        }}>{isLoading ? 'กำลังออกจากระบบ…' : 'ออกจากระบบ'}</button>
+        <button type="button" className="btn-continue-guest" onClick={onClose}>ปิดหน้าบัญชี</button>
+      </div>
+    </div>
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +82,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         const result = await register(name, email, password);
         if (result.success) {
-          setSuccessMsg('สมัครสมาชิกสำเร็จแล้ว! ข้อมูลของคุณจะถูกซิงค์อย่างปลอดภัย 🎉');
+          setSuccessMsg('สร้างบัญชีสำเร็จแล้ว พร้อมเริ่มบันทึกในบัญชีของคุณ 🌱');
           setTimeout(() => {
             setIsLoading(false);
             if (onSuccess) onSuccess();
@@ -84,7 +101,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="jar-modal-overlay" onClick={onClose}>
-      <div className="jar-modal-card auth-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="jar-modal-card auth-modal-card" role="dialog" aria-modal="true" aria-label="เข้าสู่ระบบหรือสร้างบัญชี" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="jar-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -97,7 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </h3>
               <p className="jar-modal-sub">
                 {mode === 'login'
-                  ? 'เข้าสู่ระบบเพื่อกู้คืนสิทธิ์ Plus และประวัติของคุณ'
+                  ? 'เข้าสู่ระบบเพื่อเปิดประวัติและสหายของบัญชีนี้'
                   : 'บันทึกประวัติสภาพใจและรักษาสิทธิ์ข้ามอุปกรณ์'}
               </p>
             </div>
@@ -133,7 +150,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Alerts */}
         {errorMsg && (
-          <div className="auth-alert-box error">
+          <div className="auth-alert-box error" role="alert">
             <AlertCircle size={16} />
             <span>{errorMsg}</span>
           </div>
@@ -150,11 +167,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === 'register' && (
             <div className="auth-input-group">
-              <label className="auth-label">ชื่อของคุณ / ชื่อเล่น</label>
+              <label className="auth-label" htmlFor="auth-name">ชื่อของคุณ / ชื่อเล่น</label>
               <div className="auth-input-wrapper">
                 <UserIcon size={16} className="auth-field-icon" />
                 <input
                   type="text"
+                  id="auth-name"
+                  autoComplete="nickname"
                   className="auth-input"
                   placeholder="เช่น นัตตี้, น้ำตาล, เมย์..."
                   value={name}
@@ -166,11 +185,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <div className="auth-input-group">
-            <label className="auth-label">อีเมล (Email)</label>
+            <label className="auth-label" htmlFor="auth-email">อีเมล (Email)</label>
             <div className="auth-input-wrapper">
               <Mail size={16} className="auth-field-icon" />
               <input
                 type="email"
+                id="auth-email"
+                autoComplete="username"
                 className="auth-input"
                 placeholder="youremail@example.com"
                 value={email}
@@ -182,7 +203,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <div className="auth-input-group">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label className="auth-label">รหัสผ่าน (Password)</label>
+              <label className="auth-label" htmlFor="auth-password">รหัสผ่าน (Password)</label>
               {mode === 'login' && (
                 <span className="auth-forgot-hint">จำรหัสผ่านไม่ได้? สอบถามทาง LINE</span>
               )}
@@ -191,6 +212,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <Lock size={16} className="auth-field-icon" />
               <input
                 type={showPassword ? 'text' : 'password'}
+                id="auth-password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                minLength={mode === 'register' ? 6 : undefined}
                 className="auth-input"
                 placeholder={mode === 'register' ? 'อย่างน้อย 6 ตัวอักษร' : 'กรอกรหัสผ่านของคุณ'}
                 value={password}
@@ -223,7 +247,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             ) : (
               <>
                 <Sparkles size={16} />
-                <span>สร้างบัญชี &amp; บันทึกข้อมูลถาวร ✨</span>
+                <span>สร้างบัญชี ✨</span>
               </>
             )}
           </button>
@@ -233,7 +257,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="auth-footer-notes">
           <div className="auth-privacy-guarantee">
             <ShieldCheck size={14} className="text-primary" />
-            <span>ข้อมูลส่วนตัวและการระบายความรู้สึกของคุณจะถูกเก็บเป็นความลับ 100%</span>
+            <span>ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้ และจะไม่ถูกย้ายเข้าบัญชีโดยอัตโนมัติ</span>
           </div>
 
           <button

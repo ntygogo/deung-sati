@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { bookConfig } from '../config/bookConfig';
+import { useAuth } from '../context/AuthContext';
 
 export type DrawerMenuItemId =
   | 'account'
@@ -236,6 +237,7 @@ export const AppDrawer: React.FC<{
   onEmergency?: () => void;
   onSelectRoute?: (routeId: DrawerMenuItemId) => void;
 }> = ({ isOpen, onClose, onEmergency, onSelectRoute }) => {
+  const { currentUser } = useAuth();
   const [activeLang, setActiveLang] = useState<'th' | 'en'>('th');
   const [soundActive, setSoundActive] = useState(true);
   const [vibrationActive, setVibrationActive] = useState(true);
@@ -321,10 +323,16 @@ export const AppDrawer: React.FC<{
           {/* Section 1: Account */}
           <DrawerSection title="บัญชีของฉัน" icon="👤">
             <DrawerItem
+              id="account"
+              label={currentUser ? 'ดูบัญชี / ออกจากระบบ' : 'เข้าสู่ระบบ / สร้างบัญชี'}
+              subtitle={currentUser ? currentUser.name : 'ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้'}
+              onClick={handleItemClick}
+            />
+            <DrawerItem
               id="membership_status"
               label="สถานะสมาชิก"
-              subtitle="Free Plan (ฝึกสติทั่วไป)"
-              badge="ใช้งานอยู่"
+              subtitle={currentUser?.isPlus ? 'Plus' : 'Free Plan (ฝึกสติทั่วไป)'}
+              badge={currentUser ? 'เข้าสู่ระบบแล้ว' : 'โหมดทดลอง'}
               onClick={handleItemClick}
             />
           </DrawerSection>
