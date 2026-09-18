@@ -18,3 +18,14 @@
 @keyframes egg-waterlight{0%,100%{opacity:.45}50%{opacity:.85}}
 @keyframes egg-dust{0%,100%{opacity:.3;transform:translateY(3px)}50%{opacity:.9;transform:translateY(-5px)}}
 @media(prefers-reduced-motion:reduce){.living-egg *{animation:none!important;transition:none!important}.living-egg[data-touched=true] .living-egg-reaction{transform:scale(var(--embryo-growth))}.living-egg[data-touched=true] .living-egg-heart{transform:none}}
+
+
+/* Room variant: transparent canvas, a dimensional glass shell, no baked-in scene. */
+.living-egg[data-variant=room]{background:transparent;overflow:visible;border-radius:50%;isolation:isolate}
+.living-egg[data-variant=room]:before{content:'';position:absolute;left:22%;right:22%;bottom:15%;height:8%;border-radius:50%;background:#ac729455;filter:blur(9px);pointer-events:none}
+.living-egg[data-variant=room] .living-egg-interior{left:17%;top:5%;width:66%;height:82%;border:1px solid #fff5edc4;border-radius:50% 50% 46% 46% / 61% 61% 39% 39%;background:radial-gradient(ellipse at 31% 26%,#ffffff95,transparent 35%),radial-gradient(ellipse at 65% 75%,#c4b0e44d,transparent 65%),linear-gradient(130deg,#fff4ea80,#f5c8de47 55%,#e9d5ec80);box-shadow:inset 5px 2px 9px #fff7edb0,inset -6px -3px 13px #bd8bb947,0 7px 19px #bd86a12b}
+.living-egg[data-variant=room] .living-egg-reaction{left:-5%;top:10%;width:110%;height:82%}
+.living-egg[data-variant=room] .living-egg-baby{opacity:.94;filter:saturate(.8) drop-shadow(0 5px 5px #b7759d33)}
+.living-egg[data-variant=room] .living-egg-shell{background:linear-gradient(115deg,#fff9e65e,transparent 32%,transparent 72%,#ffffff5c);box-shadow:inset 6px 1px 11px #fffafa55,inset -3px -4px 8px #f3d7ef88}
+.living-egg[data-variant=room] .living-egg-shell:after{content:'';position:absolute;left:13%;top:15%;width:12%;height:23%;border-radius:50%;background:linear-gradient(#ffffffad,#ffffff00);transform:rotate(24deg)}
+.living-egg[data-variant=room] .living-egg-heart{left:48%;top:20%;z-index:2;color:#bb7099}

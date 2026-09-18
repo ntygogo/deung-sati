@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
-import { ArrowUp, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
+import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
 import { CompanionAppearance } from './CompanionAppearance';
 import { resolveCompanionAppearance } from '../shared/companionAppearance';
@@ -24,12 +24,21 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
     if (message.trim()) { onStartChat(message.trim()); setMessage(''); }
     else onOpenChat();
   };
-  return <main className="dreamy-home" data-testid="dreamy-home">
-    <section className="dreamy-hero" aria-label="สวนของสหายสติ">
-      {isEgg ? <CompanionEgg traceCount={traceCount} size={640} paused={paused} /> :
-        <div className="dreamy-hatched-garden" data-paused={paused}>
-          <CompanionAppearance appearance={resolveCompanionAppearance(companion)} size={330} />
-        </div>}
+  return <main className="dreamy-home" data-testid="dreamy-home" data-paused={paused}>
+    <section className="dreamy-hero" aria-label="ห้องพักใจของเรา">
+      <div className="room-architecture" aria-hidden="true">
+        <div className="room-arch"><div className="room-sky"><i /><i /><i /></div><span className="room-moon" /><span className="room-window-bar" /></div>
+        <div className="room-light" /><div className="room-floor" /><div className="room-rug" />
+        <div className="room-plant"><i /><i /><i /><i /><span /></div>
+        <div className="room-particles">{Array.from({ length: 7 }, (_, i) => <i key={i} style={{ left: `${12 + i * 12}%`, top: `${32 + (i * 13) % 40}%`, animationDelay: `${-i * 1.3}s` }} />)}</div>
+      </div>
+      <div className="room-companion">
+        <span className="room-pedestal" aria-hidden="true" />
+        {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" /> :
+          <div className="dreamy-hatched-garden" data-paused={paused}>
+            <CompanionAppearance appearance={resolveCompanionAppearance(companion)} size={280} />
+          </div>}
+      </div>
       <header className="dreamy-header">
         <span className="dreamy-wordmark">Deung Sati<span aria-hidden="true">*</span></span>
         <div className="dreamy-header-actions">
@@ -41,16 +50,21 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <span className="dreamy-avatar" aria-hidden="true">{userName?.trim().slice(0, 1) || '♡'}</span>
         <div><strong>สวัสดี {userName || 'เธอ'} <span aria-hidden="true">♡</span></strong><span className="dreamy-level">Lv.{Math.max(1, level)}</span></div>
       </div>
-      <p className="dreamy-note">ร่องรอยเล็ก ๆ<br />ในวันนี้<br />ก็มีความหมาย<br />เสมอ <span>♡</span></p>
+      <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
+      <button type="button" className="room-journal" onClick={onOpenJourney} aria-label="เปิดสมุดบันทึก เส้นทางของฉัน">
+        <span className="room-book" aria-hidden="true"><BookOpen size={25} /><i /></span>
+        <span className="room-object-label">สมุดของฉัน</span>
+      </button>
       <button type="button" onClick={onOpenCompanion} className="dreamy-progress"
         aria-label={isEgg ? `ดูความคืบหน้า ${progress} จาก 20 ลูป${progress === 20 ? ' น้องพร้อมฟักแล้ว' : ''}` : 'ไปหาน้องของเรา'}
-        style={{ '--trace-angle': `${progress * 18}deg` } as CSSProperties}>
-        <span className="dreamy-progress-inner">
+        style={{ '--trace-glow': .2 + progress * .025 } as CSSProperties}>
+        <span className="room-lamp-cap" aria-hidden="true" /><span className="dreamy-progress-inner">
           <strong>{isEgg ? `${progress} / 20` : companion?.name || 'สหายสติ'}</strong>
-          <span>{isEgg ? (progress === 20 ? 'น้องพร้อมฟักแล้ว' : `อีก ${20 - progress} ร่องรอย\nก่อนฟัก`) : 'เติบโตไปด้วยกัน'}</span>
+          <span>{isEgg ? (progress === 20 ? 'พร้อมฟักแล้ว' : 'ร่องรอยก่อนฟัก') : 'เติบโตไปด้วยกัน'}</span>
           <Heart size={15} fill="currentColor" aria-hidden="true" />
         </span>
       </button>
+      <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : 'สหายที่เติบโตไปพร้อมเธอ'}</p>
       <button type="button" className="dreamy-motion" onClick={() => setPaused(value => !value)}
         aria-pressed={paused} aria-label={paused ? 'เล่นการเคลื่อนไหว' : 'พักการเคลื่อนไหว'}>
         {paused ? <Play size={13} /> : <Pause size={13} />}<span>{paused ? 'ให้ขยับ' : 'พักภาพ'}</span>
@@ -80,15 +94,6 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <span className="dreamy-path-dots" aria-hidden="true" />
         <button onClick={() => onStartChat('อยากลองหาทางเลือกเล็ก ๆ ที่พอทำไหว ช่วยคิดไปด้วยกันหน่อย')}><span className="dreamy-flower peach"><Sparkles size={26} /></span><b>เลือกใหม่</b></button>
       </div>
-    </section>
-    <section className="dreamy-destinations" aria-label="พื้นที่ของเรา">
-      <button className="dreamy-destination dreamy-room-card" onClick={onOpenCompanion}>
-        <span><strong>ห้องของน้อง</strong><small>ไปดูว่าน้องเป็นยังไงบ้าง</small></span><ChevronRight className="dreamy-destination-arrow" size={23} />
-        <img className="dreamy-room-baby" src="/images/companion_dna_base.png" alt="" loading="lazy" />
-      </button>
-      <button className="dreamy-destination dreamy-journey-card" onClick={onOpenJourney}>
-        <span><strong>เส้นทางของฉัน</strong><small>ร่องรอยที่เราเคยผ่าน</small></span><ChevronRight className="dreamy-destination-arrow" size={23} />
-      </button>
     </section>
     <button className="dreamy-future-link" onClick={onOpenFuture}><Sparkles size={17} aria-hidden="true" /> แวะหาฉันในวันข้างหน้า <ChevronRight size={17} /></button>
   </main>;

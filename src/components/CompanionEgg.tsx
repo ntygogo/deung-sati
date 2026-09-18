@@ -6,8 +6,8 @@ export function eggProgress(count: number): number {
 }
 
 /** Artwork, baby and glass are separate layers. Petting is visual, never a growth event. */
-export function CompanionEgg({ traceCount = 0, size = 320, onPet, isInteracting = false, paused = false }: {
-  traceCount?: number; size?: number; onPet?: () => void; isInteracting?: boolean; paused?: boolean;
+export function CompanionEgg({ traceCount = 0, size = 320, onPet, isInteracting = false, paused = false, variant = 'terrarium' }: {
+  traceCount?: number; size?: number; onPet?: () => void; isInteracting?: boolean; paused?: boolean; variant?: 'terrarium' | 'room';
 }) {
   const [touched, setTouched] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -22,9 +22,9 @@ export function CompanionEgg({ traceCount = 0, size = 320, onPet, isInteracting 
   return <button type="button" className="living-egg" onClick={pet}
     aria-label={`แตะทักทายตัวอ่อนในไข่ เรียนรู้แล้ว ${progress} จาก 20 ลูป`}
     data-testid="companion-egg-container" data-touched={touched || isInteracting}
-    data-ready={progress === 20} data-paused={paused}
+    data-variant={variant} data-ready={progress === 20} data-paused={paused}
     style={{ '--egg-size': `${size}px`, '--embryo-growth': .91 + progress / 220 } as CSSProperties}>
-    <img className="living-egg-garden" src="/images/dreamy_egg_terrarium.png" alt="" fetchPriority="high" draggable={false} />
+    {variant === 'terrarium' && <img className="living-egg-garden" src="/images/dreamy_egg_terrarium.png" alt="" fetchPriority="high" draggable={false} />}
     <span className="living-egg-interior" aria-hidden="true">
       <span className="living-egg-waterlight" />
       <span className="living-egg-reaction">
