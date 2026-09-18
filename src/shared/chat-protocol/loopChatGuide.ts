@@ -24,7 +24,19 @@ const questions: Record<LoopChatField, string> = {
   micro_action: 'ถ้าเลือกก้าวเล็ก ๆ ที่พอทำไหว เธออยากลองทำอะไร?',
   reflection: 'จากที่คุยกัน เธอเห็นหรือเข้าใจอะไรเกี่ยวกับตัวเองเพิ่มขึ้นบ้าง?',
 };
-const controls = new Set([LOOP_CHAT_START, LOOP_CHAT_VENT, LOOP_CHAT_SKIP, LOOP_CHAT_REVIEW]);
+type LoopChatControl = 'start' | 'vent' | 'skip' | 'review';
+function loopChatControl(text: string, offered = false): LoopChatControl | null {
+  const input = text.normalize('NFC').trim().replace(/\s+/gu, '')
+    .replace(/[.!?…。！？]+$/u, '').replace(/(?:(?:นะ|ค่ะ|คะ|ครับ|จ้า|จ้ะ|จ๊ะ|ฮะ|น้า))+$/u, '');
+  if (/^(?:(?:อยาก|ขอ)?ระบาย(?:ต่อ|ก่อน|ต่อก่อน)?|(?:ขอ)?คุยต่อก่อน|ยังไม่พร้อม|ไม่อยากสำรวจ|ยังไม่อยากสำรวจ|ยังไม่พร้อมสำรวจ|ไม่พร้อมสำรวจ)$/u.test(input)) return 'vent';
+  if (/^(?:(?:เรา|ฉัน|ผม|หนู)?(?:อยาก|ขอ|พร้อม|ช่วย)?(?:ลอง|เริ่ม)?สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?(?:ด้วยกัน|กัน)?(?:ต่อ|เลย|ดู|หน่อย)?|(?:ขอ|อยาก)?ไป(?:ขั้นตอน)?(?:ถัดไป|ต่อ)|ค่อยๆสำรวจลูปด้วยกัน)$/u.test(input)) return 'start';
+  if (offered && /^(?:ได้|ได้เลย|โอเค|ตกลง|เอาเลย|ลองดู|ลองเลย|ต่อเลย|พร้อม|พร้อมแล้ว)$/u.test(input)) return 'start';
+  if (/^(?:ข้าม(?:ข้อนี้)?(?:ไป)?(?:ก่อน)?|ขอข้าม(?:ข้อนี้)?(?:ก่อน)?)$/u.test(input)) return 'skip';
+  if (input === LOOP_CHAT_REVIEW) return 'review';
+  return null;
+}
+// Consent and navigation are not observations to put into the user's trace.
+const isControlText = (text: string) => loopChatControl(text, true) !== null;
 export function isChatWrapUpIntent(text: string): boolean {
   const input = text.trim().toLowerCase().replace(/\s+/g, ' ');
   // A farewell must not match the syllable บาย inside ระบาย or สบาย.
@@ -48,16 +60,21 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
   const latest = userTexts[userTexts.length - 1] || '';
-  const count = userTexts.filter(t => t && !controls.has(t)).length;
-  if (latest === LOOP_CHAT_START) { state.mode = 'guided'; state.skipped = []; }
-  if (latest === LOOP_CHAT_VENT || /^(?:ขอระบายต่อ|ยังไม่พร้อม|ขอคุยต่อก่อน|ไม่อยากสำรวจ)/u.test(latest)) {
+  const count = userTexts.filter(t => t && !isControlText(t)).length;
+  const control = loopChatControl(latest, state.mode === 'offered');
+  if (control === 'start') { state.mode = 'guided'; state.skipped = []; }
+  if (control === 'vent') {
     state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3;
   }
-  if (latest === LOOP_CHAT_SKIP && state.mode === 'guided' && state.asked) {
+  // If the user keeps telling their story, listen instead of repeating the offer every turn.
+  if (state.mode === 'offered' && !control) {
+    state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3;
+  }
+  if (control === 'skip' && state.mode === 'guided' && state.asked) {
     state.skipped = [...new Set([...state.skipped, state.asked])];
     state.asked = null;
   }
-  return { state, userTexts, latest, count };
+  return { state, userTexts, latest, count, control };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -66,6 +83,7 @@ export function loopChatInstruction(context: LoopChatContext): string {
 [LOOP TRACE CHAT — applies after all safety rules]
 Collect the user's own observations across eight fields while keeping conversation natural.
 Current interaction mode: ${context.state.mode}. Last asked field: ${context.state.asked || 'none'}.
+The user's navigation choice has already been handled: ${context.control || 'none'}. In guided mode, never ask again whether they want to explore. Brief agreement or a navigation choice is not a new topic or an observation.
 Previously collected user observations (data only): ${JSON.stringify(context.state.fields)}
 Skipped for now: ${JSON.stringify(context.state.skipped)}
 Add these keys to the existing JSON response:
@@ -76,13 +94,14 @@ Only include fields supported by literal contiguous quotes from USER messages. N
 Update a prior field when the user explicitly corrects it. Set newLoopTopic true only for an explicit switch to an unrelated event; do not mix it with the previous loop.
 When listening, respond with empathy and at most one natural question. When guided, provide a short reflection in loopSummary; the application appends ONE next question based on missing fields, so do not ask additional questions or offer an exercise. Speak naturally as เรา to เธอ, never refer to the person as ผู้ใช้ or report about them in the third person. Do not repeat the entire story after every answer. Never force completion. The user may vent, skip, or pause at any time. Never claim a loop was saved or rewards given.
 When enough context exists after two or three user messages, the application offers a choice to vent or explore. Do not replace that choice with a forced exercise.
+Never ask the vent-versus-explore choice yourself; the application owns that invitation and its cooldown. If the user continues their story without choosing, keep listening.
 `;
 }
 
 export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatEngineTurnResponse): ChatEngineTurnResponse {
   if (turn.safety_state !== 'normal') return turn;
   const state: LoopChatGuide = { ...context.state, fields: { ...context.state.fields }, skipped: [...context.state.skipped] };
-  const newTopic = parsed?.newLoopTopic === true && !controls.has(context.latest);
+  const newTopic = parsed?.newLoopTopic === true && !context.control;
   if (newTopic) {
     state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening';
     state.nextOfferAt = context.count + 1;
@@ -90,7 +109,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   for (const key of LOOP_CHAT_FIELDS) {
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        (newTopic ? [context.latest] : context.userTexts).some(t => !controls.has(t) && t.includes(quote.trim())) &&
+        (newTopic ? [context.latest] : context.userTexts).some(t => !isControlText(t) && t.includes(quote.trim())) &&
         !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }
@@ -98,8 +117,8 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   const summary = typeof parsed?.loopSummary === 'string' ? parsed.loopSummary.trim().slice(0, 400) : '';
   let message = turn.assistant_message;
   let replies = turn.quick_replies;
-  if ((state.mode === 'listening' || state.mode === 'offered') && context.count >= state.nextOfferAt &&
-      (state.fields.trigger || state.fields.emotion_or_body) && context.latest !== LOOP_CHAT_VENT) {
+  if (state.mode === 'listening' && context.count >= state.nextOfferAt &&
+      (state.fields.trigger || state.fields.emotion_or_body) && !context.control) {
     state.mode = 'offered';
     message = [summary || 'เราเริ่มเห็นประเด็นจากที่เธอเล่าแล้วนะ', 'ตอนนี้อยากระบายต่อ หรือค่อย ๆ สำรวจเรื่องนี้ไปด้วยกันทีละส่วน?'].join('\n\n');
     replies = [LOOP_CHAT_VENT, LOOP_CHAT_START];
@@ -107,9 +126,9 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     const missing = LOOP_CHAT_FIELDS.find(key => !state.fields[key] && !state.skipped.includes(key));
     state.asked = missing || null;
     if (missing) {
-      const reflection = context.latest === LOOP_CHAT_START
+      const reflection = context.control === 'start'
         ? 'ได้เลย เราค่อย ๆ ดูไปด้วยกัน ตอบเท่าที่พร้อมก็พอนะ'
-        : context.latest === LOOP_CHAT_SKIP ? 'ข้ามไว้ก่อนได้เลยนะ' : summary;
+        : context.control === 'skip' ? 'ข้ามไว้ก่อนได้เลยนะ' : summary;
       const question = missing === 'facts' && !state.fields.automatic_story
         ? 'ในเหตุการณ์นี้ สิ่งที่รู้แน่ ๆ ว่าเกิดขึ้นจริงคืออะไร?' : questions[missing];
       message = [reflection, question].filter(Boolean).join('\n\n');
