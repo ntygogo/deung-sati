@@ -619,6 +619,8 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
       const localDraftItem: LoopTraceItem = {
         id: guestTraceId,
+        source_session_id: data.conversationId,
+        conversationId: data.conversationId,
         trace_category: 'mindful_loop',
         title: data.trigger || 'แบบร่างลูปสติ',
         summary: data.emotionOrBody || '',

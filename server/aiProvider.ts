@@ -1,3 +1,4 @@
+import { pastLoopInstruction } from '../src/shared/conversation.js';
 import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
 import { prepareLoopChat, loopChatInstruction, applyLoopChat, type LoopChatContext } from '../src/shared/chat-protocol/loopChatGuide.js';
@@ -24,6 +25,7 @@ export interface StreamChatResponseParams {
   requestId?: number;
   exerciseResult?: any;
   loopGuide?: unknown;
+  pastLoopContext?: unknown;
   onAssistantToken: (token: string) => void;
   onAssistantMeta: (meta: ChatEngineTurnResponse) => void;
   onDone: (
@@ -194,7 +196,7 @@ export function sanitizeDeungSatiResponse(raw: string, loopContext?: LoopChatCon
 }
 
 export async function streamChatResponse(params: StreamChatResponseParams): Promise<void> {
-  const { messages, safety, requestId, exerciseResult, loopGuide, onAssistantToken, onAssistantMeta, onDone } = params;
+  const { messages, safety, requestId, exerciseResult, loopGuide, pastLoopContext, onAssistantToken, onAssistantMeta, onDone } = params;
 
   try {
     const loopContext = prepareLoopChat(messages, loopGuide);
@@ -326,7 +328,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           model: modelCandidate,
           contents,
           config: {
-            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext),
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
             thinkingConfig: {
@@ -382,3 +384,4 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
     onDone(fallbackErrorText, 'error', errorTurn);
   }
 }
+

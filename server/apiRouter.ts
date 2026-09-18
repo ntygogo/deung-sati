@@ -1,4 +1,5 @@
 import express from 'express';
+import { conversationsRouter } from './routes/conversations.js';
 import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import { classifySafety } from './safetyClassifier.js';
@@ -13,8 +14,9 @@ import { validateLoopForConfirmation } from '../src/shared/chat-protocol/index.j
 
 export const apiApp = express();
 
-apiApp.use(express.json());
+apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
+apiApp.use('/loops/conversations', conversationsRouter);
 
 // 1. Health endpoint
 apiApp.get('/health', (_req: Request, res: Response) => {
@@ -44,23 +46,10 @@ apiApp.post('/safety-check', async (req: Request, res: Response) => {
   }
 });
 
-// 3. Get session history endpoint
-apiApp.get('/session/:sessionId', (req: Request, res: Response) => {
-  const sessionId = Array.isArray(req.params.sessionId)
-    ? req.params.sessionId[0]
-    : String(req.params.sessionId);
-  const session = sessionStore.getSession(sessionId);
-  res.json({
-    sessionId: session.sessionId,
-    messageCount: session.messages.length,
-    messages: session.messages,
-  });
-});
-
 // 4. Pure Gemini Streaming Chat endpoint (SSE) with Structured Turn Contract
 apiApp.post('/chat/stream', async (req: Request, res: Response) => {
   try {
-    const { messages, sessionId = 'default-session', sessionState, requestId, exerciseResult, loopGuide } = req.body;
+    const { messages, sessionId = 'default-session', sessionState, requestId, exerciseResult, loopGuide, pastLoopContext } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required' });
       return;
@@ -99,6 +88,7 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
       requestId,
       exerciseResult,
       loopGuide,
+      pastLoopContext,
       onAssistantToken: (chunkText: string) => {
         if (!res.writableEnded) {
           res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: chunkText, requestId })}\n\n`);
@@ -1030,3 +1020,4 @@ apiApp.post('/user/migrate-legacy-local', requireAuth, async (req: Authenticated
     res.status(500).json({ error: err.message || 'Legacy data migration failed' });
   }
 });
+

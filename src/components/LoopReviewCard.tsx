@@ -90,6 +90,7 @@ interface LoopReviewCardProps {
   traceId?: string;
   initialData?: Partial<LoopReviewData>;
   onClose?: () => void;
+  beforeSave?: () => Promise<void>;
   onConfirmed?: (result: any) => void;
   isCrisisSession?: boolean;
 }
@@ -99,6 +100,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
   traceId: propTraceId,
   initialData,
   onClose,
+  beforeSave,
   onConfirmed,
   isCrisisSession = false,
 }) => {
@@ -284,6 +286,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
     setShowConfirmModal(false);
 
     try {
+      await beforeSave?.();
       let activeTraceId = traceId;
 
       // Ensure server or local state has a real draft record before confirm
@@ -363,6 +366,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
     setIsSubmitting(true);
 
     try {
+      await beforeSave?.();
       if (!traceId) {
         const draftRes = await createDraftTrace({
           conversationId,
@@ -419,6 +423,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
     setIsSavingDraft(true);
     setErrorMsg(null);
     try {
+      await beforeSave?.();
       const cleanField = (val?: string) => (val === 'ยังไม่ได้สำรวจ' ? '' : val || '');
       if (traceId) {
         const res = await updateTrace(traceId, {
