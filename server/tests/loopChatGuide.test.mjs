@@ -67,4 +67,43 @@ const newTopic=applyLoopChat(prepareLoopChat([...messages,u('เปลี่ย�
 assert.deepEqual(newTopic.loop_guide.fields,{trigger:'เพื่อนยกเลิกนัด'});
 const crisis=applyLoopChat(prepareLoopChat(messages,turn.loop_guide),{}, {...base,safety_state:'crisis'});
 assert.equal(crisis.loop_guide,undefined);
+// A beginner asking for help stays on the current field. No example or uncertainty is saved.
+for (const field of LOOP_CHAT_FIELDS) {
+  const guide={mode:'guided',fields:{},asked:field,skipped:[],nextOfferAt:2};
+  const first=applyLoopChat(prepareLoopChat([u('ไม่รู้')],guide),{loopTrace:{[field]:{quote:'ไม่รู้'}},newLoopTopic:true},base);
+  assert.equal(first.loop_guide.mode,'guided',field);
+  assert.equal(first.loop_guide.asked,field);
+  assert.deepEqual(first.loop_guide.fields,{});
+  assert.equal(first.loop_guide.helpAttempts[field],1);
+  const second=applyLoopChat(prepareLoopChat([u('ไม่รู้'),{role:'assistant',content:first.assistant_message},u('ยังคิดไม่ออก')],first.loop_guide),{guideSupport:{needed:true,message:first.assistant_message}},base);
+  assert.equal(second.loop_guide.asked,field);
+  assert.notEqual(second.assistant_message,first.assistant_message,'must try a different explanation');
+  const third=applyLoopChat(prepareLoopChat([u('ยังไม่รู้เลยค่ะ')],second.loop_guide),{},base);
+  assert.equal(third.loop_guide.asked,field);
+  assert.match(third.assistant_message,/ไม่ต้องฝืนให้ครบ/);
+  assert.deepEqual(third.loop_guide.fields,{});
+}
+const needsGuide={mode:'guided',fields:{trigger:event,emotion_or_body:feeling,automatic_story:answers.automatic_story,facts:answers.facts},asked:'needs',skipped:[],nextOfferAt:2};
+for (const text of ['ไม่รู้ว่าต้องการอะไร','ไม่เข้าใจคำถาม','ความต้องการคืออะไร','ช่วยอธิบายหน่อย']) {
+  const help=applyLoopChat(prepareLoopChat([...messages,u(text)],needsGuide),{loopTrace:{needs:{quote:text}}},base);
+  assert.equal(help.loop_guide.asked,'needs',text);
+  assert.equal(help.loop_guide.fields.needs,undefined,text);
+}
+const supported=applyLoopChat(prepareLoopChat([u('คำถามกว้างไปสำหรับฉัน')],needsGuide),{guideSupport:{needed:true,message:'ยังไม่ต้องหาคำตอบใหญ่ก็ได้นะ ถ้าหัวหน้าช่วยอะไรเล็ก ๆ ได้สักอย่าง เธออยากให้ช่วยตรงไหน?'}},base);
+assert.equal(supported.loop_guide.asked,'needs');
+assert.match(supported.assistant_message,/หัวหน้าช่วย/);
+const missedSignal=applyLoopChat(prepareLoopChat([u('มันบอกเป็นคำพูดยากจัง')],needsGuide),{},base);
+assert.equal(missedSignal.loop_guide.asked,'needs');
+assert.equal(missedSignal.loop_guide.helpAttempts.needs,1);
+assert.match(missedSignal.assistant_message,/ไม่ต้องรู้ความต้องการลึก/);
+const discovered='อยากให้เขาอธิบายจุดที่ต้องแก้ให้ชัดเจน';
+const afterSupport=applyLoopChat(prepareLoopChat([u(discovered)],supported.loop_guide),{loopTrace:{needs:{quote:discovered}}},base);
+assert.equal(afterSupport.loop_guide.fields.needs,discovered);
+assert.equal(afterSupport.loop_guide.asked,'options');
+const pauseSupport=applyLoopChat(prepareLoopChat([u(LOOP_CHAT_VENT)],supported.loop_guide),{guideSupport:{needed:true,message:'ไม่ควรถามต่อ'}},base);
+assert.equal(pauseSupport.loop_guide.mode,'listening');
+assert.equal(pauseSupport.loop_guide.asked,null);
+const skipSupport=applyLoopChat(prepareLoopChat([u(LOOP_CHAT_SKIP)],supported.loop_guide),{guideSupport:{needed:true}},base);
+assert.equal(skipSupport.loop_guide.asked,'options');
 console.log('PASS: offer, consent/decline, all eight fields, quote grounding, skip, topic reset and safety precedence.');
+console.log('PASS: all eight beginner support paths, repeated uncertainty, contextual explanation, discovery, pause and skip.');
