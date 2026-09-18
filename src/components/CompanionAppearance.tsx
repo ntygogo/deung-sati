@@ -3,7 +3,7 @@ import type { CompanionAppearance as Appearance } from '../shared/companionAppea
 import { appearanceHash } from '../shared/companionAppearance';
 import './CompanionAppearance.css';
 
-const ASSET = '/images/companion_form1.png';
+const ASSET = '/images/companion_dna_base.png';
 export function CompanionAppearance({ appearance, size = 280, onPet, isInteracting = false }: {
   appearance: Appearance; size?: number; onPet?: () => void; isInteracting?: boolean;
 }) {

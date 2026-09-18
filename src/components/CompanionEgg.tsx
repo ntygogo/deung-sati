@@ -29,7 +29,7 @@ export function CompanionEgg({ traceCount = 0, size = 320, onPet, isInteracting 
       <span className="living-egg-waterlight" />
       <span className="living-egg-reaction">
         <span className="living-egg-swim">
-          <img className="living-egg-baby" src="/images/companion_form1.png" alt="" draggable={false} data-testid="egg-embryo" />
+          <img className="living-egg-baby" src="/images/companion_dna_base.png" alt="" draggable={false} data-testid="egg-embryo" />
         </span>
       </span>
       <span className="living-egg-shell" />

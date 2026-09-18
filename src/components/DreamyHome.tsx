@@ -84,7 +84,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
     <section className="dreamy-destinations" aria-label="พื้นที่ของเรา">
       <button className="dreamy-destination dreamy-room-card" onClick={onOpenCompanion}>
         <span><strong>ห้องของน้อง</strong><small>ไปดูว่าน้องเป็นยังไงบ้าง</small></span><ChevronRight className="dreamy-destination-arrow" size={23} />
-        <img className="dreamy-room-baby" src="/images/companion_form1.png" alt="" loading="lazy" />
+        <img className="dreamy-room-baby" src="/images/companion_dna_base.png" alt="" loading="lazy" />
       </button>
       <button className="dreamy-destination dreamy-journey-card" onClick={onOpenJourney}>
         <span><strong>เส้นทางของฉัน</strong><small>ร่องรอยที่เราเคยผ่าน</small></span><ChevronRight className="dreamy-destination-arrow" size={23} />
