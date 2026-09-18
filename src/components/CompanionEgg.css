@@ -1,0 +1,20 @@
+.living-egg{position:relative;isolation:isolate;display:block;width:min(var(--egg-size),100%);aspect-ratio:1;flex-shrink:0;padding:0;border:0;border-radius:30px;background:#f5d3d7;overflow:hidden;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.living-egg:focus-visible{outline:3px solid #ae3977;outline-offset:3px}
+.living-egg-garden{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none}
+.living-egg-interior{position:absolute;left:27%;top:23%;width:44%;height:53%;border-radius:50% 50% 46% 46% / 61% 61% 39% 39%;overflow:hidden;pointer-events:none}
+.living-egg-reaction{position:absolute;left:-2%;top:8%;width:104%;height:87%;transition:transform .4s cubic-bezier(.2,.8,.3,1);transform:scale(var(--embryo-growth))}
+.living-egg-swim{position:absolute;inset:0;animation:embryo-swim 6.2s ease-in-out infinite;transform-origin:57% 53%}
+.living-egg-baby{width:100%;height:100%;object-fit:contain;opacity:.92;filter:saturate(.8) sepia(.08) drop-shadow(0 3px 7px #c5477970);animation:embryo-breathe 4.2s ease-in-out infinite;user-select:none}
+.living-egg-shell{position:absolute;inset:0;background:linear-gradient(113deg,#fff2dc66 0%,transparent 27%,#ffcddc19 50%,transparent 65%,#fff6ea77 94%);box-shadow:inset 7px 1px 13px #fff0e936,inset -6px 2px 16px #ffcbdf33;border-radius:inherit}
+.living-egg-waterlight{position:absolute;inset:5%;border-radius:50%;background:radial-gradient(ellipse,#ffdc9577,transparent 68%);animation:egg-waterlight 5s ease-in-out infinite}
+.living-egg-dust{position:absolute;inset:0}.living-egg-dust i{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff8db;box-shadow:0 0 5px #fff4bd;animation:egg-dust 4.5s ease-in-out infinite}
+.living-egg-heart{position:absolute;left:54%;top:29%;font:32px/1 sans-serif;color:#fff8dd;text-shadow:0 0 10px #ed73a5;opacity:0;transition:opacity .2s,transform .8s;pointer-events:none}
+.living-egg[data-touched=true] .living-egg-reaction{transform:scale(1.07) translateY(-3px)}
+.living-egg[data-touched=true] .living-egg-heart{opacity:1;transform:translateY(-14px)}
+.living-egg[data-ready=true] .living-egg-waterlight{background:radial-gradient(ellipse,#fff1b699,transparent 72%)}
+.living-egg[data-paused=true] *{animation-play-state:paused!important}
+@keyframes embryo-swim{0%,100%{transform:translate(-2%,2%) rotate(-5deg)}45%{transform:translate(2%,-3%) rotate(4deg)}70%{transform:translate(1%,-1%) rotate(1deg)}}
+@keyframes embryo-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035,1.02)}}
+@keyframes egg-waterlight{0%,100%{opacity:.45}50%{opacity:.85}}
+@keyframes egg-dust{0%,100%{opacity:.3;transform:translateY(3px)}50%{opacity:.9;transform:translateY(-5px)}}
+@media(prefers-reduced-motion:reduce){.living-egg *{animation:none!important;transition:none!important}.living-egg[data-touched=true] .living-egg-reaction{transform:scale(var(--embryo-growth))}.living-egg[data-touched=true] .living-egg-heart{transform:none}}
