@@ -93,7 +93,7 @@ export function useConversations(traces: any[]) {
     await persist(current.current);
   }, [ready, persist]);
   useEffect(() => {
-    if (!ready || active.messages.some(m => m.isStreaming)) return;
+    if (!ready) return;
     void persist(active).catch(() => undefined);
   }, [active, ready, persist]);
 

@@ -11,7 +11,7 @@ export interface Conversation {
 }
 export const newConversation = (): Conversation => ({
   id: `conv_${crypto.randomUUID()}`, revision: 0, updatedAt: new Date().toISOString(),
-  messages: [{ id: 'welcome', role: 'ai', text: 'ยินดีต้อนรับนะเธอ 🌱 วันนี้มีเรื่องไหนที่อยากชวนคุย หรือมีอะไรในใจ เล่าให้เราฟังได้เลยนะ...' }],
+  messages: [{ id: 'welcome', role: 'ai', createdAt: Date.now(), text: 'ยินดีต้อนรับนะเธอ 🌱 วันนี้มีเรื่องไหนที่อยากชวนคุย หรือมีอะไรในใจ เล่าให้เราฟังได้เลยนะ...' }],
 });
 export const confirmedTrace = (t: any): boolean => Boolean(t?.growth_event || t?.xp_awarded || t?.is_confirmed);
 export const traceConversationId = (t: any): string | undefined => t?.source_session_id || t?.conversationId || (t?.id?.startsWith('guest_trc_') ? t.id.slice(10) : undefined);
