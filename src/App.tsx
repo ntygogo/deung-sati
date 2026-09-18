@@ -28,6 +28,7 @@ import { CompanionRoom } from "./components/CompanionRoom";
 import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
+import { FutureSelf } from "./components/FutureSelf";
 import { useConversations } from "./hooks/useConversations";
 import { traceFields, type Conversation } from "./shared/conversation";
 import { TraceConversationActions } from "./components/TraceConversationActions";
@@ -493,6 +494,18 @@ export default function App() {
     triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo, undefined, chatContext);
   };
 
+  const handleFutureChat = async (text: string) => {
+    if (debugInfo.isLoading) { setScreen('chat'); return; }
+    try {
+      const doc = await chats.startNew();
+      const history: ChatMessage[] = [...doc.messages, { id: `user-${crypto.randomUUID()}`, role: 'user', text, createdAt: Date.now() }];
+      const update: React.Dispatch<React.SetStateAction<ChatMessage[]>> = change => chats.updateMessages(doc.id, change);
+      update(history); setScreen('chat');
+      const reqId = ++globalRequestId.current;
+      void triggerAiStream(history, reqId, globalRequestId, undefined, update, setDebugInfo, undefined, { id: doc.id });
+    } catch { setScreen('chat'); }
+  };
+
   return (
     <div className="appShell">
       <style>{styles}</style>
@@ -512,7 +525,6 @@ export default function App() {
         {screen === "home" && (
           <Home
             setScreen={setScreen}
-            openEvidence={() => setShowEvidence(true)}
             onOpenMenu={() => setIsDrawerOpen(true)}
             onStartChat={handleStartChatFromHome}
           />
@@ -587,10 +599,7 @@ export default function App() {
         )}
 
         {screen === "profile" && (
-          <Profile
-            setScreen={setScreen}
-            onOpenMenu={() => setIsDrawerOpen(true)}
-          />
+          <FutureSelf onBack={() => setScreen('home')} onChat={text => void handleFutureChat(text)} />
         )}
 
         {!["pause", "beforeSpeak", "perspective"].includes(screen) && (
@@ -906,12 +915,10 @@ async function triggerAiStream(
 
 function Home({
   setScreen,
-  openEvidence,
   onOpenMenu,
   onStartChat,
 }: {
   setScreen: (s: Screen) => void;
-  openEvidence: () => void;
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
 }) {
@@ -951,9 +958,9 @@ function Home({
 
       {/* 5. FUTURE SELF: Cosmic Glass Letter from Future Self */}
       <FutureSelfCard
-        trait="คนที่สงบและชัดเจนขึ้นในทุกความรู้สึก"
-        evidence="หยุดก่อนพูดและสังเกตใจได้ 2 ครั้ง"
-        onClick={openEvidence}
+        trait="ค่อย ๆ เป็นฉันที่อยากเป็น"
+        evidence="เลือกก้าวเล็ก ๆ ที่ทำไหว แล้วกลับมาดูว่าอะไรช่วย"
+        onClick={() => setScreen("profile")}
       />
 
       <div className="bottomSpacer" style={{ height: "40px" }} />
@@ -2567,99 +2574,6 @@ function Journey({
           <b>แต่คุณกำลังเติบโตขึ้นในแบบของคุณ</b>
         </p>
         🌿
-      </div>
-
-      <div className="bottomSpacer" />
-    </div>
-  );
-}
-
-function Profile({
-  setScreen,
-  onOpenMenu,
-}: {
-  setScreen: (s: Screen) => void;
-  onOpenMenu: () => void;
-}) {
-  const [selectedTraits, setSelectedTraits] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("deung_sati_future_self_traits_v1");
-      return saved ? JSON.parse(saved) : [
-        "พูดตรงโดยไม่ทำร้าย",
-        "รักษาขอบเขตตัวเอง",
-        "ใจเย็นแต่ไม่กดความรู้สึก",
-      ];
-    } catch {
-      return [
-        "พูดตรงโดยไม่ทำร้าย",
-        "รักษาขอบเขตตัวเอง",
-        "ใจเย็นแต่ไม่กดความรู้สึก",
-      ];
-    }
-  });
-
-  const allTraits = [
-    "พูดตรงโดยไม่ทำร้าย",
-    "รักษาขอบเขตตัวเอง",
-    "ใจเย็นแต่ไม่กดความรู้สึก",
-    "ให้เกียรติตัวเองและผู้อื่น",
-    "กล้าขอเวลาพักเมื่อใจยังไม่พร้อม",
-    "ให้อภัยตัวเองเมื่อเผลอพลาด",
-  ];
-
-  const toggleTrait = (t: string) => {
-    const next = selectedTraits.includes(t)
-      ? selectedTraits.filter((item) => item !== t)
-      : [...selectedTraits, t];
-    setSelectedTraits(next);
-    localStorage.setItem("deung_sati_future_self_traits_v1", JSON.stringify(next));
-  };
-
-  return (
-    <div className="screen scrollArea">
-      <AppHeader
-        title="ฉัน"
-        onEmergency={() => setScreen("pause")}
-        onOpenMenu={onOpenMenu}
-      />
-
-      <div className="profileCard">
-        <Baby size={105} />
-        <h2>คนที่ฉันอยากเป็น (Future Self)</h2>
-        <p>
-          ไม่ต้องเป็นคนสมบูรณ์แบบ
-          <br />
-          แค่ค่อยๆ เป็นคนที่ตัวเองเลือกในทุก Choice Point
-        </p>
-      </div>
-
-      <div style={{ padding: "0 20px" }}>
-        <p style={{ fontSize: "13px", color: "#685141", marginBottom: "10px" }}>
-          แตะเพื่อเลือกคุณค่าที่อยากนำทางใจ:
-        </p>
-        {allTraits.map((trait, i) => {
-          const isSelected = selectedTraits.includes(trait);
-          return (
-            <div
-              className="traitCard"
-              key={trait}
-              onClick={() => toggleTrait(trait)}
-              style={{
-                cursor: "pointer",
-                background: isSelected ? "#F3EFE6" : "#FFFDF8",
-                borderColor: isSelected ? "#657E53" : "#E8DDCF",
-              }}
-            >
-              <span style={{ background: isSelected ? "#657E53" : "#DDE7D8", color: isSelected ? "white" : "#3F5944" }}>
-                {i + 1}
-              </span>
-              <b>{trait}</b>
-              <span style={{ fontSize: "16px", color: isSelected ? "#3F5944" : "#8A7664" }}>
-                {isSelected ? "✓" : "+"}
-              </span>
-            </div>
-          );
-        })}
       </div>
 
       <div className="bottomSpacer" />

@@ -97,10 +97,10 @@ export function useConversations(traces: any[]) {
     void persist(active).catch(() => undefined);
   }, [active, ready, persist]);
 
-  const setMessages = useCallback((update: ChatMessage[] | ((old: ChatMessage[]) => ChatMessage[])) => {
-    const id = active.id;
+  const updateMessages = useCallback((id: string, update: ChatMessage[] | ((old: ChatMessage[]) => ChatMessage[])) => {
     setActive(old => old.id === id ? { ...old, messages: typeof update === 'function' ? update(old.messages) : update, updatedAt: new Date().toISOString() } : old);
-  }, [active.id]);
+  }, []);
+  const setMessages = useCallback((update: ChatMessage[] | ((old: ChatMessage[]) => ChatMessage[])) => updateMessages(active.id, update), [active.id, updateMessages]);
   const get = async (id: string) => owner === 'guest' ? readGuest().conversations[id] || null : (await request('/' + encodeURIComponent(id))).conversation as Conversation | null;
   const history = async (trace: any): Promise<Conversation[]> => {
     const source = traceConversationId(trace);
@@ -133,7 +133,7 @@ export function useConversations(traces: any[]) {
     } catch (e) { setError((e as Error).message); return false; }
     finally { busy.current = false; }
   };
-  const startNew = async () => { await flush(); install(newConversation()); };
+  const startNew = async () => { await flush(); const doc = newConversation(); install(doc); return doc; };
   const removeHistory = async (trace: any) => {
     await queue.current.catch(() => undefined);
     const docs = await history(trace);
@@ -161,5 +161,5 @@ export function useConversations(traces: any[]) {
   const sourceTrace = traces.find(t => t.id === (active.parentTraceId || active.draftTraceId) || traceConversationId(t) === active.id);
   const pastContext = sourceTrace ? JSON.stringify({ date: sourceTrace.created_at, title: sourceTrace.title, fields: traceFields(sourceTrace) }) : undefined;
   const locked = !!sourceTrace && confirmedTrace(sourceTrace) && !active.parentTraceId;
-  return { active, setMessages, ready, error, flush, history, listAll, open, reload, resume, removeHistory, startNew, sourceTrace, pastContext, locked, isGuest: owner === 'guest' };
+  return { active, setMessages, updateMessages, ready, error, flush, history, listAll, open, reload, resume, removeHistory, startNew, sourceTrace, pastContext, locked, isGuest: owner === 'guest' };
 }

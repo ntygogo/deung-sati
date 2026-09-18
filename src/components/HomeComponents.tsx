@@ -899,12 +899,12 @@ export const FutureSelfCard: React.FC<{
       </div>
       <div style={{ flex: 1 }}>
         <span style={{ fontSize: '11px', fontWeight: 700, color: '#7C3AED', letterSpacing: '0.02em' }}>
-          ข้อความจากตัวฉันในอนาคต
+          ก้าวเล็ก ๆ สู่ตัวฉันในอนาคต
         </span>
         <strong style={{ display: 'block', fontSize: '14px', color: '#1E1B4B', marginTop: '1px' }}>
           {trait}
         </strong>
-        <span style={{ fontSize: '11px', color: '#64748B' }}>หลักฐาน: {evidence}</span>
+        <span style={{ fontSize: '11px', color: '#64748B' }}>{evidence}</span>
       </div>
       <span style={{ fontSize: '16px', color: '#A855F7' }}>›</span>
     </button>
@@ -978,5 +978,6 @@ export const GrowthReflectionCard: React.FC<{
     </button>
   );
 };
+
 
 
