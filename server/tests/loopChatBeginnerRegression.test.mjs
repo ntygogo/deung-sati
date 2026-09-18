@@ -4,7 +4,7 @@ const u=content=>({role:'user',content});
 const base={assistant_message:'รับฟังอยู่',safety_state:'normal',mode:'HOLD',capacity:'medium',user_intent:'vent',readiness:'story'};
 const fields={trigger:'หัวหน้าขอแก้งาน',emotion_or_body:'อึดอัด',automatic_story:'คิดว่าฉันไม่เก่ง',facts:'เขาให้แก้ตัวเลขสองจุด',needs:'อยากพัก',options:'พักก่อนหรือแยกงานเป็นข้อ'};
 const guide={mode:'offered',fields,skipped:[],asked:null,nextOfferAt:2};
-for(const text of ['ช่วยพาไปทีละนิดได้ไหม','ได้ แต่อย่าถามยากนะ','ช่วยหน่อย อยากเข้าใจ','เริ่มเย็นลงนิดนึงแล้ว ช่วยพาสำรวจต่อหน่อย']){
+for(const text of ['ช่วยพาไปทีละนิดได้ไหม','ได้ แต่อย่าถามยากนะ','ช่วยหน่อย อยากเข้าใจ','เริ่มเย็นลงนิดนึงแล้ว ช่วยพาสำรวจต่อหน่อย','อยากสำรวจ แต่ไม่รู้จะตอบได้ไหม']){
   const r=applyLoopChat(prepareLoopChat([u(text)],guide),{},base);
   assert.equal(r.loop_guide.mode,'guided',text);
 }
@@ -20,7 +20,7 @@ for(const text of ['ยังไม่พร้อมบอกใครจริ
   assert.ok(r.loop_guide.skipped.includes('micro_action'));
   assert.equal(r.loop_guide.fields.micro_action,undefined);
 }
-for(const text of ['แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ขอบคุณนะ วันนี้ยังไม่ไหวจริง ๆ ขออยู่แค่นี้ก่อน','ยังถามให้เลือกอีก ขอพอก่อน ไม่อยากตอบซ้ำแล้ว']){
+for(const text of ['แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ไม่อยากทำอะไรเลย ไม่รู้จะตอบคำถามยังไง แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ขอบคุณนะ วันนี้ยังไม่ไหวจริง ๆ ขออยู่แค่นี้ก่อน','ยังถามให้เลือกอีก ขอพอก่อน ไม่อยากตอบซ้ำแล้ว']){
   const r=applyLoopChat(prepareLoopChat([u(text)],guide),{},base);
   assert.equal(r.loop_guide.mode,'listening');
   assert.deepEqual(r.quick_replies,[]);
@@ -53,6 +53,12 @@ const tailored=applyLoopChat(prepareLoopChat([u('อยากสำรวจ')],
 assert.ok(tailored.assistant_message.includes(question));
 const mismatch=applyLoopChat(prepareLoopChat([u('อยากสำรวจ')],optionsGuide),{guideQuestion:{field:'needs',message:'คำถามผิดช่องที่ไม่ควรแสดง'}},base);
 assert.ok(!mismatch.assistant_message.includes('คำถามผิดช่อง'));
+const vent=prepareLoopChat([u('อยากระบายต่อก่อน มันน้อยใจอะเหมือนเราไม่มีสิทธิ์เหนื่อย')],guide);
+assert.equal(vent.state.preferListening,true);
+for(const [field,message] of [['needs','ในใจลึก ๆ เธอต้องการอะไรจากเขามากที่สุด?'],['facts','มีข้อมูลในอดีตไหมที่แสดงว่าเพื่อนๆ ยังใส่ใจหรือต้องการเราอยู่?']]){
+  const r=applyLoopChat(prepareLoopChat([u('อยากสำรวจ')],{...guide,fields:{...fields,[field]:undefined}}),{guideQuestion:{field,message}},base);
+  assert.ok(!r.assistant_message.includes(message));
+}
 const exercise={id:'emergency_pause',reason:'internal rationale'};
 assert.equal(applyLoopChat(prepareLoopChat([u('อึดอัด อยากรู้สึกดีขึ้น')]),{}, {...base,recommended_exercise:exercise}).recommended_exercise,null);
 assert.deepEqual(applyLoopChat(prepareLoopChat([u('อยากฝึกหายใจ')]),{}, {...base,recommended_exercise:exercise}).recommended_exercise,exercise);
