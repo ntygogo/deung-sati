@@ -1,5 +1,6 @@
 import express from 'express';
 import { conversationsRouter } from './routes/conversations.js';
+import { futureSelfRouter } from './routes/futureSelf.js';
 import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import { classifySafety } from './safetyClassifier.js';
@@ -17,6 +18,7 @@ export const apiApp = express();
 apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
 apiApp.use('/loops/conversations', conversationsRouter);
+apiApp.use('/user/future-self', futureSelfRouter);
 
 // 1. Health endpoint
 apiApp.get('/health', (_req: Request, res: Response) => {
@@ -1020,4 +1022,3 @@ apiApp.post('/user/migrate-legacy-local', requireAuth, async (req: Authenticated
     res.status(500).json({ error: err.message || 'Legacy data migration failed' });
   }
 });
-
