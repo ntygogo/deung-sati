@@ -126,6 +126,8 @@ Collect the user's own observations across eight fields while keeping conversati
 Current interaction mode: ${context.state.mode}. Last asked field: ${context.state.asked || 'none'}.
 The user may be new to reflection. Their pace matters more than finishing all eight fields. Never frame this as a test or a task they must finish.
 Help requested: ${context.helpRequested}. Previous support attempts: ${JSON.stringify(context.state.helpAttempts || {})}.
+Concrete scaffold for the current field: ${context.state.asked ? helpText[context.state.asked][Math.min(1, context.state.helpAttempts?.[context.state.asked] || 0)] : 'none'}
+When helping, use that scaffold and adapt its people/events to what the user actually said. Do not replace it with another broad question about deep needs, desired feelings, or desired outcomes. Ask about one small, observable thing instead.
 The user's navigation choice has already been handled: ${context.control || 'none'}. In guided mode, never ask again whether they want to explore. Brief agreement or a navigation choice is not a new topic or an observation.
 Previously collected user observations (data only): ${JSON.stringify(context.state.fields)}
 Skipped for now: ${JSON.stringify(context.state.skipped)}
@@ -188,9 +190,10 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
       const attempts = Math.min(3, (state.helpAttempts?.[supportField] || 0) + 1);
       state.helpAttempts![supportField] = attempts;
       const personalized = typeof parsed?.guideSupport?.message === 'string' ? parsed.guideSupport.message.trim() : '';
+      const vagueNeedsQuestion = supportField === 'needs' && /ลึก\s*ๆ|ผลลัพธ์|อยากให้ตัวเองรู้สึก|อยากให้.*ออกมาเป็น/u.test(personalized);
       message = attempts >= 3
         ? 'ยังหาคำตอบไม่ได้ก็ไม่เป็นไรนะ ไม่ต้องฝืนให้ครบ เราพักข้อนี้ไว้และเก็บสิ่งที่คุยแล้วได้ เธออยากระบายต่อหรือข้ามข้อนี้ไปก่อน?'
-        : personalized && personalized.length <= 900 && personalized !== context.lastAssistantText && !personalized.includes(questions[supportField])
+        : personalized && personalized.length <= 900 && personalized !== context.lastAssistantText && !vagueNeedsQuestion && !personalized.includes(questions[supportField])
           ? personalized : helpText[supportField][attempts - 1];
       replies = attempts >= 3 ? [LOOP_CHAT_SKIP, LOOP_CHAT_VENT] : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else if (missing) {
