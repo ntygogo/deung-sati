@@ -122,9 +122,10 @@ assert.match(understood.assistant_message,/ค่อย ๆ ลองจาก�
 const missedSignal=applyLoopChat(prepareLoopChat([u('มันบอกเป็นคำพูดยากจัง')],needsGuide),{},base);
 assert.equal(missedSignal.loop_guide.asked,'needs');
 assert.equal(missedSignal.loop_guide.helpAttempts.needs,1);
-assert.match(missedSignal.assistant_message,/ไม่ต้องรู้ความต้องการลึก/);
+assert.match(missedSignal.assistant_message,/ยังไม่ต้องตั้งชื่อความต้องการ/);
 const vagueHelp=applyLoopChat(prepareLoopChat([u('ยังไม่รู้ ช่วยไกด์หน่อย')],needsGuide),{guideSupport:{needed:true,message:'ลึกๆ แล้วเธออยากให้ผลลัพธ์ออกมาเป็นแบบไหน?'}},base);
-assert.match(vagueHelp.assistant_message,/ถ้าคนในเรื่องนี้ทำอะไร/);
+assert.match(vagueHelp.assistant_message,/อยากพัก.*อยากได้ข้อมูลให้ชัด/);
+assert.doesNotMatch(vagueHelp.assistant_message,/ถ้าคนในเรื่องนี้ทำอะไร/);
 const discovered='อยากให้เขาอธิบายจุดที่ต้องแก้ให้ชัดเจน';
 const afterSupport=applyLoopChat(prepareLoopChat([u(discovered)],supported.loop_guide),{loopTrace:{needs:{quote:discovered}}},base);
 assert.equal(afterSupport.loop_guide.fields.needs,discovered);

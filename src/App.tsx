@@ -1793,7 +1793,6 @@ function ChatScreen({
                             ]?.title || "แบบฝึกสติ"}
                           </b>
                         </div>
-                        <p>{msg.structuredTurn.recommended_exercise.reason}</p>
                         <p className="consentQuestion">
                           อยากลองอะไรสั้นๆ ประมาณ 1 นาทีไหม?
                         </p>
