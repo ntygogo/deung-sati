@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { prepareLoopChat, applyLoopChat, loopChatReview, isChatWrapUpIntent, LOOP_CHAT_FIELDS, LOOP_CHAT_START, LOOP_CHAT_VENT, LOOP_CHAT_SKIP } from '../../src/shared/chat-protocol/loopChatGuide.ts';
 const base = { assistant_message: 'รับฟังอยู่', safety_state: 'normal', mode: 'HOLD', capacity: 'medium', user_intent: 'vent', readiness: 'story' };
 const u = content => ({role:'user',content});
-for (const text of ['อยากระบายต่อ', 'ขอระบายต่อ', 'วันนี้สบายใจขึ้น', 'ยังไม่พร้อม']) assert.equal(isChatWrapUpIntent(text),false,text);
+for (const text of ['อยากระบายต่อ', 'ขอระบายต่อ', 'วันนี้สบายใจขึ้น', 'ยังไม่พร้อม', 'ขอบคุณนะ', 'ขอบคุณมากนะ ยังมีเรื่องจะเล่าต่อ', 'ยังไม่อยากจบการคุย', 'เขาบอกว่าพอแค่นี้', 'เพื่อนไปนอนแล้ว แต่ฉันยังอยากคุย', 'ไม่อยากพอแค่นี้']) assert.equal(isChatWrapUpIntent(text),false,text);
 for (const text of ['บาย', 'บ๊ายบาย', 'บายจ้า', 'วันนี้พอแค่นี้', 'ไปนอนแล้ว']) assert.equal(isChatWrapUpIntent(text),true,text);
 const event = 'หัวหน้าขอแก้งานสองจุด';
 const feeling = 'เสียใจ';
@@ -41,6 +41,28 @@ assert.equal(prepareLoopChat([u('ได้เลย')]).state.mode,'listening','
 const declined = applyLoopChat(prepareLoopChat([...messages,u(LOOP_CHAT_VENT)],turn.loop_guide),{},base);
 assert.equal(declined.loop_guide.mode,'listening');
 assert.equal(applyLoopChat(prepareLoopChat([...messages,u(LOOP_CHAT_VENT),u('อยากเล่าอีกนิด')],declined.loop_guide),{},base).loop_guide.mode,'listening');
+// Venting must never become a goodbye, summary, or exercise even if the model suggests it.
+const ventHistory=[...messages,u(LOOP_CHAT_VENT)];
+let listening=applyLoopChat(prepareLoopChat(ventHistory,turn.loop_guide),{}, {
+  ...base, assistant_message:'ก่อนพักตรงนี้ อยากให้เราสรุปสิ่งที่คุยกันไหม?',
+  quick_replies:['สรุปให้หน่อย','ไว้คราวหน้า'], recommended_exercise:{id:'fact_story_unknown'},
+});
+assert.match(listening.assistant_message,/เราฟังอยู่/);
+assert.deepEqual(listening.quick_replies,[]);
+assert.equal(listening.recommended_exercise,null);
+assert.equal(listening.loop_guide.preferListening,true);
+for (const detail of ['อยากเล่าเรื่องงานอีก', 'ยังรู้สึกเสียใจ', 'ขอบคุณนะ', 'มีเรื่องเพื่อนด้วย', 'ยังอยากคุยต่อ']) {
+  ventHistory.push(u(detail));
+  listening=applyLoopChat(prepareLoopChat(ventHistory,listening.loop_guide),{},base);
+  assert.equal(listening.loop_guide.mode,'listening','do not interrupt with another offer after three messages');
+  assert.deepEqual(listening.quick_replies,[]);
+}
+const resumed=applyLoopChat(prepareLoopChat([...ventHistory,u('อยากสำรวจ')],listening.loop_guide),{},base);
+assert.equal(resumed.loop_guide.mode,'guided');
+assert.equal(resumed.loop_guide.preferListening,false);
+assert.deepEqual(resumed.loop_guide.fields,declined.loop_guide.fields);
+const ventCrisis=applyLoopChat(prepareLoopChat(ventHistory,listening.loop_guide),{}, {...base,safety_state:'crisis',assistant_message:'crisis support'});
+assert.equal(ventCrisis.assistant_message,'crisis support');
 messages.push(u(LOOP_CHAT_START));
 turn=applyLoopChat(prepareLoopChat(messages,turn.loop_guide),{},base);
 assert.equal(turn.loop_guide.asked,'automatic_story');
