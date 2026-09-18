@@ -2,6 +2,7 @@
  * Structured AI Output Contract for Deung Sati V1 (Authoritative SSOT)
  */
 
+import type { LoopChatGuide } from './loopChatGuide.js';
 import type { SafetyState, CbtConversationStage } from './conversationTypes.js';
 import type { UserCognitiveCapacity } from './capacityRules.js';
 import type { ConversationMode } from './modeRules.js';
@@ -70,6 +71,7 @@ export interface DeungSatiAIResponse {
  * Backward compatibility interface for existing components & API endpoints
  */
 export interface ChatEngineTurnResponse {
+  loop_guide?: LoopChatGuide;
   assistant_message: string;
   safety_state: SafetyState;
   mode: ConversationMode;

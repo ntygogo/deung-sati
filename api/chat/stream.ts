@@ -1,6 +1,7 @@
 type VercelRequest = any;
 type VercelResponse = any;
 import { GoogleGenAI } from '@google/genai';
+import { prepareLoopChat, loopChatInstruction, applyLoopChat, type LoopChatContext } from '../../src/shared/chat-protocol/loopChatGuide.js';
 import {
   DUENG_SATI_UNIFIED_MASTER_PROMPT,
   isCrisisMessage,
@@ -16,7 +17,7 @@ import {
   type CbtConversationStage,
 } from '../../src/shared/chat-protocol/index.js';
 
-function sanitizeResponse(raw: string): {
+function sanitizeResponse(raw: string, loopContext: LoopChatContext): {
   assistant_message: string;
   turn: ChatEngineTurnResponse;
 } {
@@ -109,7 +110,8 @@ function sanitizeResponse(raw: string): {
     suggested_intervention: (parsed?.suggestedIntervention || parsed?.suggested_intervention || 'reflection') as SuggestedIntervention,
   };
 
-  return { assistant_message: assistantMsg, turn: structuredTurn };
+  const guidedTurn = applyLoopChat(loopContext, parsed, structuredTurn);
+  return { assistant_message: guidedTurn.assistant_message, turn: guidedTurn };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -117,11 +119,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, requestId, exerciseResult } = req.body || {};
+  const { messages, requestId, exerciseResult, loopGuide } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
 
+  const loopContext = prepareLoopChat(messages, loopGuide);
   const apiKey = process.env.GEMINI_API_KEY || '';
 
   // Setup Server-Sent Events headers
@@ -244,9 +247,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model: modelCandidate,
           contents,
           config: {
-            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext),
             temperature: generationTemperature,
-            maxOutputTokens: 1000,
+            maxOutputTokens: 2048,
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -256,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const rawText = response.text || '';
         if (rawText.trim()) {
-          const { assistant_message, turn } = sanitizeResponse(rawText);
+          const { assistant_message, turn } = sanitizeResponse(rawText, loopContext);
 
           res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'normal' })}\n\n`);
           res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);

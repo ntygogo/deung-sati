@@ -29,6 +29,7 @@ import { ConversationalOnboarding } from "./components/ConversationalOnboarding"
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
 import { AuthModal } from "./components/AuthModal";
+import { loopChatReview, LOOP_CHAT_FIELDS, isChatWrapUpIntent } from "./shared/chat-protocol/loopChatGuide";
 
 const SvgIcon = ({
   name,
@@ -734,6 +735,7 @@ async function triggerAiStream(
         sessionId: "default-session",
         requestId,
         exerciseResult: effectiveExerciseResult || undefined,
+        loopGuide: [...history].reverse().find(m => m.role === 'ai' && m.structuredTurn)?.structuredTurn?.loop_guide,
       }),
     });
 
@@ -1129,6 +1131,7 @@ function ChatScreen({
   const lastAiWithTurn = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn);
   const serverLoopReadiness = lastAiWithTurn?.structuredTurn?.loop_readiness || 'collecting';
   const serverExtractedLoop = lastAiWithTurn?.structuredTurn?.extracted_loop || null;
+  const activeLoopGuide = lastAiWithTurn?.structuredTurn?.loop_guide;
   const isLoopReady = serverLoopReadiness === 'ready' && Boolean(serverExtractedLoop);
 
   const currentJourneyStep = mapTurnToUserFacingStep(
@@ -1147,6 +1150,7 @@ function ChatScreen({
       "สรุปแล้วบันทึก", "บันทึกลูปที่คุย", "บันทึกสิ่งที่คุย", "บันทึกลูป", "เก็บบันทึก",
       "บันทึกไว้", "สรุปให้หน่อย", "ไว้คราวหน้า", "พอแค่นี้ก่อน", "พอแค่นี้", "ขอบคุณนะ", "บาย"
     ];
+    controlKeywords.push("ค่อย ๆ สำรวจลูปด้วยกัน", "อยากระบายต่อ", "ข้ามข้อนี้ก่อน");
     const substantiveUserMsgs = messages.filter((m) => {
       if (m.role !== "user" || !m.text || !m.text.trim()) return false;
       const clean = m.text.trim();
@@ -1322,7 +1326,7 @@ function ChatScreen({
   };
 
   const handleOpenLoopReview = () => {
-    setReviewInitialData(prepareLoopReviewData());
+    setReviewInitialData({ ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) });
     setShowLoopReview(true);
   };
 
@@ -1367,7 +1371,7 @@ function ChatScreen({
       "ช่วยดึงสติหน่อย",
     ];
 
-    if (exerciseKeywords.some((k) => trimmed.includes(k))) {
+    if ((!activeLoopGuide || activeLoopGuide.mode === 'listening') && !trimmed.includes('ยังไม่พร้อม') && exerciseKeywords.some((k) => trimmed.includes(k))) {
       const lastAiMsg = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn?.recommended_exercise);
       if (lastAiMsg?.structuredTurn?.recommended_exercise?.id) {
         setActiveInlineExercise({
@@ -1405,7 +1409,7 @@ function ChatScreen({
         createdAt: Date.now(),
       };
 
-      const reviewData = prepareLoopReviewData();
+      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1423,22 +1427,7 @@ function ChatScreen({
     }
 
     // 2. Wrap-up / End-of-conversation Intent
-    const wrapUpKeywords = [
-      "พอแค่นี้",
-      "พอแค่นี้ก่อน",
-      "วันนี้พอแค่นี้",
-      "ไปนอนแล้ว",
-      "ไปทำงานก่อน",
-      "ขอตัวก่อน",
-      "แค่นี้ก่อน",
-      "ขอบคุณนะ",
-      "ขอบคุณมากนะ",
-      "บาย",
-      "บ๊ายบาย",
-      "จบการคุย",
-      "จบแค่นี้",
-    ];
-    const isWrapUpIntent = wrapUpKeywords.some((k) => normalizedInput.includes(k));
+    const isWrapUpIntent = isChatWrapUpIntent(normalizedInput);
 
     if (isWrapUpIntent) {
       const userMessage: ChatMessage = {
@@ -1456,7 +1445,7 @@ function ChatScreen({
 
       if (isDataComplete) {
         // Data is complete -> auto-present summary/review
-        const reviewData = prepareLoopReviewData();
+        const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
         setReviewInitialData(reviewData);
 
         const aiReplyMessage: ChatMessage = {
@@ -1496,7 +1485,7 @@ function ChatScreen({
         text: trimmed,
         createdAt: Date.now(),
       };
-      const reviewData = prepareLoopReviewData();
+      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1586,7 +1575,7 @@ function ChatScreen({
       {/* 4-Step Chat Journey Path Bar (Decluttered Single Line) */}
       <div
         style={{
-          display: "flex",
+          display: activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review' ? 'none' : 'flex',
           flexDirection: "column",
           padding: "8px 16px 10px",
           background: "rgba(255, 255, 255, 0.95)",
@@ -1676,6 +1665,15 @@ function ChatScreen({
         </div>
       </div>
 
+      {(activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review') && (
+        <div role="status" style={{ padding: '8px 16px', background: '#FFF7FA', color: '#9D174D', fontSize: '12px' }}>
+          สำรวจลูปในแชต · มีข้อมูล {LOOP_CHAT_FIELDS.filter(key => activeLoopGuide.fields[key]).length}/8 ส่วน
+          <span> · ข้ามหรือกลับไประบายได้เสมอ</span>
+          <button type="button" onClick={handleOpenLoopReview} style={{ display: 'block', marginTop: '6px', padding: '4px 10px', border: '1px solid #FDA4AF', borderRadius: '999px', background: 'white', color: '#9D174D', cursor: 'pointer' }}>
+            ดูสรุปที่คุยไว้
+          </button>
+        </div>
+      )}
       <div className="chatBody" ref={chatScrollRef}>
         <div className="dateLabel">วันนี้</div>
 

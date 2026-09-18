@@ -60,7 +60,7 @@ apiApp.get('/session/:sessionId', (req: Request, res: Response) => {
 // 4. Pure Gemini Streaming Chat endpoint (SSE) with Structured Turn Contract
 apiApp.post('/chat/stream', async (req: Request, res: Response) => {
   try {
-    const { messages, sessionId = 'default-session', sessionState, requestId, exerciseResult } = req.body;
+    const { messages, sessionId = 'default-session', sessionState, requestId, exerciseResult, loopGuide } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'Messages array is required' });
       return;
@@ -98,6 +98,7 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
       sessionState,
       requestId,
       exerciseResult,
+      loopGuide,
       onAssistantToken: (chunkText: string) => {
         if (!res.writableEnded) {
           res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: chunkText, requestId })}\n\n`);
