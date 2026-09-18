@@ -101,7 +101,12 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     const missing = LOOP_CHAT_FIELDS.find(key => !state.fields[key] && !state.skipped.includes(key));
     state.asked = missing || null;
     if (missing) {
-      message = [summary, questions[missing]].filter(Boolean).join('\n\n');
+      const reflection = context.latest === LOOP_CHAT_START
+        ? 'ได้เลย เราค่อย ๆ ดูไปด้วยกัน ตอบเท่าที่พร้อมก็พอนะ'
+        : context.latest === LOOP_CHAT_SKIP ? 'ข้ามไว้ก่อนได้เลยนะ' : summary;
+      const question = missing === 'facts' && !state.fields.automatic_story
+        ? 'ในเหตุการณ์นี้ สิ่งที่รู้แน่ ๆ ว่าเกิดขึ้นจริงคืออะไร?' : questions[missing];
+      message = [reflection, question].filter(Boolean).join('\n\n');
       replies = [LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else {
       state.mode = 'review';
