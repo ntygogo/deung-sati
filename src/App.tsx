@@ -29,6 +29,7 @@ import { ConversationalOnboarding } from "./components/ConversationalOnboarding"
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
 import { AuthModal } from "./components/AuthModal";
+import { loopChatReview, LOOP_CHAT_FIELDS } from "./shared/chat-protocol/loopChatGuide";
 
 const SvgIcon = ({
   name,
@@ -734,6 +735,7 @@ async function triggerAiStream(
         sessionId: "default-session",
         requestId,
         exerciseResult: effectiveExerciseResult || undefined,
+        loopGuide: [...history].reverse().find(m => m.role === 'ai' && m.structuredTurn)?.structuredTurn?.loop_guide,
       }),
     });
 
@@ -1129,6 +1131,7 @@ function ChatScreen({
   const lastAiWithTurn = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn);
   const serverLoopReadiness = lastAiWithTurn?.structuredTurn?.loop_readiness || 'collecting';
   const serverExtractedLoop = lastAiWithTurn?.structuredTurn?.extracted_loop || null;
+  const activeLoopGuide = lastAiWithTurn?.structuredTurn?.loop_guide;
   const isLoopReady = serverLoopReadiness === 'ready' && Boolean(serverExtractedLoop);
 
   const currentJourneyStep = mapTurnToUserFacingStep(
@@ -1147,6 +1150,7 @@ function ChatScreen({
       "สรุปแล้วบันทึก", "บันทึกลูปที่คุย", "บันทึกสิ่งที่คุย", "บันทึกลูป", "เก็บบันทึก",
       "บันทึกไว้", "สรุปให้หน่อย", "ไว้คราวหน้า", "พอแค่นี้ก่อน", "พอแค่นี้", "ขอบคุณนะ", "บาย"
     ];
+    controlKeywords.push("ค่อย ๆ สำรวจลูปด้วยกัน", "อยากระบายต่อ", "ข้ามข้อนี้ก่อน");
     const substantiveUserMsgs = messages.filter((m) => {
       if (m.role !== "user" || !m.text || !m.text.trim()) return false;
       const clean = m.text.trim();
@@ -1322,7 +1326,7 @@ function ChatScreen({
   };
 
   const handleOpenLoopReview = () => {
-    setReviewInitialData(prepareLoopReviewData());
+    setReviewInitialData({ ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) });
     setShowLoopReview(true);
   };
 
@@ -1405,7 +1409,7 @@ function ChatScreen({
         createdAt: Date.now(),
       };
 
-      const reviewData = prepareLoopReviewData();
+      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1456,7 +1460,7 @@ function ChatScreen({
 
       if (isDataComplete) {
         // Data is complete -> auto-present summary/review
-        const reviewData = prepareLoopReviewData();
+        const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
         setReviewInitialData(reviewData);
 
         const aiReplyMessage: ChatMessage = {
@@ -1496,7 +1500,7 @@ function ChatScreen({
         text: trimmed,
         createdAt: Date.now(),
       };
-      const reviewData = prepareLoopReviewData();
+      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1676,6 +1680,12 @@ function ChatScreen({
         </div>
       </div>
 
+      {(activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review') && (
+        <div role="status" style={{ padding: '8px 16px', background: '#FFF7FA', color: '#9D174D', fontSize: '12px' }}>
+          สำรวจลูปในแชต · มีข้อมูล {LOOP_CHAT_FIELDS.filter(key => activeLoopGuide.fields[key]).length}/8 ส่วน
+          <span> · ข้ามหรือกลับไประบายได้เสมอ</span>
+        </div>
+      )}
       <div className="chatBody" ref={chatScrollRef}>
         <div className="dateLabel">วันนี้</div>
 

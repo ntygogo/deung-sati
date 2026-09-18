@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
+import { prepareLoopChat, loopChatInstruction, applyLoopChat, type LoopChatContext } from '../src/shared/chat-protocol/loopChatGuide.js';
 import {
   DUENG_SATI_UNIFIED_MASTER_PROMPT,
   isCrisisMessage,
@@ -22,6 +23,7 @@ export interface StreamChatResponseParams {
   sessionState?: any;
   requestId?: number;
   exerciseResult?: any;
+  loopGuide?: unknown;
   onAssistantToken: (token: string) => void;
   onAssistantMeta: (meta: ChatEngineTurnResponse) => void;
   onDone: (
@@ -36,7 +38,7 @@ export interface StreamChatResponseParams {
  * Robust Sanitizer & Parser for Deung Sati AI Responses (V1 SSOT Architecture).
  * Guarantees that assistant_message is ALWAYS pure natural human text and NEVER raw JSON.
  */
-export function sanitizeDeungSatiResponse(raw: string): {
+export function sanitizeDeungSatiResponse(raw: string, loopContext?: LoopChatContext): {
   assistant_message: string;
   turn: ChatEngineTurnResponse;
 } {
@@ -187,13 +189,15 @@ export function sanitizeDeungSatiResponse(raw: string): {
     extracted_loop: extractedLoop,
   };
 
-  return { assistant_message: assistantMsg, turn: structuredTurn };
+  const guidedTurn = loopContext ? applyLoopChat(loopContext, parsed, structuredTurn) : structuredTurn;
+  return { assistant_message: guidedTurn.assistant_message, turn: guidedTurn };
 }
 
 export async function streamChatResponse(params: StreamChatResponseParams): Promise<void> {
-  const { messages, safety, requestId, exerciseResult, onAssistantToken, onAssistantMeta, onDone } = params;
+  const { messages, safety, requestId, exerciseResult, loopGuide, onAssistantToken, onAssistantMeta, onDone } = params;
 
   try {
+    const loopContext = prepareLoopChat(messages, loopGuide);
     const startTime = Date.now();
     const lastMsg = messages[messages.length - 1];
     const latestUserMsg = lastMsg?.content || '';
@@ -322,9 +326,9 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           model: modelCandidate,
           contents,
           config: {
-            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT,
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext),
             temperature: generationTemperature,
-            maxOutputTokens: 1000,
+            maxOutputTokens: 2048,
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -334,7 +338,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
         const rawText = response.text || '';
         if (rawText.trim()) {
-          const { assistant_message, turn } = sanitizeDeungSatiResponse(rawText);
+          const { assistant_message, turn } = sanitizeDeungSatiResponse(rawText, loopContext);
           const latencyMs = Date.now() - startTime;
 
           console.log(`[AI_CALL_END] requestId=${requestId ?? '1'} model=${modelCandidate} status=200 latency=${latencyMs}ms`);
