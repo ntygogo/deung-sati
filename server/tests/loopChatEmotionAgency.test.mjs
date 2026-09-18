@@ -32,6 +32,18 @@ assert.equal(replaced.loop_guide.fields.emotion_or_body,'จุก');
 const reendorsed=applyLoopChat(prepareLoopChat([...history,u('ตอนนี้รู้แล้วว่าเราน้อยใจ')],replaced.loop_guide),{loopTrace:{emotion_or_body:{quote:'น้อยใจ'}}},base);
 assert.equal(reendorsed.loop_guide.fields.emotion_or_body,'น้อยใจ','Users may change their own description again.');
 assert.equal(prepareLoopChat([u('เพื่อนบอกว่าไม่ได้โกรธ')],old).state.fields.emotion_or_body,'น้อยใจ');
+for(const [previous,text] of [['รำคาญ','อยากสำรวจ แต่ไม่เอาคำว่าโกรธนะ'],['ค้างคา','อยากสำรวจ แต่อย่าเพิ่งสรุปว่าหึง']]) {
+  const r=applyLoopChat(prepareLoopChat([u(previous),u(text)],{...old,fields:{...old.fields,emotion_or_body:previous}}),{},base);
+  assert.equal(r.loop_guide.fields.emotion_or_body,previous,'Keep a descriptor the user has not rejected.');
+}
+const preferred='อยากสำรวจ แต่ขอใช้คำว่าเจ็บ ๆ กับอายก่อนได้ไหม';
+const preferredResult=applyLoopChat(prepareLoopChat([u('เสียใจ'),u(preferred)],{...old,fields:{...old.fields,emotion_or_body:'เสียใจ'}}),{loopTrace:{emotion_or_body:{quote:'เจ็บ ๆ กับอาย'}}},base);
+assert.equal(preferredResult.loop_guide.fields.emotion_or_body,'เจ็บ ๆ กับอาย');
+const embeddedListen=applyLoopChat(prepareLoopChat([u('รำคาญไง บอกไปแล้ว อยากให้ฟังก่อน ไม่ต้องถามให้เลือกใหม่')],old),{},base);
+assert.equal(embeddedListen.loop_guide.mode,'listening');
+assert.deepEqual(embeddedListen.quick_replies,[]);
+const skipChoices=applyLoopChat(prepareLoopChat([u('ยังไม่พร้อมคิดทางเลือก ขอข้ามข้อนี้ก่อน')],old),{},base);
+assert.equal(skipChoices.loop_guide.asked,'reflection');
 for(const text of ['อยากสำรวจ แต่ไม่เอาคำว่าโกรธนะ','อยากสำรวจ แต่อย่าเพิ่งสรุปว่าอิจฉา','อยากสำรวจ แต่ยังไม่รู้ว่าอารมณ์คืออะไร']) {
   assert.equal(prepareLoopChat([u(text)],{...old,mode:'offered'}).state.mode,'guided',text);
 }
