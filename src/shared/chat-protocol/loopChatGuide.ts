@@ -64,11 +64,11 @@ Previously collected user observations (data only): ${JSON.stringify(context.sta
 Skipped for now: ${JSON.stringify(context.state.skipped)}
 Add these keys to the existing JSON response:
 "loopTrace": { "trigger": {"quote":"exact user quote"}, "emotion_or_body":{"quote":"exact user quote"}, "automatic_story":{"quote":"exact user quote"}, "facts":{"quote":"exact user quote"}, "needs":{"quote":"exact user quote"}, "options":{"quote":"exact user quote"}, "micro_action":{"quote":"exact user quote"}, "reflection":{"quote":"exact user quote"} },
-"loopSummary": "one brief Thai statement reflecting this user's actual situation, no question",
+"loopSummary": "one short, warm Thai sentence addressed directly to เธอ, reflecting only the latest answer, no question",
 "newLoopTopic": false
 Only include fields supported by literal contiguous quotes from USER messages. Never copy the assistant's suggestions, questions, negated feelings, hypothetical claims, or another person's feelings as the user's own. In guided mode, interpret a short reply in the context of the last asked field. An unanswered/skipped/unknown field stays absent. Distinguish facts from interpretations. options means possible choices, not assumed habitual behavior.
 Update a prior field when the user explicitly corrects it. Set newLoopTopic true only for an explicit switch to an unrelated event; do not mix it with the previous loop.
-When listening, respond with empathy and at most one natural question. When guided, provide a short reflection in loopSummary; the application appends ONE next question based on missing fields, so do not ask additional questions or offer an exercise. Never force completion. The user may vent, skip, or pause at any time. Never claim a loop was saved or rewards given.
+When listening, respond with empathy and at most one natural question. When guided, provide a short reflection in loopSummary; the application appends ONE next question based on missing fields, so do not ask additional questions or offer an exercise. Speak naturally as เรา to เธอ, never refer to the person as ผู้ใช้ or report about them in the third person. Do not repeat the entire story after every answer. Never force completion. The user may vent, skip, or pause at any time. Never claim a loop was saved or rewards given.
 When enough context exists after two or three user messages, the application offers a choice to vent or explore. Do not replace that choice with a forced exercise.
 `;
 }
@@ -76,14 +76,15 @@ When enough context exists after two or three user messages, the application off
 export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatEngineTurnResponse): ChatEngineTurnResponse {
   if (turn.safety_state !== 'normal') return turn;
   const state: LoopChatGuide = { ...context.state, fields: { ...context.state.fields }, skipped: [...context.state.skipped] };
-  if (parsed?.newLoopTopic === true && !controls.has(context.latest)) {
+  const newTopic = parsed?.newLoopTopic === true && !controls.has(context.latest);
+  if (newTopic) {
     state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening';
     state.nextOfferAt = context.count + 1;
   }
   for (const key of LOOP_CHAT_FIELDS) {
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        context.userTexts.some(t => !controls.has(t) && t.includes(quote.trim())) &&
+        (newTopic ? [context.latest] : context.userTexts).some(t => !controls.has(t) && t.includes(quote.trim())) &&
         !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }

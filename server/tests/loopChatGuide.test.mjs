@@ -36,7 +36,7 @@ const skippedContext=prepareLoopChat([u(event),u(LOOP_CHAT_SKIP)],{mode:'guided'
 const skipped=applyLoopChat(skippedContext,{},base);
 assert.equal(skipped.loop_guide.asked,'automatic_story');
 assert.equal(loopChatReview(skipped.loop_guide).emotionOrBody,'ยังไม่ได้สำรวจ');
-const newTopic=applyLoopChat(prepareLoopChat([...messages,u('เปลี่ยนเรื่อง เพื่อนยกเลิกนัด')],turn.loop_guide),{newLoopTopic:true,loopTrace:{trigger:{quote:'เพื่อนยกเลิกนัด'}}},base);
+const newTopic=applyLoopChat(prepareLoopChat([...messages,u('เปลี่ยนเรื่อง เพื่อนยกเลิกนัด')],turn.loop_guide),{newLoopTopic:true,loopTrace:{trigger:{quote:'เพื่อนยกเลิกนัด'},emotion_or_body:{quote:feeling},needs:{quote:answers.needs}}},base);
 assert.deepEqual(newTopic.loop_guide.fields,{trigger:'เพื่อนยกเลิกนัด'});
 const crisis=applyLoopChat(prepareLoopChat(messages,turn.loop_guide),{}, {...base,safety_state:'crisis'});
 assert.equal(crisis.loop_guide,undefined);
