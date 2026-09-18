@@ -16,11 +16,12 @@ export interface LoopChatGuide {
   preferListening?: boolean;
   helpAttempts?: Partial<Record<LoopChatField, number>>;
   emotionSourceAfter?: number;
+  storySourceAfter?: number;
 }
 type Message = { role: string; content?: string; text?: string };
 const questions: Record<LoopChatField, string> = {
   trigger: 'ก่อนรู้สึกแบบนี้ มีเหตุการณ์หรือคำพูดไหนมากระทบใจเธอ?',
-  emotion_or_body: 'ตอนนั้นเธอรู้สึกอย่างไร? ถ้าสะดวกจะเล่าความรู้สึกในร่างกายด้วยก็ได้',
+  emotion_or_body: 'ตอนนั้นเป็นอย่างไรสำหรับเธอ? ใช้คำธรรมดาที่ใกล้กับตัวเอง หรือบอกว่ายังไม่รู้ก็ได้นะ',
   automatic_story: 'ตอนนั้นมีความคิดหรือประโยคอะไรแวบขึ้นมาในหัว?',
   facts: 'ลองดูเฉพาะสิ่งที่เห็นหรือได้ยินก่อน โดยยังไม่ต้องรู้เหตุผลของมัน ตอนนั้นเกิดอะไรขึ้นที่เธอจำได้บ้าง?',
   needs: 'ถ้าเรื่องนี้ดีขึ้นได้สักนิด เธออยากให้มีอะไรเปลี่ยนไป?',
@@ -40,7 +41,7 @@ const helpText: Record<LoopChatField, [string, string]> = {
 };
 const practiceQuestions: Record<LoopChatField, string> = {
   trigger: 'มีเหตุการณ์หรือคำพูดไหนที่พอจำได้ว่าใจเริ่มสะดุด?',
-  emotion_or_body: 'ตอนนี้พอสังเกตอะไรในใจหรือร่างกายได้บ้าง?',
+  emotion_or_body: 'มีคำธรรมดาคำไหนใกล้กับที่เป็นอยู่ตอนนี้บ้าง? ยังไม่ต้องหาชื่ออารมณ์ให้ถูกนะ',
   automatic_story: 'ถ้าลองเติมว่า “ตอนนั้นฉันนึกว่า…” มีคำไหนผุดขึ้นมาบ้าง?',
   facts: 'ตอนนั้นมีใครพูดหรือทำอะไรที่เธอจำได้บ้าง?',
   needs: 'ถ้ามีอะไรช่วยให้เรื่องนี้เบาลงได้สักนิด เธออยากให้เป็นอะไร?',
@@ -61,11 +62,18 @@ function isHelpText(text: string): boolean {
     /^(?:ความต้องการ|ข้อเท็จจริง|ความคิดอัตโนมัติ|ทางเลือก|การสะท้อนคิด)(?:คืออะไร|หมายถึงอะไร|คือยังไง)/u.test(t);
 }
 type LoopChatControl = 'start' | 'vent' | 'skip' | 'review' | 'explain' | 'pause';
+const terminalExplore = /(?:^|[\s,.!])(?:เรา|ฉัน|ผม|หนู)?(?:อยาก|ขอ|พร้อม)สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?(?:ต่อ|เลย|ด้วยกัน)?(?:นะ|ค่ะ|ครับ|จ้ะ|จ้า)?[.!?]*$/u;
+function explorationRequestAtEnd(text: string): RegExpExecArray | null {
+  const match = terminalExplore.exec(text.trim());
+  if (!match || /(?:บอก(?:ว่า|ให้)?|ถามว่า|พูดว่า|คำว่า)[\s“"'「]*$/u.test(text.slice(0, match.index))) return null;
+  return match;
+}
 function loopChatControl(text: string, offered = false): LoopChatControl | null {
   const input = text.normalize('NFC').trim().replace(/\s+/gu, '')
     .replace(/[.!?…。！？]+$/u, '').replace(/(?:(?:นะ|ค่ะ|คะ|ครับ|จ้า|จ้ะ|จ๊ะ|ฮะ|น้า))+$/u, '');
   if (/^(?:(?:อยาก|ขอ)?ระบาย(?:ต่อ|ก่อน|ต่อก่อน)?|(?:ขอ)?คุยต่อก่อน|ยังไม่พร้อม|ไม่อยากสำรวจ|ยังไม่อยากสำรวจ|ยังไม่พร้อมสำรวจ|ไม่พร้อมสำรวจ)$/u.test(input)) return 'vent';
   const ownRequest = !/[“”"'「」]|(?:เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:เคย)?บอก(?:ว่า|ให้)|ถามว่า|เขาอยาก|ไม่อยากให้ช่วย|ไม่ต้องพา|อย่าพา/u.test(input);
+  if (explorationRequestAtEnd(text)) return 'start';
   if (ownRequest && /^(?:อยาก|ขอ)ระบาย(?:ต่อ|ก่อน|ต่อก่อน)(?:\s|[,.!])/u.test(text.trim())) return 'vent';
   if (ownRequest && /(?:^|[\s,.!])(?:อยาก|ขอ)(?:ให้)?(?:ฟัง|รับฟัง)(?:ก่อน|เฉยๆ)(?:\s|[,.!]|$)/u.test(text.trim())) return 'vent';
   if (ownRequest && /ขอข้าม(?:ข้อนี้)?(?:ไว้|ไป)?ก่อน$/u.test(input) && !/ไม่(?:อยาก)?ข้าม|อย่าข้าม/u.test(input)) return 'skip';
@@ -84,8 +92,48 @@ function loopChatControl(text: string, offered = false): LoopChatControl | null 
 }
 // Consent and navigation are not observations to put into the user's trace.
 const isControlText = (text: string) => loopChatControl(text, true) !== null;
+function observationText(text: string): string {
+  if (!isControlText(text)) return text;
+  const request = explorationRequestAtEnd(text);
+  if (request) return text.slice(0, request.index).trim();
+  const skip = /(?:^|\s)ขอข้าม(?:ข้อนี้)?(?:ไว้|ไป)?ก่อน(?:นะ|ค่ะ|ครับ)?$/u.exec(text.trim());
+  return skip ? text.slice(0, skip.index).trim() : '';
+}
+const reportedThought = /(?:ทุกคน|คนอื่น|เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:ก็)?(?:คิดว่า|มองว่า|บอกว่า|บอกให้|คาดหวังว่า)/gu;
+const ownThought = /(?:(?:เรา|ฉัน|ผม|หนู)(?:เอง)?(?:ก็|เลย|กลับ)?|ตอนนั้น)(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)/gu;
+function lastMatchIndex(text: string, pattern: RegExp): number {
+  return [...text.matchAll(pattern)].at(-1)?.index ?? -1;
+}
+// Literal presence is necessary, but a quoted request or another person's belief
+// is not automatically an observation belonging to this field.
+function groundedObservation(key: LoopChatField, quote: string, source: string): boolean {
+  let index = source.indexOf(quote);
+  while (index >= 0) {
+    const throughQuote = source.slice(0, index + quote.length);
+    const before = source.slice(0, index);
+    const reporting = lastMatchIndex(throughQuote, reportedThought);
+    const endorsement = lastMatchIndex(throughQuote, ownThought);
+    const isOthersThought = key === 'automatic_story' && reporting >= 0 && endorsement < reporting;
+    const help = /(?:ช่วยยกตัวอย่าง|ขอ(?:แค่)?ตัวอย่าง|มีตัวอย่าง|ขอ(?:แค่)?ประโยค|หมายถึงอะไร|ทางเลือกคืออะไร)/u.exec(throughQuote);
+    const userChoice = /(?:เรา|ฉัน|ผม|หนู)(?:จะ|อาจ|เลือก|อยากลอง)/u.exec(throughQuote);
+    const isHelpFragment = ['options', 'micro_action', 'needs'].includes(key) && Boolean(help && (!userChoice || userChoice.index < help.index));
+    const isLabelPreference = key === 'needs' && /(?:ใช้คำว่า|เรียกว่า|เรียกแบบนี้|ชื่ออารมณ์)/u.test(quote);
+    const isUnchosenAction = key === 'micro_action' && /(?:ดีไหม|ได้ไหม|หรือเปล่า|ยังไม่พร้อม|ยังไม่อยากทำ|^(?:เรา|ฉัน|ผม|หนู)?อาจ)/u.test(quote);
+    // Do not remove an attribution and promote its content to an observed fact.
+    const isThoughtAsFact = key === 'facts' && (
+      /^(?:เรา|ฉัน|ผม|หนู)?(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)/u.test(quote) ||
+      /(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)$/u.test(before.trim())
+    );
+    if (!isOthersThought && !isHelpFragment && !isLabelPreference && !isUnchosenAction && !isThoughtAsFact) return true;
+    index = source.indexOf(quote, index + quote.length);
+  }
+  return false;
+}
 function validObservation(key: LoopChatField, value: string): boolean {
+  if ((key === 'options' || key === 'micro_action') && /^(?:เรา|ฉัน|ผม|หนู)?(?:ยัง)?(?:ไม่พร้อม|ไม่อยากทำอะไร|ไม่ได้เลือก)/u.test(value)) return false;
+  if (key === 'needs' && /(?:ใช้คำว่า|เรียกว่า|เรียกแบบนี้|ชื่ออารมณ์)/u.test(value)) return false;
   if (key !== 'automatic_story') return true;
+  if (lastMatchIndex(value, reportedThought) >= 0 && lastMatchIndex(value, ownThought) < lastMatchIndex(value, reportedThought)) return false;
   // A body sensation or the act of self-criticism is not the content of a thought.
   return !/^(?:มัน)?(?:อัดแน่นในหัว|แน่นหน้าอก|ตึงที่ไหล่|จุกที่อก|หัวตื้อ)(?:ไปหมด|มาก|ๆ)?$/u.test(value.replace(/\s+/gu, '')) &&
     !/^(?:เอาแต่|ก็)?(?:ด่า|โทษ|ตำหนิ)ตัวเอง(?:มาก|ซ้ำ|ๆ)*$/u.test(value.replace(/\s+/gu, ''));
@@ -140,7 +188,21 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     preferListening: input.preferListening === true,
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
+  for (const key of LOOP_CHAT_FIELDS) {
+    const value = state.fields[key];
+    if (!value) continue;
+    const sources = userTexts.filter(text => text.includes(value));
+    if (sources.length && !sources.some(text => groundedObservation(key, value, text))) delete state.fields[key];
+  }
   const latest = userTexts[userTexts.length - 1] || '';
+  const storyCorrection = /(?:ความคิด(?:ของเราเอง|ของฉัน|ของเรา)?(?:ตอนนั้น)?(?:ยัง)?(?:บอกไม่ได้|ไม่รู้|นึกไม่ออก)|ยังไม่รู้ว่าตอนนั้นคิดอะไร|ขอเว้นช่องความคิด)/u.test(latest.replace(/\s+/gu, ''));
+  state.storySourceAfter = Number.isInteger(input.storySourceAfter) ? Math.max(0, Math.min(input.storySourceAfter!, userTexts.length)) : 0;
+  if (storyCorrection) {
+    delete state.fields.automatic_story;
+    state.storySourceAfter = userTexts.length;
+    state.skipped = [...new Set([...state.skipped, 'automatic_story' as const])];
+    if (state.asked === 'automatic_story') state.asked = null;
+  }
   const preferredEmotion = /(?:^|\s|แต่)(?:เรา|ฉัน|ผม|หนู)?(?:ขอใช้คำ|ขอเรียก)ว่า/u.test(latest);
   const emotionCorrection = correctsEmotion(latest) || preferredEmotion;
   state.emotionSourceAfter = Number.isInteger(input.emotionSourceAfter) ? Math.max(0, Math.min(input.emotionSourceAfter!, userTexts.length - 1)) : 0;
@@ -150,7 +212,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     if (preferredEmotion || mentioned.some(word => state.fields.emotion_or_body?.includes(word))) delete state.fields.emotion_or_body;
     state.emotionSourceAfter = Math.max(0, userTexts.length - 1);
   }
-  const count = userTexts.filter(t => t && !isControlText(t)).length;
+  const count = userTexts.filter(t => observationText(t)).length;
   const control = loopChatControl(latest, state.mode === 'offered');
   if (control === 'start') { state.mode = 'guided'; state.skipped = []; state.preferListening = false; }
   if (control === 'vent') {
@@ -165,7 +227,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   if (control === 'skip' && state.mode === 'guided' && state.asked) {
     state.skipped = [...new Set([...state.skipped, state.asked])];
     // Declining action while considering choices must not lead straight to another action question.
-    if (/(?:ยัง)?ไม่พร้อมทำอะไร|ยังไม่อยากทำอะไร|ไม่พร้อมลงมือ|ไม่พร้อมคิดทางเลือก/u.test(latest)) {
+    if (/(?:ยัง)?ไม่พร้อม(?:ทำอะไร|ลงมือ|คิดทางเลือก|เลือก|ตัดสินใจ)|ยังไม่อยากทำอะไร/u.test(latest)) {
       state.skipped = [...new Set([...state.skipped, 'options' as const, 'micro_action' as const])];
     }
     state.asked = null;
@@ -176,7 +238,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && (isHelpText(latest) || understood);
   const requestedExercise = !/ไม่อยาก|ไม่ต้อง|อย่า|ยังไม่|บอกว่า/u.test(latest) && /(?:ขอ|อยาก|ช่วย|ลอง)(?:ฝึกหายใจ|ทำแบบฝึก|พาหายใจ|สอน(?:วิธี)?หายใจ|ทำgrounding)/u.test(latest.replace(/\s+/gu, ''));
   const deferOffer = /ไหม|เหรอ|หรือเปล่า|ยังไง|อย่างไร|หมายถึง|ขอ(?:แค่)?(?:ตัวอย่าง|ประโยค|คำอธิบาย)|อย่าเพิ่ง|ไม่ต้อง(?:สรุป|บอก|เรียก)/u.test(latest);
-  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, deferOffer };
+  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -190,6 +252,7 @@ User chose to keep talking: ${context.state.preferListening === true}. In this c
 The user may be new to reflection. Their pace matters more than finishing all eight fields. Never frame this as a test or a task they must finish.
 The user owns their emotion description. Never persuade them that they are angry, jealous, afraid or sad when they reject that word. A rough sensation, neutral state, mixed feelings or uncertainty is acceptable. Do not turn uncertainty into an assertion, and do not use body scans as the default when a person cannot name a feeling. If they request concrete wording, put an actual usable sentence in guideSupport.message, not just a promise to provide examples or hidden quickReplies.
 Emotion correction this turn: ${context.emotionCorrection}. Challenged observations have been removed; an unaffected description may remain in current fields. Preserve that remaining description and extract any new preferred wording only from the latest USER message, preserving uncertainty. If no endorsed description remains, leave emotion_or_body absent. Consent with "ขอใช้คำว่า..." can also contain the user's preferred emotion wording. Never extract an emotion word from a denial, question about that word, or someone else's feeling. A feeling is not proof of the other person's intent.
+User says their automatic thought is unknown this turn: ${context.storyCorrection}. If true, leave that field empty and respect the pause on it. Do not substitute a reason for relief or other people's expectations for a thought they have not identified.
 Help requested: ${context.helpRequested}. Previous support attempts: ${JSON.stringify(context.state.helpAttempts || {})}.
 Concrete scaffold for the current field: ${context.state.asked ? helpText[context.state.asked][Math.min(1, context.state.helpAttempts?.[context.state.asked] || 0)] : 'none'}
 When helping, use that scaffold and adapt its people/events to what the user actually said. Do not replace it with another broad question about deep needs, desired feelings, or desired outcomes. Ask about one small, observable thing instead.
@@ -206,11 +269,22 @@ For guideQuestion, choose the first missing non-skipped field AFTER your valid l
 Field meaning matters: emotion_or_body holds sensations (e.g. "อัดแน่นในหัว") and feelings. automatic_story is the actual interpretation/prediction/self-talk (e.g. "เงินจะไม่พอ", "เราไม่สำคัญ"), NOT a sensation or the label "ด่าตัวเอง". If no thought content is known leave it absent. A quote must be copied EXACTLY, not summarized; prefer the latest explicit clarification over a vague older phrase. One USER sentence can support multiple fields. Do not discard an explicit action just because earlier turns expressed uncertainty.
 If the user does not understand, cannot find an answer, asks why/how, or still needs help exploring the current question, set guideSupport.needed=true. In guideSupport.message gently acknowledge that not knowing is okay, explain the current idea in plain Thai using their actual story, and ask at most ONE smaller, concrete observation question. Do not repeat the original abstract question. Stay with the current field; do not rush to the next field or invent an answer for them. Label examples as possibilities that may not fit; do not interpret examples or uncertainty as the user's answer. If they remain unsure, try a different angle and explicitly allow pausing. Brief genuine observations such as “เสียใจ” are valid answers, not a reason to interrogate them further.
 Only include fields supported by literal contiguous quotes from USER messages. Never copy the assistant's suggestions, questions, negated feelings, hypothetical claims, or another person's feelings as the user's own. In guided mode, interpret a short reply in the context of the last asked field. An unanswered/skipped/unknown field stays absent. Distinguish facts from interpretations. options means possible choices, not assumed habitual behavior.
+Source meaning and speaker must survive extraction. "ทุกคนคิดว่าเราต้องเศร้า" is OTHER PEOPLE's expectation, never the user's automatic_story. If they later say "เราเลยคิดว่าเราผิดปกติ", that later clause can be automatic_story. A request such as "มีตัวอย่างทางเลือกไหม" is not options; leave options absent and actually explain. "เรียกว่าอึดอัดไว้ก่อน" is a wording preference, not needs. "ฉันคิดว่าเขาไม่สนใจ" is a thought, not a fact, even if you copy only "เขาไม่สนใจ". Do not make fields look complete by moving a quote to an unrelated field.
+GROUNDING CHECK for assistantMessage, loopSummary, guideSupport and guideQuestion: use only details the user has given. Do not add events, causes, motives or a more intense emotion to sound empathetic. Keep tentative wording tentative. You may respond directly without a reflective preface. In listening mode, do not ask about bodily sensations by default; use one concrete moment from the story. An explanation is not a diagnosis or a hidden-cause claim.
+In listening mode leave quickReplies empty. Do not write fictional first-person answers for the user to tap (for example a deadline they never mentioned); let them supply their own account. Do not replace listening with a rest-versus-talk menu.
+Examples of grounded conversational responses (adapt, do not copy their events into other cases):
+- USER: "หัวหน้าเรียกคุยงาน อึดอัด ไม่รู้เรียกว่าอะไร" -> "เรียกว่าอึดอัดไว้ก่อนได้เลย ตอนคุยงานมีคำพูดช่วงไหนที่ยังติดอยู่ในหัวบ้าง?" Do not invent a sudden meeting, fear, or failure.
+- USER: "แม่โทรให้ช่วย มันยุ่งในหัว ไม่รู้ว่าเหนื่อยหรือรำคาญ" -> "ยังไม่ต้องเลือกชื่อก็ได้ ก่อนแม่โทรมา เธอกำลังทำอะไรอยู่?" Do not invent a workload.
+- USER: "เลิกกับแฟน ไม่ร้องไห้ มันว่าง ๆ" -> "ไม่จำเป็นต้องบังคับให้ตัวเองร้องไห้นะ ใช้คำว่าว่าง ๆ ตามที่เป็นอยู่ได้" Do not explain it as the mind protecting itself or require proof that they care.
+- USER: "ไม่ร้องไห้แปลว่าเราใจดำไหม" -> "การไม่ร้องไห้อย่างเดียวไม่ได้บอกว่าเธอเป็นคนใจดำนะ ไม่ต้องฝืนแสดงความเศร้าเพื่อพิสูจน์อะไร" Do not add that they are sad, their mind needs time, or they must be uncomfortable around a friend. Answer this question directly; no extra question is necessary.
+- USER: "เพื่อนลืมวันเกิด ไม่เป็นไร แต่คิดถึงทั้งวัน" -> "เรื่องนี้ยังวนกลับมาในหัวอยู่ มีช่วงไหนที่เธอนึกถึงบ่อยเป็นพิเศษไหม?" Do not say their mouth and heart disagree.
+- USER: "น้อยใจนิดนึงมั้ง" -> Keep "อาจ/มั้ง/ยังไม่แน่ใจ"; do not conclude a definite emotion or its cause.
 Update a prior field when the user explicitly corrects it. Set newLoopTopic true only for an explicit switch to an unrelated event; do not mix it with the previous loop.
 When listening, respond with empathy and at most one natural question. When guided, provide a short reflection in loopSummary; the application appends ONE next question based on missing fields, so do not ask additional questions or offer an exercise. Speak naturally as เรา to เธอ, never refer to the person as ผู้ใช้ or report about them in the third person. Do not repeat the entire story after every answer. Never force completion. The user may vent, skip, or pause at any time. Never claim a loop was saved or rewards given.
 When enough context exists after two or three user messages, the application offers a choice to vent or explore. Do not replace that choice with a forced exercise.
 Never ask the vent-versus-explore choice yourself; the application owns that invitation and its cooldown. If the user continues their story without choosing, keep listening.
 When guideSupport is needed, its message REPLACES the routine next-field question. Explain only the current field with one easier question; do not include a second question in loopSummary. Do not repeat the previous assistant message.
+When a listening user requests examples, provide the actual examples in assistantMessage as well as guideSupport.message. Saying that small tasks can be unrelated to work is not an example. If work is the given context, examples could be opening their existing file or writing a title, explicitly optional. Do not treat those suggestions as the user's choices until they choose.
 `;
 }
 
@@ -229,18 +303,24 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   if (explicitReflection) state.fields.reflection = context.latest.slice(0, 600);
   let supportField = state.mode === 'guided' && state.asked && !context.control && !explicitAction && !explicitReflection &&
     (context.helpRequested || parsed?.guideSupport?.needed === true) ? state.asked : null;
+  if (supportField && /(?:ตัวอย่าง|อธิบาย).*ทางเลือก|ทางเลือก.*(?:คืออะไร|หมายถึง)/u.test(context.latest)) supportField = 'options';
   const newTopic = parsed?.newLoopTopic === true && !context.control && !supportField;
   if (newTopic) {
     state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening'; state.helpAttempts = {};
     state.emotionSourceAfter = Math.max(0, context.userTexts.length - 1);
+    state.storySourceAfter = Math.max(0, context.userTexts.length - 1);
     state.nextOfferAt = context.count + 1;
   }
   for (const key of LOOP_CHAT_FIELDS) {
-    // Help-seeking is not an answer, even if the model also emits an extraction.
-    if ((supportField && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
+    // Help-seeking is not an answer to that field. Independent observations in
+    // the same message (e.g. a fact before a request for options) are still valid.
+    if ((supportField === key && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : context.userTexts).some(t => (!isControlText(t) || (key === 'emotion_or_body' && context.preferredEmotion && t === context.latest)) && !isHelpText(t) && !understandsExplanation(t, '') && t.includes(quote.trim()) && (key !== 'emotion_or_body' || groundedEmotionQuote(quote.trim(), t))) &&
+        (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : key === 'automatic_story' ? context.userTexts.slice(state.storySourceAfter || 0) : context.userTexts).some(raw => {
+          const t = key === 'emotion_or_body' && context.preferredEmotion && raw === context.latest ? raw : observationText(raw);
+          return Boolean(t) && (!isHelpText(t) || (key === 'options' && /^(?:เรา|ฉัน|ผม|หนู)(?:อาจลอง|จะลอง|เลือกที่จะ)/u.test(quote.trim()) && t.includes('แต่' + quote.trim()))) && !understandsExplanation(t, '') && t.includes(quote.trim()) && groundedObservation(key, quote.trim(), t) && (key !== 'emotion_or_body' || groundedEmotionQuote(quote.trim(), t));
+        }) &&
         validObservation(key, quote.trim()) && !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }
@@ -249,7 +329,10 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   if (!supportField && state.mode === 'guided' && state.asked && !context.control && !state.fields[state.asked]) {
     supportField = state.asked;
   }
-  const summary = typeof parsed?.loopSummary === 'string' ? parsed.loopSummary.trim().slice(0, 400) : '';
+  const rawSummary = typeof parsed?.loopSummary === 'string' ? parsed.loopSummary.trim().slice(0, 400) : '';
+  // Optional reflection must not turn the user's explicit uncertainty into certainty.
+  const uncertainty = /มั้ง|ไม่แน่ใจ|บอกไม่ถูก|บอกไม่ได้/u;
+  const summary = uncertainty.test(context.latest) && !/มั้ง|ไม่แน่ใจ|บอกไม่ถูก|บอกไม่ได้|อาจ|ยังไม่ชัด/u.test(rawSummary) ? '' : rawSummary;
   let message = turn.assistant_message;
   let replies = turn.quick_replies;
   if (context.control === 'pause') {
@@ -261,6 +344,16 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   } else if (context.control === 'vent') {
     // Keep this transition independent of model wrap-up/exercise suggestions.
     message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
+    replies = [];
+  } else if (state.mode === 'listening' && /(?:ไม่|ไม่ได้)ร้องไห้.*(?:ใจดำ|ไร้หัวใจ).*(?:ไหม|หรือเปล่า)/u.test(context.latest)) {
+    // Answer the moral self-judgment without inventing an emotional/clinical cause.
+    message = 'การไม่ร้องไห้เพียงอย่างเดียวไม่ได้บอกว่าเธอเป็นคนใจดำหรือไม่ใส่ใจนะ ไม่ต้องฝืนร้องไห้เพื่อพิสูจน์ความรู้สึกให้ใครเห็น';
+    replies = [];
+  } else if (state.mode === 'listening' && parsed?.guideSupport?.needed === true &&
+      /ไม่เข้าใจ|ช่วย(?:ยกตัวอย่าง|อธิบาย)|ขอตัวอย่าง|หมายถึงอะไร/u.test(context.latest) &&
+      typeof parsed.guideSupport.message === 'string' && parsed.guideSupport.message.trim().length >= 10 && parsed.guideSupport.message.length <= 900) {
+    // The useful explanation may be in the support field even outside guided mode.
+    message = parsed.guideSupport.message.trim();
     replies = [];
   } else if (state.mode === 'listening' && !state.preferListening && context.count >= state.nextOfferAt &&
       (state.fields.trigger || state.fields.emotion_or_body) && !context.control && !context.deferOffer) {
@@ -311,7 +404,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   }
   const f = state.fields;
   return {
-    ...turn, assistant_message: message, quick_replies: state.mode === 'listening' && state.preferListening ? [] : replies, loop_guide: state,
+    ...turn, assistant_message: message, quick_replies: state.mode === 'listening' ? [] : replies, loop_guide: state,
     ...(state.mode !== 'listening' || state.preferListening || !context.requestedExercise ? { recommended_exercise: null } : {}),
     extracted_loop: { ...f, old_response: f.options, new_choice: f.micro_action, desires: f.needs, insights: f.reflection },
   };
