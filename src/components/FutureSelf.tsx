@@ -74,7 +74,7 @@ function FutureSelfPage({ ownerId, onBack, onChat }: { ownerId: string; onBack: 
           <label>วันที่พลังน้อย ลดเหลือแค่…<textarea maxLength={400} value={editing.fallback} onChange={e => setEditing({ ...editing, fallback: e.target.value })} placeholder="เล็กแค่หนึ่งประโยคหรือหนึ่งจังหวะก็ได้" /></label>
         </details>
         <button type="submit" disabled={!canSave} className="fs-primary">เก็บก้าวนี้ไว้ลอง <ArrowRight size={18} /></button>
-      </form> : choosing ? <section className="fs-choose">
+      </form> : (choosing || !focus) ? <section className="fs-choose">
         <div className="fs-section-head"><h2>ตอนนี้อยากให้เรื่องไหนเบาลง?</h2>{focus && <button className="fs-text-button" onClick={() => setChoosing(false)}>กลับก้าวเดิม</button>}</div>
         <p className="fs-soft">เลือกทีละเรื่อง เปลี่ยนใจได้เสมอ</p>
         {choices.map((item, i) => <button className="fs-choice" key={item.title} onClick={() => choose(i)}><span className="fs-choice-number">0{i + 1}</span><span><strong>{item.title}</strong><small>{item.detail}</small></span><ChevronRight size={18} /></button>)}
