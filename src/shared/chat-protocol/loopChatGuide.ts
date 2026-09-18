@@ -41,7 +41,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     nextOfferAt: typeof input.nextOfferAt === 'number' ? Math.max(2, input.nextOfferAt) : 2,
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
-  const latest = userTexts.at(-1) || '';
+  const latest = userTexts[userTexts.length - 1] || '';
   const count = userTexts.filter(t => t && !controls.has(t)).length;
   if (latest === LOOP_CHAT_START) { state.mode = 'guided'; state.skipped = []; }
   if (latest === LOOP_CHAT_VENT || /^(?:ขอระบายต่อ|ยังไม่พร้อม|ขอคุยต่อก่อน|ไม่อยากสำรวจ)/u.test(latest)) {
