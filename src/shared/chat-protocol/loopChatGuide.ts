@@ -303,6 +303,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   if (explicitReflection) state.fields.reflection = context.latest.slice(0, 600);
   let supportField = state.mode === 'guided' && state.asked && !context.control && !explicitAction && !explicitReflection &&
     (context.helpRequested || parsed?.guideSupport?.needed === true) ? state.asked : null;
+  if (supportField && /(?:ตัวอย่าง|อธิบาย).*ทางเลือก|ทางเลือก.*(?:คืออะไร|หมายถึง)/u.test(context.latest)) supportField = 'options';
   const newTopic = parsed?.newLoopTopic === true && !context.control && !supportField;
   if (newTopic) {
     state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening'; state.helpAttempts = {};
@@ -311,8 +312,9 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     state.nextOfferAt = context.count + 1;
   }
   for (const key of LOOP_CHAT_FIELDS) {
-    // Help-seeking is not an answer, even if the model also emits an extraction.
-    if ((supportField && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
+    // Help-seeking is not an answer to that field. Independent observations in
+    // the same message (e.g. a fact before a request for options) are still valid.
+    if ((supportField === key && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
         (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : key === 'automatic_story' ? context.userTexts.slice(state.storySourceAfter || 0) : context.userTexts).some(raw => {

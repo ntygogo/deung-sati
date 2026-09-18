@@ -62,4 +62,9 @@ const tears=applyLoopChat(prepareLoopChat([u('ไม่ร้องไห้แ�
 assert.match(tears.assistant_message,/ไม่ได้บอกว่าเธอเป็นคนใจดำ/);
 assert.doesNotMatch(tears.assistant_message,/ปรับตัว|ป้องกัน|ต้องการเวลา|ไหม/);
 assert.equal(applyLoopChat(prepareLoopChat([u('ไม่ร้องไห้แปลว่าเราใจดำไหม')]),{}, {...base,safety_state:'crisis',assistant_message:'safety first'}).assistant_message,'safety first');
+const factWithHelp='วันนี้เปิดเอกสารไว้แต่ยังไม่ได้พิมพ์ ขอแค่ดูตัวอย่างทางเลือก ยังไม่อยากเลือกว่าจะลงมืออะไร';
+const helped=applyLoopChat(prepareLoopChat([u(factWithHelp)],{...stale,asked:'facts'}),{loopTrace:{facts:{quote:'วันนี้เปิดเอกสารไว้แต่ยังไม่ได้พิมพ์'},options:{quote:'ดูตัวอย่างทางเลือก'}},guideSupport:{needed:true,message:'เช่นเปิดไฟล์หรือเขียนหัวข้อ ตัวอย่างไหนพอเห็นภาพบ้าง?'}},base);
+assert.equal(helped.loop_guide.fields.facts,'วันนี้เปิดเอกสารไว้แต่ยังไม่ได้พิมพ์');
+assert.equal(helped.loop_guide.fields.options,undefined);
+assert.equal(helped.loop_guide.asked,'options');
 console.log('PASS: source speaker, help requests, label preferences, proposals versus commitments, facts and cached-field cleanup.');
