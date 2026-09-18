@@ -25,4 +25,9 @@ Build note: the shared guide used Array.at in serverless compilation where the c
 
 - Delete both source/continuation transcript through the UI: old chat action is disabled and summary-only entry is offered. Fresh conversation explicitly says the old chat is unavailable.
 
-Pending at this checkpoint: final preview and production smoke checks.
+- Future Self reload: the selected plan and the single reflection with its original note are restored.
+- Latest preview (30d9280): “ยังไม่รู้ ขอคุยให้เห็นภาพก่อน” opens an independent chat; the live assistant invites the user to describe what is weighing on them without rushing to a plan.
+- Preview layout inspected at the app's phone width. Final styling scopes the cream background above the shared screen style.
+- Latest preview build is READY; the Array.at compiler diagnostic is absent.
+
+Production smoke is performed after merging. Live signed-in account/cross-device persistence and real-user outcome evaluation remain outside this synthetic verification.

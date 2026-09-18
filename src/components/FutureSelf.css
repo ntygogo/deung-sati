@@ -1,4 +1,4 @@
-.future-self { background: #fbf8f4; color: #343d34; font-family: inherit; }
+.screen.future-self { background: #fbf8f4; color: #343d34; font-family: inherit; }
 .future-self * { box-sizing: border-box; }
 .fs-top { display: flex; align-items: center; justify-content: space-between; padding: 22px 22px 10px; }
 .fs-top > span { font-size: 11px; letter-spacing: 2.2px; color: #74756d; font-weight: 600; }
