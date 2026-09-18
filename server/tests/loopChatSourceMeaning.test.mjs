@@ -34,4 +34,15 @@ assert.equal(cleaned.state.fields.automatic_story,undefined,'Recheck cached exce
 assert.equal(cleaned.state.fields.emotion_or_body,'โล่ง');
 const safety = applyLoopChat(cleaned,{}, {...base,safety_state:'crisis',assistant_message:'safety response'});
 assert.equal(safety.assistant_message,'safety response');
+const listening = applyLoopChat(prepareLoopChat([u('หัวหน้าเรียกคุย อึดอัด')]),{}, {...base,quick_replies:['ตอนเขาพูดเรื่องกำหนดส่งงาน']});
+assert.deepEqual(listening.quick_replies,[],'Do not suggest invented first-person details in listening chips.');
+const mixed='เขาบอกให้แก้งานสองจุด ฉันคิดว่างานแค่นี้ยังทำไม่ดีเลย อยากสำรวจ';
+const entered = applyLoopChat(prepareLoopChat([u(mixed)]),{loopTrace:{trigger:{quote:'เขาบอกให้แก้งานสองจุด'},automatic_story:{quote:'ฉันคิดว่างานแค่นี้ยังทำไม่ดีเลย'}}},base);
+assert.equal(entered.loop_guide.mode,'guided');
+assert.equal(entered.loop_guide.fields.trigger,'เขาบอกให้แก้งานสองจุด');
+assert.equal(entered.loop_guide.fields.automatic_story,'ฉันคิดว่างานแค่นี้ยังทำไม่ดีเลย');
+assert.doesNotMatch(entered.assistant_message,/ตอนนี้อยากระบายต่อ/);
+for(const text of ['เพื่อนบอกว่า อยากสำรวจ','เขาถามว่า อยากสำรวจ','ไม่อยากสำรวจ','ไม่ได้อยากสำรวจ','อยากสำรวจแต่ยังไม่พร้อม']) assert.notEqual(prepareLoopChat([u(text)]).state.mode,'guided',text);
+const unsure = applyLoopChat(prepareLoopChat([u('เพื่อนลืมวันเกิด'),u('น้อยใจนิดนึงมั้ง ยังไม่แน่ใจ')]),{loopTrace:{trigger:{quote:'เพื่อนลืมวันเกิด'}},loopSummary:'เธอน้อยใจเพราะอยากให้เพื่อนใส่ใจ'},base);
+assert.doesNotMatch(unsure.assistant_message,/เธอน้อยใจเพราะ/);
 console.log('PASS: source speaker, help requests, label preferences, proposals versus commitments, facts and cached-field cleanup.');
