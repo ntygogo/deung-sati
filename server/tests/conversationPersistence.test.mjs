@@ -26,7 +26,7 @@ await fails(() => repo.assertCanCreateTrace('a', 'followup'), 409);
 await fails(() => repo.assertCanCreateTrace('b', 'followup'), 404);
 await repo.assertCanCreateTrace('a', 'conv_a');
 assert.deepEqual(await db.query('SELECT * FROM ledger'), [{id:'reward',points:10}], 'history and continuation never mutate rewards');
-assert.deepEqual((await repo.list('a', 'confirmed')).map(c => c.id).sort(), ['conv_old','followup']);
+assert.deepEqual((await repo.list('a', 'confirmed')).map(c => c.id).sort(), ['followup']);
 await fails(() => repo.list('b', 'confirmed'), 404);
 await repo.remove('b', 'conv_a'); assert.ok(await repo.get('a', 'conv_a'), 'other owner cannot delete');
 await repo.remove('a', 'conv_a'); assert.equal(await repo.get('a', 'conv_a'), null);

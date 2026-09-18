@@ -446,6 +446,7 @@ export default function App() {
   const chatContext = { id: chats.active.id, pastContext: chats.pastContext };
   const [showSavedLoops, setShowSavedLoops] = useState(false);
   const [selectedChatTrace, setSelectedChatTrace] = useState<any>(null);
+  const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [recentChats, setRecentChats] = useState<Conversation[] | null>(null);
   const resumeTrace = async (trace: any) => {
     if (chatMessages.some(m => m.isStreaming)) throw new Error('กรุณารอข้อความตอบกลับก่อน');
@@ -615,7 +616,10 @@ export default function App() {
         {recentChats && <div role="dialog" aria-modal="true" aria-label="ประวัติแชท" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
           <button onClick={() => setRecentChats(null)}>กลับไปแชท</button><h2>ประวัติแชท</h2>
           {recentChats.length === 0 && <p>ยังไม่มีบทสนทนาที่บันทึก</p>}
-          {recentChats.map(c => <button key={c.id} style={{ display: 'block', padding: 16, margin: '12px 0', width: '100%', textAlign: 'left' }} onClick={async () => { if (chatMessages.some(m => m.isStreaming)) return; try { await chats.open(c); setRecentChats(null); setScreen('chat'); } catch {} }}>{c.messages.find(m => m.role === 'user')?.text.slice(0, 80) || 'คุยต่อจากลูป'} · {new Date(c.updatedAt).toLocaleDateString('th-TH')}</button>)}
+          {recentChats.map(c => <div key={c.id} style={{ borderBottom: '1px solid #ddd4e0', padding: '12px 0' }}>
+            <button style={{ display: 'block', padding: 16, width: '100%', textAlign: 'left' }} onClick={async () => { if (chatMessages.some(m => m.isStreaming)) return; try { await chats.open(c); setRecentChats(null); setScreen('chat'); } catch {} }}>{c.messages.find(m => m.role === 'user')?.text.slice(0, 80) || 'คุยต่อจากลูป'} · {new Date(c.updatedAt).toLocaleDateString('th-TH')}</button>
+            {deleteChatId === c.id ? <p>ลบข้อความในแชทนี้ถาวร? สรุปลูปยังอยู่ <button onClick={async () => { try { await chats.removeConversation(c); setRecentChats(old => old?.filter(d => d.id !== c.id) || []); setDeleteChatId(null); } catch {} }}>ยืนยันลบแชทนี้</button> <button onClick={() => setDeleteChatId(null)}>เก็บไว้</button></p> : <button onClick={() => setDeleteChatId(c.id)}>ลบแชท</button>}
+          </div>)}
         </div>}
 
         {/* Right-side Sliding Hamburger App Drawer */}

@@ -58,6 +58,13 @@ export class ConversationRepository {
     for (const traceId of [data.parentTraceId, data.draftTraceId].filter(Boolean)) {
       if (typeof traceId !== 'string' || !await this.adapter.queryOne('SELECT id FROM loop_traces WHERE id = $1 AND user_id = $2', [traceId, userId])) fail(404, 'Trace not found');
     }
+    const existingOwnerRow: any = await this.adapter.queryOne('SELECT user_id FROM chat_conversations WHERE id = $1', [id]);
+    if (existingOwnerRow && existingOwnerRow.user_id !== userId) fail(404, 'Conversation not found');
+    if (!existingOwnerRow) {
+      if (data.revision !== 0) fail(409, 'Conversation revision does not exist');
+      const locked = await this.adapter.queryOne('SELECT id FROM loop_traces WHERE source_session_id = $1 AND user_id = $2 AND xp_awarded = $3', [id, userId, true]);
+      if (locked) fail(409, 'Open a continuation to keep talking about this saved loop');
+    }
     const content = JSON.stringify(messages);
     const parent = data.parentTraceId || null;
     const draft = data.draftTraceId || null;

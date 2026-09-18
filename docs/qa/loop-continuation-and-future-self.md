@@ -19,4 +19,10 @@ The new persistence suite exercises a real in-memory SQLite database: owner-scop
 
 Build note: the shared guide used Array.at in serverless compilation where the compiler library target differed. Replaced that single lookup with indexed access without changing semantics; regression suites rerun.
 
-Pending at this checkpoint: final preview and production smoke checks, confirmed-loop continuation/no second reward browser flow, and deletion fallback.
+- Confirmed synthetic guest trace once: one loop, +15 XP, +10 Shells. The original transcript becomes read-only.
+- Continue from the confirmed trace: a new linked conversation opens and the original transcript remains in the archive.
+- Send “สรุปแล้วบันทึก” in that continuation: saves the conversation and does not open another growth confirmation.
+
+- Delete both source/continuation transcript through the UI: old chat action is disabled and summary-only entry is offered. Fresh conversation explicitly says the old chat is unavailable.
+
+Pending at this checkpoint: final preview and production smoke checks.
