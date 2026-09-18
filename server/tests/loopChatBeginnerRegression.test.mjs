@@ -20,7 +20,7 @@ for(const text of ['ยังไม่พร้อมบอกใครจริ
   assert.ok(r.loop_guide.skipped.includes('micro_action'));
   assert.equal(r.loop_guide.fields.micro_action,undefined);
 }
-for(const text of ['แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ไม่อยากทำอะไรเลย ไม่รู้จะตอบคำถามยังไง แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ขอบคุณนะ วันนี้ยังไม่ไหวจริง ๆ ขออยู่แค่นี้ก่อน','ยังถามให้เลือกอีก ขอพอก่อน ไม่อยากตอบซ้ำแล้ว']){
+for(const text of ['แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ไม่อยากทำอะไรเลย ไม่รู้จะตอบคำถามยังไง แค่อยู่เงียบ ๆ ด้วยกันก็พอ','ขอบคุณนะ วันนี้ยังไม่ไหวจริง ๆ ขออยู่แค่นี้ก่อน','ยังถามให้เลือกอีก ขอพอก่อน ไม่อยากตอบซ้ำแล้ว','ตอนนี้เห็นว่าดีใจกับเพื่อนและอยากก้าวหน้าเองด้วย วันนี้ขอพักก่อน','ขออยู่แค่นี้ก่อน ไม่ต้องถามต่อแล้วนะ']){
   const r=applyLoopChat(prepareLoopChat([u(text)],guide),{},base);
   assert.equal(r.loop_guide.mode,'listening');
   assert.deepEqual(r.quick_replies,[]);
@@ -61,6 +61,9 @@ const mismatch=applyLoopChat(prepareLoopChat([u('อยากสำรวจ')],
 assert.ok(!mismatch.assistant_message.includes('คำถามผิดช่อง'));
 const vent=prepareLoopChat([u('อยากระบายต่อก่อน มันน้อยใจอะเหมือนเราไม่มีสิทธิ์เหนื่อย')],guide);
 assert.equal(vent.state.preferListening,true);
+const listening=applyLoopChat(prepareLoopChat([u('อยากให้ฟังก่อน ไม่ต้องถามให้เลือกเพิ่ม วันนี้รู้แค่ว่าในหัวด่าตัวเองก็พอ')],optionsGuide),{},base);
+assert.equal(listening.loop_guide.mode,'listening');
+assert.deepEqual(listening.quick_replies,[]);
 for(const [field,message] of [['needs','ในใจลึก ๆ เธอต้องการอะไรจากเขามากที่สุด?'],['facts','มีข้อมูลในอดีตไหมที่แสดงว่าเพื่อนๆ ยังใส่ใจหรือต้องการเราอยู่?']]){
   const r=applyLoopChat(prepareLoopChat([u('อยากสำรวจ')],{...guide,fields:{...fields,[field]:undefined}}),{guideQuestion:{field,message}},base);
   assert.ok(!r.assistant_message.includes(message));
