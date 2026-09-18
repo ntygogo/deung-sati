@@ -1437,44 +1437,17 @@ function ChatScreen({
         createdAt: Date.now(),
       };
 
-      const isDataComplete =
-        isLoopReady ||
-        (Boolean(serverExtractedLoop?.trigger) &&
-          Boolean(serverExtractedLoop?.emotion_or_body) &&
-          Boolean(serverExtractedLoop?.new_choice || serverExtractedLoop?.automatic_story));
-
-      if (isDataComplete) {
-        // Data is complete -> auto-present summary/review
-        const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
-        setReviewInitialData(reviewData);
-
-        const aiReplyMessage: ChatMessage = {
-          id: `ai-wrapup-complete-${Date.now()}`,
-          role: "ai",
-          text: "ขอบคุณที่เปิดใจคุยกันนะ วันนี้เราเห็นความรู้สึกและการเลือกทางใหม่ของคุณชัดเจนเลย ก่อนแยกย้ายกัน เราสรุปสิ่งที่คุณได้เรียนรู้ไว้ให้แล้ว ตรวจทานและบันทึกพลังให้น้องได้เลยนะ 🌱",
-          createdAt: Date.now() + 1,
-        };
-
-        setInputText("");
-        setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
-        setShowLoopReview(true);
-        isSendingRef.current = false;
-        return;
-      } else {
-        // Data not complete -> ask politely with quick replies
-        const aiReplyMessage: ChatMessage = {
-          id: `ai-wrapup-incomplete-${Date.now()}`,
-          role: "ai",
-          text: "ก่อนพักตรงนี้ อยากให้เราสรุปสิ่งที่เห็นจากที่คุยกันไว้ให้ไหม?",
-          options: ["สรุปให้หน่อย", "ไว้คราวหน้า"],
-          createdAt: Date.now() + 1,
-        };
-
-        setInputText("");
-        setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
-        isSendingRef.current = false;
-        return;
-      }
+      // Ending a chat is not consent to open a summary or a save form.
+      const aiReplyMessage: ChatMessage = {
+        id: `ai-wrapup-${Date.now()}`,
+        role: "ai",
+        text: "ได้เลย ไว้พร้อมเมื่อไหร่ก็มาคุยกันต่อได้นะ",
+        createdAt: Date.now() + 1,
+      };
+      setInputText("");
+      setMessages((prev) => [...prev, userMessage, aiReplyMessage]);
+      isSendingRef.current = false;
+      return;
     }
 
     // 3. User clicked quick reply "สรุปให้หน่อย" or "ไว้คราวหน้า"
@@ -1895,43 +1868,7 @@ function ChatScreen({
             </div>
           )}
 
-        {/* Agency Actions Bar */}
-        <div className="agencyRow">
-          {[
-            {
-              label: "หายใจลึกๆ",
-              action: () => setScreen("pause"),
-              icon: "≈",
-            },
-            {
-              label: "ระบาย",
-              action: () => handleSendMessage("อยากระบายความรู้สึกตอนนี้"),
-              icon: "☁",
-            },
-            {
-              label: "เข้าใจ",
-              action: () =>
-                handleSendMessage("ช่วยอธิบายและทำความเข้าใจเรื่องนี้หน่อย"),
-              icon: "♡",
-            },
-            {
-              label: "หยุดก่อน",
-              action: () => handleSendMessage("อยากหยุดตัวเองก่อนทำอะไรใจร้อน"),
-              icon: "✋",
-            },
-            {
-              label: "คิดทางเลือก",
-              action: () =>
-                handleSendMessage("มีทางเลือกใหม่อะไรที่ใจดีกับตัวเองบ้าง"),
-              icon: "⑂",
-            },
-          ].map((item) => (
-            <button key={item.label} onClick={item.action}>
-              <span>{item.icon}</span>
-              <small>{item.label}</small>
-            </button>
-          ))}
-        </div>
+
       </div>
 
       <form className="composer" onSubmit={handleFormSubmit}>

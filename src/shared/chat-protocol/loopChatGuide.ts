@@ -13,6 +13,7 @@ export interface LoopChatGuide {
   skipped: LoopChatField[];
   asked: LoopChatField | null;
   nextOfferAt: number;
+  preferListening?: boolean;
   helpAttempts?: Partial<Record<LoopChatField, number>>;
 }
 type Message = { role: string; content?: string; text?: string };
@@ -72,10 +73,10 @@ function loopChatControl(text: string, offered = false): LoopChatControl | null 
 // Consent and navigation are not observations to put into the user's trace.
 const isControlText = (text: string) => loopChatControl(text, true) !== null;
 export function isChatWrapUpIntent(text: string): boolean {
-  const input = text.trim().toLowerCase().replace(/\s+/g, ' ');
-  // A farewell must not match the syllable บาย inside ระบาย or สบาย.
-  return /^(?:บ๊าย)?บาย(?:(?:นะ|จ้ะ|จ้า|ครับ|ค่ะ|คะ)|[ !.ๆ…])*$/u.test(input) ||
-    ['พอแค่นี้', 'ไปนอนแล้ว', 'ไปทำงานก่อน', 'ขอตัวก่อน', 'แค่นี้ก่อน', 'ขอบคุณนะ', 'ขอบคุณมากนะ', 'จบการคุย', 'จบแค่นี้'].some(k => input.includes(k));
+  const input = text.normalize('NFC').trim().replace(/\s+/gu, '').replace(/[.!?…。！？]+$/u, '');
+  // Only an explicit whole-message farewell ends a chat. Gratitude, negation,
+  // reported speech, and the syllable บาย inside ระบาย/สบาย are not goodbyes.
+  return /^(?:(?:วันนี้)?(?:ขอ)?(?:พอแค่นี้|แค่นี้ก่อน|จบการคุย|จบแค่นี้)(?:ก่อน)?|(?:เรา|ฉัน|ผม|หนู)?(?:จะ)?(?:ไปนอนแล้ว|ไปทำงานก่อน|ขอตัวก่อน)|(?:บ๊าย)?บาย)(?:นะ|จ้ะ|จ้า|ครับ|ค่ะ|คะ|ๆ)*$/u.test(input);
 }
 const textOf = (m: Message) => (m.content || m.text || '').trim();
 export function prepareLoopChat(messages: Message[], previous?: unknown) {
@@ -94,14 +95,15 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     skipped: Array.isArray(input.skipped) ? input.skipped.filter(k => LOOP_CHAT_FIELDS.includes(k)) : [],
     asked: LOOP_CHAT_FIELDS.includes(input.asked as LoopChatField) ? input.asked! : null,
     nextOfferAt: typeof input.nextOfferAt === 'number' ? Math.max(2, input.nextOfferAt) : 2,
+    preferListening: input.preferListening === true,
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
   const latest = userTexts[userTexts.length - 1] || '';
   const count = userTexts.filter(t => t && !isControlText(t)).length;
   const control = loopChatControl(latest, state.mode === 'offered');
-  if (control === 'start') { state.mode = 'guided'; state.skipped = []; }
+  if (control === 'start') { state.mode = 'guided'; state.skipped = []; state.preferListening = false; }
   if (control === 'vent') {
-    state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3;
+    state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3; state.preferListening = true;
   }
   // If the user keeps telling their story, listen instead of repeating the offer every turn.
   if (state.mode === 'offered' && !control) {
@@ -124,6 +126,7 @@ export function loopChatInstruction(context: LoopChatContext): string {
 [LOOP TRACE CHAT — applies after all safety rules]
 Collect the user's own observations across eight fields while keeping conversation natural.
 Current interaction mode: ${context.state.mode}. Last asked field: ${context.state.asked || 'none'}.
+User chose to keep talking: ${context.state.preferListening === true}. In this case stay with their story until THEY ask to explore. Do not offer a summary, saving, a break, an exercise, or another mode-choice menu. “อยากระบายต่อ” means keep listening, never goodbye. Gratitude alone also does not end a conversation. Reflect the latest feeling or event naturally without recapping everything; allow space to talk without requiring a question every turn. Summarize only when explicitly requested.
 The user may be new to reflection. Their pace matters more than finishing all eight fields. Never frame this as a test or a task they must finish.
 Help requested: ${context.helpRequested}. Previous support attempts: ${JSON.stringify(context.state.helpAttempts || {})}.
 Concrete scaffold for the current field: ${context.state.asked ? helpText[context.state.asked][Math.min(1, context.state.helpAttempts?.[context.state.asked] || 0)] : 'none'}
@@ -173,7 +176,11 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   const summary = typeof parsed?.loopSummary === 'string' ? parsed.loopSummary.trim().slice(0, 400) : '';
   let message = turn.assistant_message;
   let replies = turn.quick_replies;
-  if (state.mode === 'listening' && context.count >= state.nextOfferAt &&
+  if (context.control === 'vent') {
+    // Keep this transition independent of model wrap-up/exercise suggestions.
+    message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
+    replies = [];
+  } else if (state.mode === 'listening' && !state.preferListening && context.count >= state.nextOfferAt &&
       (state.fields.trigger || state.fields.emotion_or_body) && !context.control) {
     state.mode = 'offered';
     message = [summary || 'เราเริ่มเห็นประเด็นจากที่เธอเล่าแล้วนะ', 'ตอนนี้อยากระบายต่อ หรือค่อย ๆ สำรวจเรื่องนี้ไปด้วยกันทีละส่วน?'].join('\n\n');
@@ -214,8 +221,8 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   }
   const f = state.fields;
   return {
-    ...turn, assistant_message: message, quick_replies: replies, loop_guide: state,
-    ...(state.mode !== 'listening' ? { recommended_exercise: null } : {}),
+    ...turn, assistant_message: message, quick_replies: state.mode === 'listening' && state.preferListening ? [] : replies, loop_guide: state,
+    ...(state.mode !== 'listening' || state.preferListening ? { recommended_exercise: null } : {}),
     extracted_loop: { ...f, old_response: f.options, new_choice: f.micro_action, desires: f.needs, insights: f.reflection },
   };
 }
