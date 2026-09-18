@@ -5,6 +5,7 @@ export type LoopChatField = typeof LOOP_CHAT_FIELDS[number];
 export const LOOP_CHAT_START = 'ค่อย ๆ สำรวจลูปด้วยกัน';
 export const LOOP_CHAT_VENT = 'อยากระบายต่อ';
 export const LOOP_CHAT_SKIP = 'ข้ามข้อนี้ก่อน';
+export const LOOP_CHAT_HELP = 'ยังไม่รู้ ช่วยไกด์หน่อย';
 export const LOOP_CHAT_REVIEW = 'สรุปแล้วบันทึก';
 export interface LoopChatGuide {
   mode: 'listening' | 'offered' | 'guided' | 'review';
@@ -37,7 +38,7 @@ const helpText: Record<LoopChatField, [string, string]> = {
 };
 function isHelpText(text: string): boolean {
   const t = text.trim().replace(/\s+/gu, '').replace(/[.!?…。！？]+$/u, '');
-  return /^(?:(?:เรา|ฉัน|ผม|หนู|ยัง|ก็|ตอนนี้|เอ่อ|คือ))*(?:ไม่รู้|ไม่เข้าใจ|ไม่ค่อยเข้าใจ|ไม่แน่ใจ|นึกไม่ออก|คิดไม่ออก|ตอบไม่ได้|ตอบไม่ถูก|งง)(?:เลย|จริงๆ|นะ|ค่ะ|ครับ|อะ|อ่ะ|เหมือนกัน)*$/u.test(t) ||
+  return t === LOOP_CHAT_HELP.replace(/\s+/gu, '') || /^(?:(?:เรา|ฉัน|ผม|หนู|ยัง|ก็|ตอนนี้|เอ่อ|คือ))*(?:ไม่รู้|ไม่เข้าใจ|ไม่ค่อยเข้าใจ|ไม่แน่ใจ|นึกไม่ออก|คิดไม่ออก|ตอบไม่ได้|ตอบไม่ถูก|งง)(?:เลย|จริงๆ|นะ|ค่ะ|ครับ|อะ|อ่ะ|เหมือนกัน)*$/u.test(t) ||
     /^(?:(?:เรา|ฉัน|ผม|หนู|ยัง|ก็))*(?:ไม่รู้|ไม่เข้าใจ|ไม่แน่ใจ)(?:ว่า)?(?:ต้องการอะไร|จะตอบอะไร|จะตอบยังไง|คำถาม|ตัวเอง|ใจตัวเอง)/u.test(t) ||
     /^(?:ช่วยอธิบาย|ช่วยยกตัวอย่าง|ขอตัวอย่าง|ขอคำอธิบาย|หมายถึงอะไร|หมายความว่า|ต้องตอบยังไง|ต้องตอบอะไร)/u.test(t) ||
     /^(?:ความต้องการ|ข้อเท็จจริง|ความคิดอัตโนมัติ|ทางเลือก|การสะท้อนคิด)(?:คืออะไร|หมายถึงอะไร|คือยังไง)/u.test(t);
@@ -169,7 +170,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
         ? 'ยังหาคำตอบไม่ได้ก็ไม่เป็นไรนะ ไม่ต้องฝืนให้ครบ เราพักข้อนี้ไว้และเก็บสิ่งที่คุยแล้วได้ เธออยากระบายต่อหรือข้ามข้อนี้ไปก่อน?'
         : personalized && personalized.length <= 900 && personalized !== context.lastAssistantText && !personalized.includes(questions[supportField])
           ? personalized : helpText[supportField][attempts - 1];
-      replies = [LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+      replies = attempts >= 3 ? [LOOP_CHAT_SKIP, LOOP_CHAT_VENT] : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else if (missing) {
       const reflection = context.control === 'start'
         ? 'ได้เลย เราค่อย ๆ ดูไปด้วยกัน ตอบเท่าที่พร้อมก็พอนะ'
@@ -177,7 +178,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
       const question = missing === 'facts' && !state.fields.automatic_story
         ? 'ในเหตุการณ์นี้ สิ่งที่รู้แน่ ๆ ว่าเกิดขึ้นจริงคืออะไร?' : questions[missing];
       message = [reflection, question].filter(Boolean).join('\n\n');
-      replies = [LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+      replies = [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else {
       state.mode = 'review';
       const complete = LOOP_CHAT_FIELDS.every(key => state.fields[key]);

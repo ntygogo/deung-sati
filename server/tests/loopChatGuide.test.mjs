@@ -84,7 +84,7 @@ for (const field of LOOP_CHAT_FIELDS) {
   assert.deepEqual(third.loop_guide.fields,{});
 }
 const needsGuide={mode:'guided',fields:{trigger:event,emotion_or_body:feeling,automatic_story:answers.automatic_story,facts:answers.facts},asked:'needs',skipped:[],nextOfferAt:2};
-for (const text of ['ไม่รู้ว่าต้องการอะไร','ไม่เข้าใจคำถาม','ความต้องการคืออะไร','ช่วยอธิบายหน่อย']) {
+for (const text of ['ไม่รู้ว่าต้องการอะไร','ไม่เข้าใจคำถาม','ความต้องการคืออะไร','ช่วยอธิบายหน่อย','ยังไม่รู้ ช่วยไกด์หน่อย']) {
   const help=applyLoopChat(prepareLoopChat([...messages,u(text)],needsGuide),{loopTrace:{needs:{quote:text}}},base);
   assert.equal(help.loop_guide.asked,'needs',text);
   assert.equal(help.loop_guide.fields.needs,undefined,text);
