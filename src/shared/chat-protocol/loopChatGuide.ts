@@ -20,7 +20,7 @@ export interface LoopChatGuide {
 type Message = { role: string; content?: string; text?: string };
 const questions: Record<LoopChatField, string> = {
   trigger: 'ก่อนรู้สึกแบบนี้ มีเหตุการณ์หรือคำพูดไหนมากระทบใจเธอ?',
-  emotion_or_body: 'ตอนนั้นเธอรู้สึกอย่างไร? ถ้าสะดวกจะเล่าความรู้สึกในร่างกายด้วยก็ได้',
+  emotion_or_body: 'ตอนนั้นเป็นอย่างไรสำหรับเธอ? ใช้คำธรรมดาที่ใกล้กับตัวเอง หรือบอกว่ายังไม่รู้ก็ได้นะ',
   automatic_story: 'ตอนนั้นมีความคิดหรือประโยคอะไรแวบขึ้นมาในหัว?',
   facts: 'ลองดูเฉพาะสิ่งที่เห็นหรือได้ยินก่อน โดยยังไม่ต้องรู้เหตุผลของมัน ตอนนั้นเกิดอะไรขึ้นที่เธอจำได้บ้าง?',
   needs: 'ถ้าเรื่องนี้ดีขึ้นได้สักนิด เธออยากให้มีอะไรเปลี่ยนไป?',
@@ -40,7 +40,7 @@ const helpText: Record<LoopChatField, [string, string]> = {
 };
 const practiceQuestions: Record<LoopChatField, string> = {
   trigger: 'มีเหตุการณ์หรือคำพูดไหนที่พอจำได้ว่าใจเริ่มสะดุด?',
-  emotion_or_body: 'ตอนนี้พอสังเกตอะไรในใจหรือร่างกายได้บ้าง?',
+  emotion_or_body: 'มีคำธรรมดาคำไหนใกล้กับที่เป็นอยู่ตอนนี้บ้าง? ยังไม่ต้องหาชื่ออารมณ์ให้ถูกนะ',
   automatic_story: 'ถ้าลองเติมว่า “ตอนนั้นฉันนึกว่า…” มีคำไหนผุดขึ้นมาบ้าง?',
   facts: 'ตอนนั้นมีใครพูดหรือทำอะไรที่เธอจำได้บ้าง?',
   needs: 'ถ้ามีอะไรช่วยให้เรื่องนี้เบาลงได้สักนิด เธออยากให้เป็นอะไร?',
@@ -84,8 +84,40 @@ function loopChatControl(text: string, offered = false): LoopChatControl | null 
 }
 // Consent and navigation are not observations to put into the user's trace.
 const isControlText = (text: string) => loopChatControl(text, true) !== null;
+const reportedThought = /(?:ทุกคน|คนอื่น|เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:ก็)?(?:คิดว่า|มองว่า|บอกว่า|บอกให้|คาดหวังว่า)/gu;
+const ownThought = /(?:(?:เรา|ฉัน|ผม|หนู)(?:เอง)?(?:ก็|เลย|กลับ)?|ตอนนั้น)(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)/gu;
+function lastMatchIndex(text: string, pattern: RegExp): number {
+  return [...text.matchAll(pattern)].at(-1)?.index ?? -1;
+}
+// Literal presence is necessary, but a quoted request or another person's belief
+// is not automatically an observation belonging to this field.
+function groundedObservation(key: LoopChatField, quote: string, source: string): boolean {
+  let index = source.indexOf(quote);
+  while (index >= 0) {
+    const throughQuote = source.slice(0, index + quote.length);
+    const before = source.slice(0, index);
+    const reporting = lastMatchIndex(throughQuote, reportedThought);
+    const endorsement = lastMatchIndex(throughQuote, ownThought);
+    const isOthersThought = key === 'automatic_story' && reporting >= 0 && endorsement < reporting;
+    const help = /(?:ช่วยยกตัวอย่าง|ขอ(?:แค่)?ตัวอย่าง|มีตัวอย่าง|ขอ(?:แค่)?ประโยค|หมายถึงอะไร|ทางเลือกคืออะไร)/u.exec(throughQuote);
+    const userChoice = /(?:เรา|ฉัน|ผม|หนู)(?:จะ|อาจ|เลือก|อยากลอง)/u.exec(throughQuote);
+    const isHelpFragment = ['options', 'micro_action', 'needs'].includes(key) && Boolean(help && (!userChoice || userChoice.index < help.index));
+    const isLabelPreference = key === 'needs' && /(?:ใช้คำว่า|เรียกว่า|เรียกแบบนี้|ชื่ออารมณ์)/u.test(quote);
+    const isUnchosenAction = key === 'micro_action' && /(?:ดีไหม|ได้ไหม|หรือเปล่า|ยังไม่พร้อม|ยังไม่อยากทำ|^(?:เรา|ฉัน|ผม|หนู)?อาจ)/u.test(quote);
+    // Do not remove an attribution and promote its content to an observed fact.
+    const isThoughtAsFact = key === 'facts' && (
+      /^(?:เรา|ฉัน|ผม|หนู)?(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)/u.test(quote) ||
+      /(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)$/u.test(before.trim())
+    );
+    if (!isOthersThought && !isHelpFragment && !isLabelPreference && !isUnchosenAction && !isThoughtAsFact) return true;
+    index = source.indexOf(quote, index + quote.length);
+  }
+  return false;
+}
 function validObservation(key: LoopChatField, value: string): boolean {
+  if (key === 'needs' && /(?:ใช้คำว่า|เรียกว่า|เรียกแบบนี้|ชื่ออารมณ์)/u.test(value)) return false;
   if (key !== 'automatic_story') return true;
+  if (lastMatchIndex(value, reportedThought) >= 0 && lastMatchIndex(value, ownThought) < lastMatchIndex(value, reportedThought)) return false;
   // A body sensation or the act of self-criticism is not the content of a thought.
   return !/^(?:มัน)?(?:อัดแน่นในหัว|แน่นหน้าอก|ตึงที่ไหล่|จุกที่อก|หัวตื้อ)(?:ไปหมด|มาก|ๆ)?$/u.test(value.replace(/\s+/gu, '')) &&
     !/^(?:เอาแต่|ก็)?(?:ด่า|โทษ|ตำหนิ)ตัวเอง(?:มาก|ซ้ำ|ๆ)*$/u.test(value.replace(/\s+/gu, ''));
@@ -140,6 +172,12 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     preferListening: input.preferListening === true,
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
+  for (const key of LOOP_CHAT_FIELDS) {
+    const value = state.fields[key];
+    if (!value) continue;
+    const sources = userTexts.filter(text => text.includes(value));
+    if (sources.length && !sources.some(text => groundedObservation(key, value, text))) delete state.fields[key];
+  }
   const latest = userTexts[userTexts.length - 1] || '';
   const preferredEmotion = /(?:^|\s|แต่)(?:เรา|ฉัน|ผม|หนู)?(?:ขอใช้คำ|ขอเรียก)ว่า/u.test(latest);
   const emotionCorrection = correctsEmotion(latest) || preferredEmotion;
@@ -206,6 +244,14 @@ For guideQuestion, choose the first missing non-skipped field AFTER your valid l
 Field meaning matters: emotion_or_body holds sensations (e.g. "อัดแน่นในหัว") and feelings. automatic_story is the actual interpretation/prediction/self-talk (e.g. "เงินจะไม่พอ", "เราไม่สำคัญ"), NOT a sensation or the label "ด่าตัวเอง". If no thought content is known leave it absent. A quote must be copied EXACTLY, not summarized; prefer the latest explicit clarification over a vague older phrase. One USER sentence can support multiple fields. Do not discard an explicit action just because earlier turns expressed uncertainty.
 If the user does not understand, cannot find an answer, asks why/how, or still needs help exploring the current question, set guideSupport.needed=true. In guideSupport.message gently acknowledge that not knowing is okay, explain the current idea in plain Thai using their actual story, and ask at most ONE smaller, concrete observation question. Do not repeat the original abstract question. Stay with the current field; do not rush to the next field or invent an answer for them. Label examples as possibilities that may not fit; do not interpret examples or uncertainty as the user's answer. If they remain unsure, try a different angle and explicitly allow pausing. Brief genuine observations such as “เสียใจ” are valid answers, not a reason to interrogate them further.
 Only include fields supported by literal contiguous quotes from USER messages. Never copy the assistant's suggestions, questions, negated feelings, hypothetical claims, or another person's feelings as the user's own. In guided mode, interpret a short reply in the context of the last asked field. An unanswered/skipped/unknown field stays absent. Distinguish facts from interpretations. options means possible choices, not assumed habitual behavior.
+Source meaning and speaker must survive extraction. "ทุกคนคิดว่าเราต้องเศร้า" is OTHER PEOPLE's expectation, never the user's automatic_story. If they later say "เราเลยคิดว่าเราผิดปกติ", that later clause can be automatic_story. A request such as "มีตัวอย่างทางเลือกไหม" is not options; leave options absent and actually explain. "เรียกว่าอึดอัดไว้ก่อน" is a wording preference, not needs. "ฉันคิดว่าเขาไม่สนใจ" is a thought, not a fact, even if you copy only "เขาไม่สนใจ". Do not make fields look complete by moving a quote to an unrelated field.
+GROUNDING CHECK for assistantMessage, loopSummary, guideSupport and guideQuestion: use only details the user has given. Do not add events, causes, motives or a more intense emotion to sound empathetic. Keep tentative wording tentative. You may respond directly without a reflective preface. In listening mode, do not ask about bodily sensations by default; use one concrete moment from the story. An explanation is not a diagnosis or a hidden-cause claim.
+Examples of grounded conversational responses (adapt, do not copy their events into other cases):
+- USER: "หัวหน้าเรียกคุยงาน อึดอัด ไม่รู้เรียกว่าอะไร" -> "เรียกว่าอึดอัดไว้ก่อนได้เลย ตอนคุยงานมีคำพูดช่วงไหนที่ยังติดอยู่ในหัวบ้าง?" Do not invent a sudden meeting, fear, or failure.
+- USER: "แม่โทรให้ช่วย มันยุ่งในหัว ไม่รู้ว่าเหนื่อยหรือรำคาญ" -> "ยังไม่ต้องเลือกชื่อก็ได้ ก่อนแม่โทรมา เธอกำลังทำอะไรอยู่?" Do not invent a workload.
+- USER: "เลิกกับแฟน ไม่ร้องไห้ มันว่าง ๆ" -> "ไม่จำเป็นต้องบังคับให้ตัวเองร้องไห้นะ ใช้คำว่าว่าง ๆ ตามที่เป็นอยู่ได้" Do not explain it as the mind protecting itself or require proof that they care.
+- USER: "เพื่อนลืมวันเกิด ไม่เป็นไร แต่คิดถึงทั้งวัน" -> "เรื่องนี้ยังวนกลับมาในหัวอยู่ มีช่วงไหนที่เธอนึกถึงบ่อยเป็นพิเศษไหม?" Do not say their mouth and heart disagree.
+- USER: "น้อยใจนิดนึงมั้ง" -> Keep "อาจ/มั้ง/ยังไม่แน่ใจ"; do not conclude a definite emotion or its cause.
 Update a prior field when the user explicitly corrects it. Set newLoopTopic true only for an explicit switch to an unrelated event; do not mix it with the previous loop.
 When listening, respond with empathy and at most one natural question. When guided, provide a short reflection in loopSummary; the application appends ONE next question based on missing fields, so do not ask additional questions or offer an exercise. Speak naturally as เรา to เธอ, never refer to the person as ผู้ใช้ or report about them in the third person. Do not repeat the entire story after every answer. Never force completion. The user may vent, skip, or pause at any time. Never claim a loop was saved or rewards given.
 When enough context exists after two or three user messages, the application offers a choice to vent or explore. Do not replace that choice with a forced exercise.
@@ -240,7 +286,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     if ((supportField && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : context.userTexts).some(t => (!isControlText(t) || (key === 'emotion_or_body' && context.preferredEmotion && t === context.latest)) && !isHelpText(t) && !understandsExplanation(t, '') && t.includes(quote.trim()) && (key !== 'emotion_or_body' || groundedEmotionQuote(quote.trim(), t))) &&
+        (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : context.userTexts).some(t => (!isControlText(t) || (key === 'emotion_or_body' && context.preferredEmotion && t === context.latest)) && (!isHelpText(t) || (key === 'options' && /^(?:เรา|ฉัน|ผม|หนู)(?:อาจลอง|จะลอง|เลือกที่จะ)/u.test(quote.trim()) && t.includes('แต่' + quote.trim()))) && !understandsExplanation(t, '') && t.includes(quote.trim()) && groundedObservation(key, quote.trim(), t) && (key !== 'emotion_or_body' || groundedEmotionQuote(quote.trim(), t))) &&
         validObservation(key, quote.trim()) && !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }
