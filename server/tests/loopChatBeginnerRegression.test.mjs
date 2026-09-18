@@ -14,7 +14,7 @@ for(const text of ['ไม่อยากให้ช่วยพาสำรว
 const explained=applyLoopChat(prepareLoopChat([u('สำรวจคืออะไร')],guide),{},base);
 assert.equal(explained.loop_guide.mode,'offered');
 assert.equal(prepareLoopChat([u('ได้เลย')],explained.loop_guide).state.mode,'guided');
-for(const text of ['ยังไม่พร้อมบอกใครจริง ๆ ขอข้ามข้อนี้ก่อน','ตอนนี้ยังไม่พร้อมทำอะไร ขอข้ามไว้ก่อน']){
+for(const text of ['ยังไม่พร้อมบอกใครจริง ๆ ขอข้ามข้อนี้ก่อน','ตอนนี้ยังไม่พร้อมทำอะไร ขอข้ามไว้ก่อน','ก็บอกว่ายังไม่พร้อมทำอะไร ขอข้ามไว้ก่อน']){
   const r=applyLoopChat(prepareLoopChat([u(text)],{...guide,mode:'guided',asked:'micro_action'}),{guideSupport:{needed:true}},base);
   assert.equal(r.loop_guide.asked,'reflection',text);
   assert.ok(r.loop_guide.skipped.includes('micro_action'));
@@ -26,7 +26,7 @@ for(const text of ['แค่อยู่เงียบ ๆ ด้วยกั�
   assert.deepEqual(r.quick_replies,[]);
   assert.doesNotMatch(r.assistant_message,/ไหม|หรือ/);
 }
-for(const text of ['จะส่งหาแม่ตอนนี้ว่าขอพักยี่สิบนาที แล้วจะไปซื้อให้','เขียนสองจุดที่ต้องแก้ออกมาก่อนน่าจะช่วยได้ จะลองทำแบบนั้นตอนเปิดงาน']){
+for(const text of ['จะส่งหาแม่ตอนนี้ว่าขอพักยี่สิบนาที แล้วจะไปซื้อให้','เขียนสองจุดที่ต้องแก้ออกมาก่อนน่าจะช่วยได้ จะลองทำแบบนั้นตอนเปิดงาน','ลองพิมพ์ไว้ในโน้ตก่อนน่าจะไหว จะเขียนสิ่งที่อยากส่งแต่ยังไม่ส่งตอนนี้']){
   const r=applyLoopChat(prepareLoopChat([u(text)],{...guide,mode:'guided',asked:'micro_action'}),{guideSupport:{needed:true}},base);
   assert.equal(r.loop_guide.fields.micro_action,text);
   assert.equal(r.loop_guide.asked,'reflection');
@@ -45,6 +45,12 @@ for(const quote of ['มันอัดแน่นในหัวไปหม�
   assert.equal(prepareLoopChat([],{...guide,fields:{automatic_story:quote}}).state.fields.automatic_story,undefined);
 }
 const optionsGuide={...guide,mode:'guided',asked:'options',fields:{...fields,options:undefined}};
+const noAction=applyLoopChat(prepareLoopChat([u('ยังไม่พร้อมทำอะไร ขอข้ามข้อนี้ก่อน')],optionsGuide),{},base);
+assert.equal(noAction.loop_guide.asked,'reflection');
+assert.ok(noAction.loop_guide.skipped.includes('micro_action'));
+const noPrematureAction=applyLoopChat(prepareLoopChat([u('จะเขียนโน้ตก่อน')],{...guide,mode:'guided',asked:'micro_action'}),{guideQuestion:{field:'reflection',message:'หลังเขียนเสร็จแล้วอยากทำอะไรเพิ่ม?'}},base);
+assert.match(noPrematureAction.assistant_message,/เริ่มสังเกตเห็น/);
+assert.doesNotMatch(noPrematureAction.assistant_message,/เสร็จแล้ว|ทำอะไรเพิ่ม/);
 const supported=applyLoopChat(prepareLoopChat([u('ช่วยคิดให้เห็นภาพหน่อย')],optionsGuide),{guideSupport:{needed:true,message:'ลองดูสองทางนี้ ทางไหนที่พอทำไหว?'}},base);
 assert.doesNotMatch(supported.assistant_message,/ลองดูสองทางนี้/);
 assert.match(supported.assistant_message,/พักการตัดสินใจ.*หรือแยกเรื่อง/);

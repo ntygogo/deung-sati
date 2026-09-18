@@ -64,7 +64,7 @@ function loopChatControl(text: string, offered = false): LoopChatControl | null 
   const input = text.normalize('NFC').trim().replace(/\s+/gu, '')
     .replace(/[.!?…。！？]+$/u, '').replace(/(?:(?:นะ|ค่ะ|คะ|ครับ|จ้า|จ้ะ|จ๊ะ|ฮะ|น้า))+$/u, '');
   if (/^(?:(?:อยาก|ขอ)?ระบาย(?:ต่อ|ก่อน|ต่อก่อน)?|(?:ขอ)?คุยต่อก่อน|ยังไม่พร้อม|ไม่อยากสำรวจ|ยังไม่อยากสำรวจ|ยังไม่พร้อมสำรวจ|ไม่พร้อมสำรวจ)$/u.test(input)) return 'vent';
-  const ownRequest = !/[“”"'「」]|บอกว่า|ถามว่า|เขาอยาก|ไม่อยากให้ช่วย|ไม่ต้องพา|อย่าพา/u.test(input);
+  const ownRequest = !/[“”"'「」]|(?:เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:เคย)?บอกว่า|ถามว่า|เขาอยาก|ไม่อยากให้ช่วย|ไม่ต้องพา|อย่าพา/u.test(input);
   if (ownRequest && /^(?:อยาก|ขอ)ระบาย(?:ต่อ|ก่อน|ต่อก่อน)(?:\s|[,.!])/u.test(text.trim())) return 'vent';
   if (ownRequest && /ขอข้าม(?:ข้อนี้)?(?:ไว้|ไป)?ก่อน$/u.test(input) && !/ไม่(?:อยาก)?ข้าม|อย่าข้าม/u.test(input)) return 'skip';
   if (ownRequest && /^(?:สำรวจคืออะไร|สำรวจยังไง|ต้องสำรวจอะไร|สำรวจหมายถึงอะไร)$/u.test(input)) return 'explain';
@@ -128,6 +128,10 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   }
   if (control === 'skip' && state.mode === 'guided' && state.asked) {
     state.skipped = [...new Set([...state.skipped, state.asked])];
+    // Declining action while considering choices must not lead straight to another action question.
+    if (state.asked === 'options' && /(?:ยัง)?ไม่พร้อมทำอะไร|ยังไม่อยากทำอะไร|ไม่พร้อมลงมือ/u.test(latest)) {
+      state.skipped = [...new Set([...state.skipped, 'micro_action' as const])];
+    }
     state.asked = null;
   }
   const assistantTexts = messages.filter(m => m.role === 'assistant' || m.role === 'ai').map(textOf);
@@ -175,7 +179,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   if (turn.safety_state !== 'normal') return turn;
   const state: LoopChatGuide = { ...context.state, fields: { ...context.state.fields }, skipped: [...context.state.skipped], helpAttempts: { ...context.state.helpAttempts } };
   const explicitAction = state.mode === 'guided' && (state.asked === 'options' || state.asked === 'micro_action') && !context.control &&
-    !/อาจ|ถ้า|หรือ|ไหม|ยังไม่|ไม่พร้อม|ไม่อยาก|บอกว่า|[“”"'「」]/u.test(context.latest) &&
+    !/อาจ|ถ้า|หรือ|ไหม|ยังไม่แน่ใจ|ไม่รู้ว่า|ไม่พร้อม|ไม่อยาก|บอกว่า|[“”"'「」]/u.test(context.latest) &&
     /(?:^|\s|แล้ว)(?:เรา|ฉัน|ผม|หนู)?(?:จะ(?:ลอง)?|เลือกที่จะ)(?:ส่ง|เขียน|เปิด|ดู|บอก|ขอ|พัก|กันเวลา|เริ่ม|ทำแบบนั้น)/u.test(context.latest);
   if (explicitAction) {
     state.fields.micro_action = context.latest.slice(0, 600);
@@ -249,7 +253,8 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
       const tailored = parsed?.guideQuestion;
       const abstractNeeds = missing === 'needs' && /ลึก\s*ๆ|ผลลัพธ์|อยากให้ตัวเองรู้สึก/u.test(tailored?.message || '');
       const disputingFacts = missing === 'facts' && /ยังใส่ใจ|ยังแคร์|ยังต้องการ|ต้องการเราอยู่|ห่วงใย|หลักฐาน.*(?:หักล้าง|โต้แย้ง)|ในอดีต/u.test(tailored?.message || '');
-      const question = tailored?.field === missing && typeof tailored.message === 'string' &&
+      // Reflection is about what was noticed in chat, not another task or an action assumed completed.
+      const question = missing !== 'reflection' && tailored?.field === missing && typeof tailored.message === 'string' &&
         !abstractNeeds && !disputingFacts &&
         tailored.message.trim().length >= 10 && tailored.message.length <= 500 && tailored.message.trim() !== context.lastAssistantText
           ? tailored.message.trim() : questions[missing];
