@@ -92,6 +92,11 @@ for (const text of ['ไม่รู้ว่าต้องการอะไ�
 const supported=applyLoopChat(prepareLoopChat([u('คำถามกว้างไปสำหรับฉัน')],needsGuide),{guideSupport:{needed:true,message:'ยังไม่ต้องหาคำตอบใหญ่ก็ได้นะ ถ้าหัวหน้าช่วยอะไรเล็ก ๆ ได้สักอย่าง เธออยากให้ช่วยตรงไหน?'}},base);
 assert.equal(supported.loop_guide.asked,'needs');
 assert.match(supported.assistant_message,/หัวหน้าช่วย/);
+const understood=applyLoopChat(prepareLoopChat([u('อ๋อ เข้าใจแล้วค่ะ')],supported.loop_guide),{loopTrace:{needs:{quote:'เข้าใจแล้ว'}}},base);
+assert.equal(understood.loop_guide.asked,'needs');
+assert.equal(understood.loop_guide.helpAttempts.needs,0);
+assert.equal(understood.loop_guide.fields.needs,undefined);
+assert.match(understood.assistant_message,/ค่อย ๆ ลองจากเรื่องของเธอ/);
 const missedSignal=applyLoopChat(prepareLoopChat([u('มันบอกเป็นคำพูดยากจัง')],needsGuide),{},base);
 assert.equal(missedSignal.loop_guide.asked,'needs');
 assert.equal(missedSignal.loop_guide.helpAttempts.needs,1);

@@ -36,6 +36,21 @@ const helpText: Record<LoopChatField, [string, string]> = {
   micro_action: ['ไม่ต้องแก้ทั้งเรื่องหรือลงมือทันทีนะ แค่ก้าวเล็กมาก ๆ ที่เธอเลือกเอง เช่นขอเวลาคิดก่อน มีอะไรเล็กพอที่เธอพอทำไหวไหม?', 'ถ้ายังไม่พร้อมทำอะไร เราไม่ต้องตั้งภารกิจเพิ่มก็ได้ ตอนนี้อยากพักไว้ก่อน หรือมีก้าวเล็กกว่านั้นที่พอไหว?'],
   reflection: ['ไม่ต้องมีบทเรียนสวย ๆ ก็ได้นะ เช่นเริ่มเห็นว่าตัวเองเหนื่อย หรือยังมีเรื่องที่ไม่รู้ เมื่อเทียบกับตอนเริ่มคุย มีอะไรที่เธอสังเกตได้เพิ่มนิดหนึ่งไหม?', 'ถ้ายังไม่เห็นอะไรเพิ่มก็ไม่เป็นไร ไม่ได้แปลว่าคุยเสียเปล่า เราเก็บเท่าที่มีไว้ได้ ตอนนี้อยากพักข้อนี้ไว้ก่อนไหม?'],
 };
+const practiceQuestions: Record<LoopChatField, string> = {
+  trigger: 'มีเหตุการณ์หรือคำพูดไหนที่พอจำได้ว่าใจเริ่มสะดุด?',
+  emotion_or_body: 'ตอนนี้พอสังเกตอะไรในใจหรือร่างกายได้บ้าง?',
+  automatic_story: 'ถ้าลองเติมว่า “ตอนนั้นฉันนึกว่า…” มีคำไหนผุดขึ้นมาบ้าง?',
+  facts: 'ตอนนั้นมีใครพูดหรือทำอะไรที่เธอจำได้บ้าง?',
+  needs: 'ถ้ามีอะไรช่วยให้เรื่องนี้เบาลงได้สักนิด เธออยากให้เป็นอะไร?',
+  options: 'มีทางไหนที่เธอพอลองมองไว้ได้ โดยยังไม่ต้องเลือกทำจริง?',
+  micro_action: 'มีก้าวเล็กแค่ไหนที่รู้สึกพอไหวสำหรับเธอ?',
+  reflection: 'ตอนนี้มีอะไรที่เธอสังเกตเห็นเพิ่มขึ้นนิดหนึ่งบ้าง?',
+};
+function understandsExplanation(text: string, previousReply: string): boolean {
+  const t = text.trim().replace(/\s+/gu, '').replace(/[.!?…。！？]+$/u, '').replace(/(?:นะ|ค่ะ|คะ|ครับ|จ้า|จ้ะ)+$/u, '');
+  return /^(?:อ๋อ|อ้อ)?(?:เข้าใจแล้ว|พอเข้าใจแล้ว|เห็นภาพแล้ว|เข้าใจขึ้นแล้ว)$/u.test(t) ||
+    (/เข้าใจ|เห็นภาพ|เห็นความต่าง|เห็นความแตกต่าง/u.test(previousReply) && /^(?:ใช่|อ๋อ|อ้อ|เข้าใจ)$/u.test(t));
+}
 function isHelpText(text: string): boolean {
   const t = text.trim().replace(/\s+/gu, '').replace(/[.!?…。！？]+$/u, '');
   return t === LOOP_CHAT_HELP.replace(/\s+/gu, '') || /^(?:(?:เรา|ฉัน|ผม|หนู|ยัง|ก็|ตอนนี้|เอ่อ|คือ))*(?:ไม่รู้|ไม่เข้าใจ|ไม่ค่อยเข้าใจ|ไม่แน่ใจ|นึกไม่ออก|คิดไม่ออก|ตอบไม่ได้|ตอบไม่ถูก|งง)(?:เลย|จริงๆ|นะ|ค่ะ|ครับ|อะ|อ่ะ|เหมือนกัน)*$/u.test(t) ||
@@ -96,9 +111,11 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     state.skipped = [...new Set([...state.skipped, state.asked])];
     state.asked = null;
   }
-  const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && isHelpText(latest);
   const assistantTexts = messages.filter(m => m.role === 'assistant' || m.role === 'ai').map(textOf);
-  return { state, userTexts, latest, count, control, helpRequested, lastAssistantText: assistantTexts[assistantTexts.length - 1] || '' };
+  const lastAssistantText = assistantTexts[assistantTexts.length - 1] || '';
+  const understood = state.mode === 'guided' && Boolean(state.asked && state.helpAttempts?.[state.asked]) && !control && understandsExplanation(latest, lastAssistantText);
+  const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && (isHelpText(latest) || understood);
+  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -142,7 +159,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     if (supportField) continue;
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        (newTopic ? [context.latest] : context.userTexts).some(t => !isControlText(t) && !isHelpText(t) && t.includes(quote.trim())) &&
+        (newTopic ? [context.latest] : context.userTexts).some(t => !isControlText(t) && !isHelpText(t) && !understandsExplanation(t, '') && t.includes(quote.trim())) &&
         !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }
@@ -162,7 +179,12 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   } else if (state.mode === 'guided') {
     const missing = supportField || LOOP_CHAT_FIELDS.find(key => !state.fields[key] && !state.skipped.includes(key));
     state.asked = missing || null;
-    if (supportField) {
+    if (supportField && context.understood) {
+      // Understanding an explanation is progress, but is not yet an answer to the trace field.
+      state.helpAttempts![supportField] = 0;
+      message = `ค่อย ๆ ลองจากเรื่องของเธอก็ได้นะ ${practiceQuestions[supportField]}`;
+      replies = [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+    } else if (supportField) {
       const attempts = Math.min(3, (state.helpAttempts?.[supportField] || 0) + 1);
       state.helpAttempts![supportField] = attempts;
       const personalized = typeof parsed?.guideSupport?.message === 'string' ? parsed.guideSupport.message.trim() : '';
