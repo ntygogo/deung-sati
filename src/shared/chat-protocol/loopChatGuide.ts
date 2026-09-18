@@ -20,7 +20,7 @@ const questions: Record<LoopChatField, string> = {
   trigger: 'ก่อนรู้สึกแบบนี้ มีเหตุการณ์หรือคำพูดไหนมากระทบใจเธอ?',
   emotion_or_body: 'ตอนนั้นเธอรู้สึกอย่างไร? ถ้าสะดวกจะเล่าความรู้สึกในร่างกายด้วยก็ได้',
   automatic_story: 'ตอนนั้นมีความคิดหรือประโยคอะไรแวบขึ้นมาในหัว?',
-  facts: 'ถ้าแยกจากความคิดเมื่อกี้ สิ่งที่รู้แน่ ๆ ว่าเกิดขึ้นจริงคืออะไร?',
+  facts: 'ข้อนี้ไม่ต้องหาความจริงทั้งหมดนะ ลองนึกเฉพาะสิ่งที่เห็นหรือได้ยิน เช่น “เขาขอให้แก้งาน” คือสิ่งที่ได้ยิน ส่วน “เขาคิดว่าเราไม่เก่ง” ยังเป็นการคาดเดา ในเรื่องของเธอ มีใครพูดหรือทำอะไรที่พอจำได้บ้าง?',
   needs: 'ถ้าเรื่องนี้ดีขึ้นได้สักนิด เธออยากให้มีอะไรเปลี่ยนไป?',
   options: 'ตอนนี้พอมองเห็นทางเลือกอะไรที่เป็นไปได้บ้าง?',
   micro_action: 'ถ้าเลือกก้าวเล็ก ๆ ที่พอทำไหว เธออยากลองทำอะไร?',
@@ -175,8 +175,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
       const reflection = context.control === 'start'
         ? 'ได้เลย เราค่อย ๆ ดูไปด้วยกัน ตอบเท่าที่พร้อมก็พอนะ'
         : context.control === 'skip' ? 'ข้ามไว้ก่อนได้เลยนะ' : summary;
-      const question = missing === 'facts' && !state.fields.automatic_story
-        ? 'ในเหตุการณ์นี้ สิ่งที่รู้แน่ ๆ ว่าเกิดขึ้นจริงคืออะไร?' : questions[missing];
+      const question = questions[missing];
       message = [reflection, question].filter(Boolean).join('\n\n');
       replies = [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else {
