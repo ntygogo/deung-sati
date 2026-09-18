@@ -45,4 +45,17 @@ assert.doesNotMatch(entered.assistant_message,/ตอนนี้อยากร
 for(const text of ['เพื่อนบอกว่า อยากสำรวจ','เขาถามว่า อยากสำรวจ','ไม่อยากสำรวจ','ไม่ได้อยากสำรวจ','อยากสำรวจแต่ยังไม่พร้อม']) assert.notEqual(prepareLoopChat([u(text)]).state.mode,'guided',text);
 const unsure = applyLoopChat(prepareLoopChat([u('เพื่อนลืมวันเกิด'),u('น้อยใจนิดนึงมั้ง ยังไม่แน่ใจ')]),{loopTrace:{trigger:{quote:'เพื่อนลืมวันเกิด'}},loopSummary:'เธอน้อยใจเพราะอยากให้เพื่อนใส่ใจ'},base);
 assert.doesNotMatch(unsure.assistant_message,/เธอน้อยใจเพราะ/);
+const withdrawal='เราคุยตกลงเลิกกันเมื่อวาน ส่วนความคิดของเราเองตอนนั้นยังบอกไม่ได้';
+const unknownStory=applyLoopChat(prepareLoopChat([u('โล่งเพราะไม่ต้องระวังคำพูดทุกวัน'),u(withdrawal)],{...stale,fields:{...stale.fields,automatic_story:'ไม่ต้องระวังคำพูดทุกวัน'}}),{loopTrace:{automatic_story:{quote:'ไม่ต้องระวังคำพูดทุกวัน'}}},base);
+assert.equal(unknownStory.loop_guide.fields.automatic_story,undefined);
+const nextUnknown=applyLoopChat(prepareLoopChat([u('โล่งเพราะไม่ต้องระวังคำพูดทุกวัน'),u(withdrawal),u('อยากมีพื้นที่ส่วนตัว')],unknownStory.loop_guide),{loopTrace:{automatic_story:{quote:'ไม่ต้องระวังคำพูดทุกวัน'}}},base);
+assert.equal(nextUnknown.loop_guide.fields.automatic_story,undefined,'A withdrawn unknown thought must not reappear.');
+const supportMessage='เช่นเปิดไฟล์เอกสาร หรือเขียนหัวข้อหนึ่งบรรทัด ยังไม่ต้องเลือกทำจริงก็ได้';
+const explained=applyLoopChat(prepareLoopChat([u('ไม่เข้าใจว่างานเล็กต้องเล็กแค่ไหน ช่วยยกตัวอย่างก่อน')]),{guideSupport:{needed:true,message:supportMessage}},base);
+assert.equal(explained.assistant_message,supportMessage);
+const boundary='อยากมีเวลาพักที่ไม่ถูกขัด ยังไม่พร้อมเลือกว่าจะทำอะไร ขอข้ามข้อนี้ก่อน';
+const skipped=applyLoopChat(prepareLoopChat([u(boundary)],stale),{loopTrace:{needs:{quote:'อยากมีเวลาพักที่ไม่ถูกขัด'}}},base);
+assert.equal(skipped.loop_guide.fields.needs,'อยากมีเวลาพักที่ไม่ถูกขัด');
+assert.ok(skipped.loop_guide.skipped.includes('options'));
+assert.ok(skipped.loop_guide.skipped.includes('micro_action'));
 console.log('PASS: source speaker, help requests, label preferences, proposals versus commitments, facts and cached-field cleanup.');
