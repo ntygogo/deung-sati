@@ -522,6 +522,7 @@ export default function App() {
             setScreen={setScreen}
             onOpenMenu={() => setIsDrawerOpen(true)}
             onStartChat={handleStartChatFromHome}
+            onOpenSaved={() => setShowSavedLoops(true)}
           />
         )}
 
@@ -602,7 +603,7 @@ export default function App() {
         )}
 
         {showSavedLoops && <div role="dialog" aria-modal="true" aria-label="ลูปที่บันทึก" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
-          <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>กลับไปแชท</button>
+          <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>{screen === "home" ? "กลับห้องพักใจ" : "กลับไปแชท"}</button>
           <h2>ลูปที่บันทึก</h2>
           {traces.length === 0 && <p>เมื่อบันทึกลูปแล้ว กลับมาคุยต่อได้ที่นี่</p>}
           {selectedChatTrace ? <><h3>{selectedChatTrace.title}</h3><p>{selectedChatTrace.summary}</p><TraceConversationActions trace={selectedChatTrace} history={chats.history} resume={resumeTrace} remove={chats.removeHistory} isGuest={chats.isGuest} /><button onClick={() => setSelectedChatTrace(null)}>ดูลูปอื่น</button></> : traces.map(t => <button key={t.id} onClick={() => setSelectedChatTrace(t)} style={{ display: 'block', padding: 16, margin: '12px 0', width: '100%', textAlign: 'left' }}>{t.title}</button>)}
@@ -915,10 +916,12 @@ function Home({
   setScreen,
   onOpenMenu,
   onStartChat,
+  onOpenSaved,
 }: {
   setScreen: (s: Screen) => void;
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
+  onOpenSaved: () => void;
 }) {
   const { companion, traceCount } = useCompanion();
 
@@ -930,7 +933,7 @@ function Home({
         onOpenMenu={onOpenMenu}
         onEmergency={() => setScreen("pause")}
         onOpenCompanion={() => setScreen("companion")}
-        onOpenJourney={() => setScreen("journey")}
+        onOpenJourney={onOpenSaved}
         onOpenFuture={() => setScreen("profile")}
         onOpenChat={() => setScreen("chat")}
         onStartChat={onStartChat}
