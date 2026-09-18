@@ -15,6 +15,7 @@ export interface LoopChatGuide {
   nextOfferAt: number;
   preferListening?: boolean;
   helpAttempts?: Partial<Record<LoopChatField, number>>;
+  emotionSourceAfter?: number;
 }
 type Message = { role: string; content?: string; text?: string };
 const questions: Record<LoopChatField, string> = {
@@ -29,7 +30,7 @@ const questions: Record<LoopChatField, string> = {
 };
 const helpText: Record<LoopChatField, [string, string]> = {
   trigger: ['หมายถึงจังหวะที่ใจเริ่มสะดุด ไม่ต้องเล่าทั้งเรื่องก็ได้ ก่อนหน้านั้นมีอะไรเกิดขึ้นหรือได้ยินคำพูดอะไรบ้าง?', 'ลองนึกถึงภาพเล็ก ๆ ภาพเดียว เช่น ตอนเปิดอ่านข้อความหรือตอนอยู่กับใคร มีช่วงไหนที่พอนึกออกไหม?'],
-  emotion_or_body: ['ยังไม่ต้องหาชื่ออารมณ์ให้ถูกก็ได้ ลองสังเกตตอนนี้ว่าร่างกายหรือใจตรงไหนรู้สึกเปลี่ยนไปบ้าง?', 'ตัวอย่างอาจเป็นหนัก ๆ ตื้อ ๆ ว่าง ๆ หรือยังจับไม่ได้ ไม่จำเป็นต้องตรงกับเธอนะ มีคำไหนใกล้สิ่งที่รู้สึกอยู่ไหม?'],
+  emotion_or_body: ['ยังไม่ต้องหาชื่ออารมณ์ให้ถูกนะ ใช้คำธรรมดาอย่าง “ค้าง ๆ” หรือ “เฉย ๆ” ก็ได้ ตัวอย่างอาจไม่ตรงกับเธอเลย มีคำของเธอเองที่ใกล้กว่าไหม หรือยังไม่รู้ก็ได้?', 'เราไม่ต้องเลือกชื่ออารมณ์ตอนนี้ก็ได้ ถ้าคำไหนไม่ตรงไม่ต้องใช้ เราเว้นช่องนี้ไว้ก่อนและคุยจากเหตุการณ์ต่อได้ เธออยากพักข้อนี้ไว้ก่อนไหม?'],
   automatic_story: ['หมายถึงคำพูดที่ใจพูดกับตัวเองตอนนั้น ไม่ใช่สิ่งที่ต้องคิดให้ถูก เช่นความกังวลหรือการคาดเดา มีประโยคสั้น ๆ อะไรที่พอนึกออกไหม?', 'ลองเติมแค่ช่วงต้นว่า “ตอนนั้นฉันนึกว่า…” ก็ได้ ถ้ายังไม่มีคำพูดขึ้นมา เราพักข้อนี้ไว้ได้ มีอะไรแวบขึ้นมาบ้างไหม?'],
   facts: ['ข้อนี้แยกสิ่งที่เกิดขึ้นจากสิ่งที่เราคาดเดา เหมือนกล้องที่เห็นภาพและได้ยินเสียง ตอนนั้นมีใครพูดหรือทำอะไรที่เธอจำได้ชัดบ้าง?', 'เช่น “เขายังไม่ตอบข้อความ” เป็นสิ่งที่สังเกตได้ ส่วน “เขาไม่สนใจฉัน” ยังเป็นการตีความ ตัวอย่างนี้อาจไม่ใช่เรื่องของเธอ ในเรื่องที่เล่ามามีส่วนไหนที่สังเกตได้แบบแรกบ้าง?'],
   needs: ['ยังไม่ต้องตั้งชื่อความต้องการก็ได้ เช่น อยากพัก อยากได้ข้อมูลให้ชัด หรืออยากมีคนฟัง มีอย่างไหนใกล้สิ่งที่เธอขาดอยู่ตอนนี้บ้าง หรือยังไม่ตรงเลยก็ได้?', 'ลองนึกถึงตอนที่เรื่องนี้เบาลงนิดหนึ่ง อะไรเล็ก ๆ ที่มีเพิ่มขึ้นหรือหายไปแล้วจะช่วยเธอได้? ไม่ต้องเป็นสิ่งที่คนอื่นทำให้ก็ได้นะ'],
@@ -64,15 +65,17 @@ function loopChatControl(text: string, offered = false): LoopChatControl | null 
   const input = text.normalize('NFC').trim().replace(/\s+/gu, '')
     .replace(/[.!?…。！？]+$/u, '').replace(/(?:(?:นะ|ค่ะ|คะ|ครับ|จ้า|จ้ะ|จ๊ะ|ฮะ|น้า))+$/u, '');
   if (/^(?:(?:อยาก|ขอ)?ระบาย(?:ต่อ|ก่อน|ต่อก่อน)?|(?:ขอ)?คุยต่อก่อน|ยังไม่พร้อม|ไม่อยากสำรวจ|ยังไม่อยากสำรวจ|ยังไม่พร้อมสำรวจ|ไม่พร้อมสำรวจ)$/u.test(input)) return 'vent';
-  const ownRequest = !/[“”"'「」]|(?:เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:เคย)?บอกว่า|ถามว่า|เขาอยาก|ไม่อยากให้ช่วย|ไม่ต้องพา|อย่าพา/u.test(input);
+  const ownRequest = !/[“”"'「」]|(?:เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:เคย)?บอก(?:ว่า|ให้)|ถามว่า|เขาอยาก|ไม่อยากให้ช่วย|ไม่ต้องพา|อย่าพา/u.test(input);
   if (ownRequest && /^(?:อยาก|ขอ)ระบาย(?:ต่อ|ก่อน|ต่อก่อน)(?:\s|[,.!])/u.test(text.trim())) return 'vent';
+  if (ownRequest && /^(?:อยาก|ขอ)(?:ให้)?(?:ฟัง|รับฟัง)(?:ก่อน|เฉยๆ)(?:\s|[,.!]|$)/u.test(text.trim())) return 'vent';
   if (ownRequest && /ขอข้าม(?:ข้อนี้)?(?:ไว้|ไป)?ก่อน$/u.test(input) && !/ไม่(?:อยาก)?ข้าม|อย่าข้าม/u.test(input)) return 'skip';
   if (ownRequest && /^(?:สำรวจคืออะไร|สำรวจยังไง|ต้องสำรวจอะไร|สำรวจหมายถึงอะไร)$/u.test(input)) return 'explain';
   if (ownRequest && (/^ช่วยพาไปทีละ(?:นิด|ข้อ)(?:ได้ไหม|หน่อย|ที)?$/u.test(input) || /(?:^|[\s,.!])ช่วยพาสำรวจ(?:ต่อ)?(?:หน่อย|ได้ไหม|ที)?(?:นะ|ค่ะ|ครับ)?$/u.test(text.trim()) || /^ช่วยหน่อยอยากเข้าใจ$/u.test(input))) return 'start';
   if (offered && ownRequest && /^(?:ได้|ได้เลย|โอเค|ตกลง)แต่(?:ขอ)?(?:อย่า|ไม่ต้อง)(?:ถามยาก|เร่ง|รีบ)$/u.test(input)) return 'start';
   if (ownRequest && /^(?:อยาก|ขอ)สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?แต่(?:ยัง)?(?:ไม่รู้|ไม่แน่ใจ)(?:ว่าจะ|จะ)?ตอบ(?:ได้ไหม|ได้หรือเปล่า|ยังไง)$/u.test(input)) return 'start';
+  if (ownRequest && /^(?:อยาก|ขอ)สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?แต่.+/u.test(input) && !/แต่(?:วันนี้)?(?:ยัง)?(?:ไม่พร้อม|ไม่อยากสำรวจ|ขอพัก|เอาไว้ก่อน|เปลี่ยนใจ)/u.test(input)) return 'start';
   if (ownRequest && /(?:^|[\s,.!])(?:แค่)?อยู่เงียบ\s*ๆ(?:\s*ด้วยกัน)?\s*ก็พอ(?:นะ|ค่ะ|ครับ)?$/u.test(text.trim()) && !/ไม่อยากอยู่เงียบ|ไม่ต้องอยู่เงียบ/u.test(input)) return 'pause';
-  if (ownRequest && !/ไม่อยาก(?:พัก|พอ)|ไม่ต้อง(?:พัก|พอ)/u.test(input) && /(?:^|[\s,.!])(?:ขออยู่แค่นี้ก่อน|วันนี้พอก่อน|ขอพอก่อน|ขอพักก่อน)(?:\s|$)/u.test(text.trim()) && /(?:ขออยู่แค่นี้ก่อน|วันนี้พอก่อน|ขอพอก่อน|ขอพักก่อน)(?:ไม่อยากตอบซ้ำแล้ว)?$/u.test(input)) return 'pause';
+  if (ownRequest && !/ไม่อยาก(?:พัก|พอ)|ไม่ต้อง(?:พัก|พอ)/u.test(input) && /(?:^|[\s,.!])(?:วันนี้)?(?:ขออยู่แค่นี้ก่อน|วันนี้พอก่อน|ขอพอก่อน|ขอพักก่อน)(?:\s|$)/u.test(text.trim())) return 'pause';
   if (/^(?:(?:เรา|ฉัน|ผม|หนู)?(?:อยาก|ขอ|พร้อม|ช่วย)?(?:ลอง|เริ่ม)?สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?(?:ด้วยกัน|กัน)?(?:ต่อ|เลย|ดู|หน่อย)?|(?:ขอ|อยาก)?ไป(?:ขั้นตอน)?(?:ถัดไป|ต่อ)|ค่อยๆสำรวจลูปด้วยกัน)$/u.test(input)) return 'start';
   if (offered && /^(?:ได้|ได้เลย|โอเค|ตกลง|เอาเลย|ลองดู|ลองเลย|ต่อเลย|พร้อม|พร้อมแล้ว)$/u.test(input)) return 'start';
   if (/^(?:ข้าม(?:ข้อนี้)?(?:ไป)?(?:ก่อน)?|ขอข้าม(?:ข้อนี้)?(?:ก่อน)?)$/u.test(input)) return 'skip';
@@ -94,6 +97,30 @@ export function isChatWrapUpIntent(text: string): boolean {
   return /^(?:(?:วันนี้)?(?:ขอ)?(?:พอแค่นี้|แค่นี้ก่อน|จบการคุย|จบแค่นี้)(?:ก่อน)?|(?:เรา|ฉัน|ผม|หนู)?(?:จะ)?(?:ไปนอนแล้ว|ไปทำงานก่อน|ขอตัวก่อน)|(?:บ๊าย)?บาย)(?:นะ|จ้ะ|จ้า|ครับ|ค่ะ|คะ|ๆ)*$/u.test(input);
 }
 const textOf = (m: Message) => (m.content || m.text || '').trim();
+const emotionWords = '(?:โกรธ|หงุดหงิด|รำคาญ|เศร้า|เสียใจ|น้อยใจ|อิจฉา|หึง|กลัว|กังวล|อาย|โล่ง|ดีใจ|อึดอัด|ตื้อ)';
+function correctsEmotion(text: string): boolean {
+  const t = text.replace(/[“”"'「」]/gu, '');
+  if (/(?:เขา|แม่|พ่อ|เพื่อน|หัวหน้า)(?:บอก|ถาม)ว่า/u.test(t)) return false;
+  return new RegExp(`(?:^|[\\s,.!?]|แต่)(?:(?:เรา|ฉัน|ผม|หนู)(?:ก็|ยัง)?)?(?:ไม่ได้|ไม่ใช่|ไม่)(?:รู้สึก)?${emotionWords}`, 'u').test(t) ||
+    new RegExp(`(?:อย่า(?:เพิ่ง)?|ไม่ต้อง)(?:สรุป|บอก|เรียก)(?:ว่า)?(?:เรา|ฉัน)?${emotionWords}`, 'u').test(t) ||
+    new RegExp(`(?:คำว่า${emotionWords}.{0,20}(?:ไม่แน่ใจ|ไม่ตรง)|(?:เรา|ฉัน)(?:ยัง)?ไม่แน่ใจว่า${emotionWords}|ขอแก้จาก${emotionWords}|ขอถอนคำว่า${emotionWords}|ไม่เอาคำว่า${emotionWords})`, 'u').test(t);
+}
+function groundedEmotionQuote(quote: string, source: string): boolean {
+  if (new RegExp(`^(?:เรา|ฉัน)?(?:ไม่ได้|ไม่ใช่|ไม่)(?:รู้สึก)?${emotionWords}`, 'u').test(quote) || /^(?:ยัง)?(?:ไม่รู้|ไม่แน่ใจ|บอกไม่ได้|บอกไม่ถูก)(?:ว่า|จะ)/u.test(quote)) return false;
+  let index = source.indexOf(quote);
+  while (index >= 0) {
+    const before = source.slice(0, index).split(/แต่|แค่|ตอนนี้|[.,!?\n]/u).pop()!.replace(/\s+/gu, '');
+    const after = source.slice(index + quote.length);
+    const denied = /(?:ไม่ได้|ไม่ใช่|ไม่|ไม่รู้สึก|อย่า(?:เพิ่ง)?(?:สรุป|บอก|เรียก)|ไม่ต้อง(?:สรุป|บอก|เรียก)|ขอถอนคำ)(?:ว่า)?(?:เรา|ฉัน)?$/u.test(before);
+    const qualified = /มั้ง|เหมือน|อาจ|น่าจะ|คิดว่า|ไม่แน่ใจ/u.test(quote);
+    const uncertain = (/(?:ไม่รู้|ไม่แน่ใจ|บอกไม่ได้|บอกไม่ถูก|ถ้า).{0,40}$/u.test(before) || /(?:คิดว่า|เหมือน|อาจ|น่าจะ)$/u.test(before) || /^[^\s,.!?]{0,12}มั้ง/u.test(after)) && !qualified;
+    const someoneElse = /(?:เขา|แม่|พ่อ|เพื่อน|หัวหน้า)(?:กำลัง|รู้สึก)?$/u.test(before);
+    const metaLabel = /คำว่า$/u.test(before) && /^(?:เราก็)?(?:ยัง)?ไม่แน่ใจ/u.test(after.replace(/\s+/gu, ''));
+    if (!denied && !uncertain && !metaLabel && !someoneElse) return true;
+    index = source.indexOf(quote, index + quote.length);
+  }
+  return false;
+}
 export function prepareLoopChat(messages: Message[], previous?: unknown) {
   const input = previous && typeof previous === 'object' ? previous as Partial<LoopChatGuide> : {};
   const fields: LoopChatGuide['fields'] = {};
@@ -114,6 +141,12 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
   const latest = userTexts[userTexts.length - 1] || '';
+  const emotionCorrection = correctsEmotion(latest);
+  state.emotionSourceAfter = Number.isInteger(input.emotionSourceAfter) ? Math.max(0, Math.min(input.emotionSourceAfter!, userTexts.length - 1)) : 0;
+  if (emotionCorrection) {
+    delete state.fields.emotion_or_body;
+    state.emotionSourceAfter = Math.max(0, userTexts.length - 1);
+  }
   const count = userTexts.filter(t => t && !isControlText(t)).length;
   const control = loopChatControl(latest, state.mode === 'offered');
   if (control === 'start') { state.mode = 'guided'; state.skipped = []; state.preferListening = false; }
@@ -139,7 +172,8 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   const understood = state.mode === 'guided' && Boolean(state.asked && state.helpAttempts?.[state.asked]) && !control && understandsExplanation(latest, lastAssistantText);
   const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && (isHelpText(latest) || understood);
   const requestedExercise = !/ไม่อยาก|ไม่ต้อง|อย่า|ยังไม่|บอกว่า/u.test(latest) && /(?:ขอ|อยาก|ช่วย|ลอง)(?:ฝึกหายใจ|ทำแบบฝึก|พาหายใจ|สอน(?:วิธี)?หายใจ|ทำgrounding)/u.test(latest.replace(/\s+/gu, ''));
-  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText, requestedExercise };
+  const deferOffer = /ไหม|เหรอ|หรือเปล่า|ยังไง|อย่างไร|หมายถึง|ขอ(?:แค่)?(?:ตัวอย่าง|ประโยค|คำอธิบาย)|อย่าเพิ่ง|ไม่ต้อง(?:สรุป|บอก|เรียก)/u.test(latest);
+  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, deferOffer };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -151,6 +185,8 @@ Current interaction mode: ${context.state.mode}. Last asked field: ${context.sta
 Respond to THIS turn, not an earlier request for help. Distress alone does not mean the person wants an exercise. Keep recommendedExercise null unless they explicitly request a tool. Never send them away from chat just because they are unsure or upset.
 User chose to keep talking: ${context.state.preferListening === true}. In this case stay with their story until THEY ask to explore. Do not offer a summary, saving, a break, an exercise, or another mode-choice menu. “อยากระบายต่อ” means keep listening, never goodbye. Gratitude alone also does not end a conversation. Reflect the latest feeling or event naturally without recapping everything; allow space to talk without requiring a question every turn. Summarize only when explicitly requested.
 The user may be new to reflection. Their pace matters more than finishing all eight fields. Never frame this as a test or a task they must finish.
+The user owns their emotion description. Never persuade them that they are angry, jealous, afraid or sad when they reject that word. A rough sensation, neutral state, mixed feelings or uncertainty is acceptable. Do not turn uncertainty into an assertion, and do not use body scans as the default when a person cannot name a feeling. If they request concrete wording, put an actual usable sentence in guideSupport.message, not just a promise to provide examples or hidden quickReplies.
+Emotion correction this turn: ${context.emotionCorrection}. When true, the old emotion observation has been withdrawn. Extract only a newly endorsed description from the latest USER message, preserving any uncertainty; otherwise leave emotion_or_body absent. Never extract an emotion word from a denial, question about that word, or someone else's feeling. A feeling is not proof of the other person's intent.
 Help requested: ${context.helpRequested}. Previous support attempts: ${JSON.stringify(context.state.helpAttempts || {})}.
 Concrete scaffold for the current field: ${context.state.asked ? helpText[context.state.asked][Math.min(1, context.state.helpAttempts?.[context.state.asked] || 0)] : 'none'}
 When helping, use that scaffold and adapt its people/events to what the user actually said. Do not replace it with another broad question about deep needs, desired feelings, or desired outcomes. Ask about one small, observable thing instead.
@@ -193,14 +229,15 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   const newTopic = parsed?.newLoopTopic === true && !context.control && !supportField;
   if (newTopic) {
     state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening'; state.helpAttempts = {};
+    state.emotionSourceAfter = Math.max(0, context.userTexts.length - 1);
     state.nextOfferAt = context.count + 1;
   }
   for (const key of LOOP_CHAT_FIELDS) {
     // Help-seeking is not an answer, even if the model also emits an extraction.
-    if (supportField || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
+    if ((supportField && !(key === 'emotion_or_body' && context.emotionCorrection)) || (key === 'micro_action' && explicitAction) || (key === 'reflection' && explicitReflection)) continue;
     const quote = parsed?.loopTrace?.[key]?.quote;
     if (typeof quote === 'string' && quote.trim().length >= 2 && quote.length <= 600 &&
-        (newTopic ? [context.latest] : context.userTexts).some(t => !isControlText(t) && !isHelpText(t) && !understandsExplanation(t, '') && t.includes(quote.trim())) &&
+        (newTopic ? [context.latest] : key === 'emotion_or_body' ? context.userTexts.slice(state.emotionSourceAfter || 0) : context.userTexts).some(t => !isControlText(t) && !isHelpText(t) && !understandsExplanation(t, '') && t.includes(quote.trim()) && (key !== 'emotion_or_body' || groundedEmotionQuote(quote.trim(), t))) &&
         validObservation(key, quote.trim()) && !/^(?:ยังไม่รู้|ไม่รู้|ไม่แน่ใจ|ยังไม่ได้สำรวจ|ข้ามข้อนี้ก่อน)$/u.test(quote.trim())) {
       state.fields[key] = quote.trim();
     }
@@ -223,7 +260,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
     replies = [];
   } else if (state.mode === 'listening' && !state.preferListening && context.count >= state.nextOfferAt &&
-      (state.fields.trigger || state.fields.emotion_or_body) && !context.control) {
+      (state.fields.trigger || state.fields.emotion_or_body) && !context.control && !context.deferOffer) {
     state.mode = 'offered';
     message = [summary || 'เราเริ่มเห็นประเด็นจากที่เธอเล่าแล้วนะ', 'ตอนนี้อยากระบายต่อ หรือค่อย ๆ สำรวจเรื่องนี้ไปด้วยกันทีละส่วน?'].join('\n\n');
     replies = [LOOP_CHAT_VENT, LOOP_CHAT_START];
@@ -254,7 +291,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
       const abstractNeeds = missing === 'needs' && /ลึก\s*ๆ|ผลลัพธ์|อยากให้ตัวเองรู้สึก/u.test(tailored?.message || '');
       const disputingFacts = missing === 'facts' && /ยังใส่ใจ|ยังแคร์|ยังต้องการ|ต้องการเราอยู่|ห่วงใย|หลักฐาน.*(?:หักล้าง|โต้แย้ง)|ในอดีต/u.test(tailored?.message || '');
       // Reflection is about what was noticed in chat, not another task or an action assumed completed.
-      const question = missing !== 'reflection' && tailored?.field === missing && typeof tailored.message === 'string' &&
+      const question = missing !== 'reflection' && missing !== 'facts' && tailored?.field === missing && typeof tailored.message === 'string' &&
         !abstractNeeds && !disputingFacts &&
         tailored.message.trim().length >= 10 && tailored.message.length <= 500 && tailored.message.trim() !== context.lastAssistantText
           ? tailored.message.trim() : questions[missing];
