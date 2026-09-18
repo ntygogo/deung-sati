@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { useCompanion } from '../context/CompanionContext';
 import { CompanionRenderer } from './CompanionRenderer';
+import { TraceConversationActions } from './TraceConversationActions';
+import type { Conversation } from '../shared/conversation';
 import { LoopReviewCard } from './LoopReviewCard';
 
 interface CompanionRoomProps {
+  conversationActions: { history: (trace: any) => Promise<Conversation[]>; resume: (trace: any) => Promise<void>; remove: (trace: any) => Promise<void>; isGuest: boolean };
   onBack: () => void;
   onOpenChat: () => void;
 }
 
-export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat }) => {
+export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat, conversationActions }) => {
   const {
     companion,
     traceCount,
@@ -537,6 +540,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               WebkitOverflowScrolling: 'touch',
             }}
           >
+            {selectedResumeTrace && <TraceConversationActions trace={selectedResumeTrace} {...conversationActions} />}
             <LoopReviewCard
               conversationId={selectedResumeTrace?.source_session_id || (selectedResumeTrace as any)?.conversationId || `room_${Date.now()}`}
               traceId={selectedResumeTrace?.id}

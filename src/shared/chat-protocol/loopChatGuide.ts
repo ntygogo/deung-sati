@@ -102,7 +102,8 @@ function observationText(text: string): string {
 const reportedThought = /(?:ทุกคน|คนอื่น|เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:ก็)?(?:คิดว่า|มองว่า|บอกว่า|บอกให้|คาดหวังว่า)/gu;
 const ownThought = /(?:(?:เรา|ฉัน|ผม|หนู)(?:เอง)?(?:ก็|เลย|กลับ)?|ตอนนั้น)(?:คิดว่า|นึกว่า|เชื่อว่า|กลัวว่า)/gu;
 function lastMatchIndex(text: string, pattern: RegExp): number {
-  return [...text.matchAll(pattern)].at(-1)?.index ?? -1;
+  const matches = [...text.matchAll(pattern)];
+  return matches[matches.length - 1]?.index ?? -1;
 }
 // Literal presence is necessary, but a quoted request or another person's belief
 // is not automatically an observation belonging to this field.

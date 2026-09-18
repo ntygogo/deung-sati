@@ -28,6 +28,10 @@ import { CompanionRoom } from "./components/CompanionRoom";
 import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
+import { FutureSelf } from "./components/FutureSelf";
+import { useConversations } from "./hooks/useConversations";
+import { traceFields, type Conversation } from "./shared/conversation";
+import { TraceConversationActions } from "./components/TraceConversationActions";
 import { AuthModal } from "./components/AuthModal";
 import { loopChatReview, LOOP_CHAT_FIELDS, isChatWrapUpIntent } from "./shared/chat-protocol/loopChatGuide";
 
@@ -384,7 +388,7 @@ export default function App() {
     | "cancelled";
 
   // Decoupled Onboarding Lifecycle State Machine: Independent of companion updates during the flow
-  const { companion, isHydrated } = useCompanion();
+  const { companion, isHydrated, traces } = useCompanion();
   const [onboardingLifecycle, setOnboardingLifecycle] = useState<OnboardingLifecycleStatus>("pending_hydration");
 
   useEffect(() => {
@@ -436,15 +440,19 @@ export default function App() {
   // Active Interactive Exercise Modal state
   const [activeExerciseModal, setActiveExerciseModal] = useState<ExerciseId | null>(null);
 
-  // Fresh Global Chat State
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "initial-ai",
-      role: "ai",
-      text: "ยินดีต้อนรับนะเธอ 🌱 วันนี้มีเรื่องไหนที่อยากชวนคุย หรือมีอะไรในใจ เล่าให้เราฟังได้เลยนะ...",
-      options: ["วันนี้รู้สึกเหนื่อยจัง", "มีเรื่องที่ยังค้างคาใจ", "อยากลองดึงสติ"],
-    },
-  ]);
+  const chats = useConversations(traces);
+  const chatMessages = chats.active.messages;
+  const setChatMessages = chats.setMessages;
+  const chatContext = { id: chats.active.id, pastContext: chats.pastContext };
+  const [showSavedLoops, setShowSavedLoops] = useState(false);
+  const [selectedChatTrace, setSelectedChatTrace] = useState<any>(null);
+  const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
+  const [recentChats, setRecentChats] = useState<Conversation[] | null>(null);
+  const resumeTrace = async (trace: any) => {
+    if (chatMessages.some(m => m.isStreaming)) throw new Error('กรุณารอข้อความตอบกลับก่อน');
+    if (!await chats.resume(trace)) throw new Error('ยังเปิดแชทไม่สำเร็จ');
+    setSelectedChatTrace(null); setShowSavedLoops(false); setScreen('chat');
+  };
 
   // Dev Debug State
   const [debugInfo, setDebugInfo] = useState<ChatDebugInfo>({
@@ -472,6 +480,7 @@ export default function App() {
   };
 
   const handleStartChatFromHome = (textToSend: string) => {
+    if (!chats.ready || chats.locked || debugInfo.isLoading) { setScreen("chat"); return; }
     setScreen("chat");
     const reqId = ++globalRequestId.current;
     const userMsg: ChatMessage = {
@@ -483,7 +492,19 @@ export default function App() {
     const cleanHistory = chatMessages.filter((m) => m.text && m.text.trim());
     const newHistory = [...cleanHistory, userMsg];
     setChatMessages(newHistory);
-    triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo);
+    triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo, undefined, chatContext);
+  };
+
+  const handleFutureChat = async (text: string) => {
+    if (debugInfo.isLoading) { setScreen('chat'); return; }
+    try {
+      const doc = await chats.startNew();
+      const history: ChatMessage[] = [...doc.messages, { id: `user-${crypto.randomUUID()}`, role: 'user', text, createdAt: Date.now() }];
+      const update: React.Dispatch<React.SetStateAction<ChatMessage[]>> = change => chats.updateMessages(doc.id, change);
+      update(history); setScreen('chat');
+      const reqId = ++globalRequestId.current;
+      void triggerAiStream(history, reqId, globalRequestId, undefined, update, setDebugInfo, undefined, { id: doc.id });
+    } catch { setScreen('chat'); }
   };
 
   return (
@@ -505,7 +526,6 @@ export default function App() {
         {screen === "home" && (
           <Home
             setScreen={setScreen}
-            openEvidence={() => setShowEvidence(true)}
             onOpenMenu={() => setIsDrawerOpen(true)}
             onStartChat={handleStartChatFromHome}
           />
@@ -524,6 +544,7 @@ export default function App() {
           <CompanionRoom
             onBack={() => setScreen("home")}
             onOpenChat={() => setScreen("chat")}
+            conversationActions={{ history: chats.history, resume: resumeTrace, remove: chats.removeHistory, isGuest: chats.isGuest }}
           />
         )}
 
@@ -531,6 +552,20 @@ export default function App() {
 
         {screen === "chat" && (
           <ChatScreen
+            key={chats.active.id}
+            conversationId={chats.active.id}
+            trace={chats.sourceTrace}
+            continuation={!!chats.active.parentTraceId}
+            pastContext={chats.pastContext}
+            beforeSave={chats.flush}
+            disabled={!chats.ready || chats.locked}
+            onContinue={() => resumeTrace(chats.sourceTrace)}
+            onOpenSaved={() => setShowSavedLoops(true)}
+            onNewChat={() => chats.startNew().catch(() => undefined)}
+            onHistory={async () => { try { await chats.flush(); setRecentChats(await chats.listAll()); } catch {} }}
+            onReload={() => chats.reload().catch(() => undefined)}
+            storageError={chats.error}
+            isGuest={chats.isGuest}
             setScreen={setScreen}
             messages={chatMessages}
             setMessages={setChatMessages}
@@ -565,15 +600,27 @@ export default function App() {
         )}
 
         {screen === "profile" && (
-          <Profile
-            setScreen={setScreen}
-            onOpenMenu={() => setIsDrawerOpen(true)}
-          />
+          <FutureSelf onBack={() => setScreen('home')} onChat={text => void handleFutureChat(text)} />
         )}
 
         {!["pause", "beforeSpeak", "perspective"].includes(screen) && (
           <BottomNav screen={screen} setScreen={setScreen} />
         )}
+
+        {showSavedLoops && <div role="dialog" aria-modal="true" aria-label="ลูปที่บันทึก" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
+          <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>กลับไปแชท</button>
+          <h2>ลูปที่บันทึก</h2>
+          {traces.length === 0 && <p>เมื่อบันทึกลูปแล้ว กลับมาคุยต่อได้ที่นี่</p>}
+          {selectedChatTrace ? <><h3>{selectedChatTrace.title}</h3><p>{selectedChatTrace.summary}</p><TraceConversationActions trace={selectedChatTrace} history={chats.history} resume={resumeTrace} remove={chats.removeHistory} isGuest={chats.isGuest} /><button onClick={() => setSelectedChatTrace(null)}>ดูลูปอื่น</button></> : traces.map(t => <button key={t.id} onClick={() => setSelectedChatTrace(t)} style={{ display: 'block', padding: 16, margin: '12px 0', width: '100%', textAlign: 'left' }}>{t.title}</button>)}
+        </div>}
+        {recentChats && <div role="dialog" aria-modal="true" aria-label="ประวัติแชท" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
+          <button onClick={() => setRecentChats(null)}>กลับไปแชท</button><h2>ประวัติแชท</h2>
+          {recentChats.length === 0 && <p>ยังไม่มีบทสนทนาที่บันทึก</p>}
+          {recentChats.map(c => <div key={c.id} style={{ borderBottom: '1px solid #ddd4e0', padding: '12px 0' }}>
+            <button style={{ display: 'block', padding: 16, width: '100%', textAlign: 'left' }} onClick={async () => { if (chatMessages.some(m => m.isStreaming)) return; try { await chats.open(c); setRecentChats(null); setScreen('chat'); } catch {} }}>{c.messages.find(m => m.role === 'user')?.text.slice(0, 80) || 'คุยต่อจากลูป'} · {new Date(c.updatedAt).toLocaleDateString('th-TH')}</button>
+            {deleteChatId === c.id ? <p>ลบข้อความในแชทนี้ถาวร? สรุปลูปยังอยู่ <button onClick={async () => { try { await chats.removeConversation(c); setRecentChats(old => old?.filter(d => d.id !== c.id) || []); setDeleteChatId(null); } catch {} }}>ยืนยันลบแชทนี้</button> <button onClick={() => setDeleteChatId(null)}>เก็บไว้</button></p> : <button onClick={() => setDeleteChatId(c.id)}>ลบแชท</button>}
+          </div>)}
+        </div>}
 
         {/* Right-side Sliding Hamburger App Drawer */}
         {isAuthOpen && <AuthModal isOpen onClose={() => setIsAuthOpen(false)} />}
@@ -626,7 +673,7 @@ export default function App() {
               setScreen("chat");
 
               // Trigger AI continuation on the natural user result
-              triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo);
+              triggerAiStream(newHistory, reqId, globalRequestId, undefined, setChatMessages, setDebugInfo, undefined, chatContext);
             }}
           />
         )}
@@ -677,7 +724,8 @@ async function triggerAiStream(
   isSendingRef?: React.MutableRefObject<boolean>,
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   setDebugInfo?: React.Dispatch<React.SetStateAction<ChatDebugInfo>>,
-  exerciseResult?: ExerciseResultPayload
+  exerciseResult?: ExerciseResultPayload,
+  conversation?: { id: string; pastContext?: string }
 ) {
   const aiMsgId = `ai-${requestId}-${Date.now()}`;
   console.log(`[ASSISTANT_MESSAGE_CREATE] assistantMessageId=${aiMsgId} requestId=${requestId}`);
@@ -732,7 +780,8 @@ async function triggerAiStream(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: formattedMessages,
-        sessionId: "default-session",
+        sessionId: conversation?.id,
+        pastLoopContext: conversation?.pastContext,
         requestId,
         exerciseResult: effectiveExerciseResult || undefined,
         loopGuide: [...history].reverse().find(m => m.role === 'ai' && m.structuredTurn)?.structuredTurn?.loop_guide,
@@ -870,12 +919,10 @@ async function triggerAiStream(
 
 function Home({
   setScreen,
-  openEvidence,
   onOpenMenu,
   onStartChat,
 }: {
   setScreen: (s: Screen) => void;
-  openEvidence: () => void;
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
 }) {
@@ -915,9 +962,9 @@ function Home({
 
       {/* 5. FUTURE SELF: Cosmic Glass Letter from Future Self */}
       <FutureSelfCard
-        trait="คนที่สงบและชัดเจนขึ้นในทุกความรู้สึก"
-        evidence="หยุดก่อนพูดและสังเกตใจได้ 2 ครั้ง"
-        onClick={openEvidence}
+        trait="ค่อย ๆ เป็นฉันที่อยากเป็น"
+        evidence="เลือกก้าวเล็ก ๆ ที่ทำไหว แล้วกลับมาดูว่าอะไรช่วย"
+        onClick={() => setScreen("profile")}
       />
 
       <div className="bottomSpacer" style={{ height: "40px" }} />
@@ -1104,6 +1151,8 @@ function PauseScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // REAL Interactive Chat Screen
 function ChatScreen({
+  conversationId, trace, continuation, pastContext, beforeSave, disabled, onContinue,
+  onOpenSaved, onNewChat, onHistory, onReload, storageError, isGuest,
   setScreen,
   messages,
   setMessages,
@@ -1112,6 +1161,10 @@ function ChatScreen({
   onOpenExercise,
   onOpenMenu,
 }: {
+  conversationId: string; trace?: any; continuation: boolean; pastContext?: string;
+  beforeSave: () => Promise<void>; disabled: boolean; onContinue: () => Promise<void>;
+  onOpenSaved: () => void; onNewChat: () => void; onHistory: () => void; onReload: () => void;
+  storageError: string; isGuest: boolean;
   setScreen: (s: Screen) => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -1125,7 +1178,8 @@ function ChatScreen({
   const [activeInlineExercise, setActiveInlineExercise] = useState<{ msgId: string; exerciseId: string } | null>(null);
   const [showLoopReview, setShowLoopReview] = useState(false);
   const [reviewInitialData, setReviewInitialData] = useState<any>(null);
-  const conversationIdRef = useRef(`conv_${Date.now()}`);
+  const chatContext = { id: conversationId, pastContext };
+  const [continuationNotice, setContinuationNotice] = useState('');
 
   // Server-authoritative Loop Readiness: strictly read from server's latest structuredTurn
   const lastAiWithTurn = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn);
@@ -1325,8 +1379,15 @@ function ChatScreen({
     };
   };
 
+  const reviewDataForChat = () => {
+    const f = traceFields(trace);
+    const prior = { trigger: f.trigger, emotionOrBody: f.emotion_or_body, automaticStory: f.automatic_story, facts: f.facts, needs: f.needs, options: f.options, microAction: f.micro_action, reflection: f.reflection };
+    const next = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
+    return { ...prior, ...Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined && v !== '' && v !== UNEXPLORED)) };
+  };
   const handleOpenLoopReview = () => {
-    setReviewInitialData({ ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) });
+    if (continuation) { setContinuationNotice('บทสนทนานี้เก็บไว้กับลูปเดิมแล้ว คุยต่อได้เลย โดยไม่เพิ่มลูปหรือคะแนนซ้ำ'); return; }
+    setReviewInitialData(reviewDataForChat());
     setShowLoopReview(true);
   };
 
@@ -1343,7 +1404,7 @@ function ChatScreen({
 
   const handleSendMessage = (textToSend: string) => {
     const trimmed = textToSend.trim();
-    if (!trimmed) return;
+    if (!trimmed || disabled || debugInfo.isLoading) return;
 
     if (isSendingRef.current) {
       console.log(`[Chat Client] Ignored send because previous request is in flight.`);
@@ -1401,6 +1462,10 @@ function ChatScreen({
     ];
     const isSaveIntent = saveIntentKeywords.some((k) => normalizedInput.includes(k));
 
+    if (continuation && (isSaveIntent || trimmed === 'สรุปให้หน่อย')) {
+      void beforeSave().then(() => setContinuationNotice('เก็บบทสนทนาต่อไว้แล้ว กลับมาอ่านหรือคุยต่อจากลูปเดิมได้เสมอ')).catch(() => undefined);
+      setInputText(''); isSendingRef.current = false; return;
+    }
     if (isSaveIntent) {
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -1409,7 +1474,7 @@ function ChatScreen({
         createdAt: Date.now(),
       };
 
-      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
+      const reviewData = reviewDataForChat();
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1458,7 +1523,7 @@ function ChatScreen({
         text: trimmed,
         createdAt: Date.now(),
       };
-      const reviewData = { ...prepareLoopReviewData(), ...loopChatReview(activeLoopGuide) };
+      const reviewData = reviewDataForChat();
       setReviewInitialData(reviewData);
 
       const aiReplyMessage: ChatMessage = {
@@ -1515,7 +1580,7 @@ function ChatScreen({
     setMessages(nextHistory);
 
     // Call triggerAiStream cleanly outside setState updater callback
-    triggerAiStream(nextHistory, reqId, activeRequestId, isSendingRef, setMessages, setDebugInfo);
+    triggerAiStream(nextHistory, reqId, activeRequestId, isSendingRef, setMessages, setDebugInfo, undefined, chatContext);
   };
 
   useEffect(() => {
@@ -1545,6 +1610,18 @@ function ChatScreen({
         onOpenMenu={onOpenMenu}
       />
 
+      <div style={{ padding: '8px 16px', fontSize: 12, background: '#faf6fc', color: '#51375f' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <button onClick={onOpenSaved} disabled={debugInfo.isLoading}>ลูปที่บันทึก</button>
+          <button onClick={onHistory} disabled={debugInfo.isLoading}>ประวัติแชท</button>
+          <button onClick={onNewChat} disabled={debugInfo.isLoading || disabled && !trace}>เริ่มเรื่องใหม่</button>
+        </div>
+        {trace && <p>{continuation ? 'คุยต่อจากลูป' : 'ลูปเดิม'}: {trace.title} · {new Date(trace.created_at).toLocaleDateString('th-TH')}</p>}
+        {disabled && trace && <button onClick={() => void onContinue().catch(() => undefined)}>คุยเรื่องนี้ต่อ</button>}
+        {isGuest && <div>ประวัติแชทเก็บในเบราว์เซอร์นี้เท่านั้น</div>}
+        {storageError && <div role="alert">{storageError} <button onClick={() => void beforeSave().catch(() => undefined)}>ลองเก็บแชทอีกครั้ง</button> <button onClick={onReload}>เปิดข้อมูลล่าสุดแทนแชทในหน้านี้</button></div>}
+        {continuationNotice && <p role="status">{continuationNotice}</p>}
+      </div>
       {/* 4-Step Chat Journey Path Bar (Decluttered Single Line) */}
       <div
         style={{
@@ -1569,7 +1646,7 @@ function ChatScreen({
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            {isLoopReady && (
+            {isLoopReady && !continuation && (
               <button
                 type="button"
                 onClick={handleOpenLoopReview}
@@ -1733,7 +1810,7 @@ function ChatScreen({
                             activeRequestId,
                             isSendingRef,
                             setMessages,
-                            setDebugInfo
+                            setDebugInfo, undefined, chatContext
                           );
                         }}
                       >
@@ -1771,7 +1848,7 @@ function ChatScreen({
                           isSendingRef,
                           setMessages,
                           setDebugInfo,
-                          result
+                          result, chatContext
                         );
                       }}
                       onCancel={() => {
@@ -1881,6 +1958,7 @@ function ChatScreen({
         </button>
         <input
           value={inputText}
+          disabled={disabled}
           onChange={(e) => setInputText(e.target.value)}
           onCompositionStart={() => {
             isComposingRef.current = true;
@@ -1905,7 +1983,7 @@ function ChatScreen({
           type="submit"
           className="sendButton"
           title="ส่งข้อความ"
-          disabled={!inputText.trim() || debugInfo.isLoading}
+          disabled={disabled || !inputText.trim() || debugInfo.isLoading}
         >
           <SvgIcon name="send" stroke="#fff" size={18} />
         </button>
@@ -1937,7 +2015,9 @@ function ChatScreen({
             }}
           >
             <LoopReviewCard
-              conversationId={conversationIdRef.current}
+              conversationId={conversationId}
+              traceId={trace?.id}
+              beforeSave={beforeSave}
               initialData={reviewInitialData}
               onClose={() => setShowLoopReview(false)}
               onConfirmed={() => {
@@ -2498,99 +2578,6 @@ function Journey({
           <b>แต่คุณกำลังเติบโตขึ้นในแบบของคุณ</b>
         </p>
         🌿
-      </div>
-
-      <div className="bottomSpacer" />
-    </div>
-  );
-}
-
-function Profile({
-  setScreen,
-  onOpenMenu,
-}: {
-  setScreen: (s: Screen) => void;
-  onOpenMenu: () => void;
-}) {
-  const [selectedTraits, setSelectedTraits] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("deung_sati_future_self_traits_v1");
-      return saved ? JSON.parse(saved) : [
-        "พูดตรงโดยไม่ทำร้าย",
-        "รักษาขอบเขตตัวเอง",
-        "ใจเย็นแต่ไม่กดความรู้สึก",
-      ];
-    } catch {
-      return [
-        "พูดตรงโดยไม่ทำร้าย",
-        "รักษาขอบเขตตัวเอง",
-        "ใจเย็นแต่ไม่กดความรู้สึก",
-      ];
-    }
-  });
-
-  const allTraits = [
-    "พูดตรงโดยไม่ทำร้าย",
-    "รักษาขอบเขตตัวเอง",
-    "ใจเย็นแต่ไม่กดความรู้สึก",
-    "ให้เกียรติตัวเองและผู้อื่น",
-    "กล้าขอเวลาพักเมื่อใจยังไม่พร้อม",
-    "ให้อภัยตัวเองเมื่อเผลอพลาด",
-  ];
-
-  const toggleTrait = (t: string) => {
-    const next = selectedTraits.includes(t)
-      ? selectedTraits.filter((item) => item !== t)
-      : [...selectedTraits, t];
-    setSelectedTraits(next);
-    localStorage.setItem("deung_sati_future_self_traits_v1", JSON.stringify(next));
-  };
-
-  return (
-    <div className="screen scrollArea">
-      <AppHeader
-        title="ฉัน"
-        onEmergency={() => setScreen("pause")}
-        onOpenMenu={onOpenMenu}
-      />
-
-      <div className="profileCard">
-        <Baby size={105} />
-        <h2>คนที่ฉันอยากเป็น (Future Self)</h2>
-        <p>
-          ไม่ต้องเป็นคนสมบูรณ์แบบ
-          <br />
-          แค่ค่อยๆ เป็นคนที่ตัวเองเลือกในทุก Choice Point
-        </p>
-      </div>
-
-      <div style={{ padding: "0 20px" }}>
-        <p style={{ fontSize: "13px", color: "#685141", marginBottom: "10px" }}>
-          แตะเพื่อเลือกคุณค่าที่อยากนำทางใจ:
-        </p>
-        {allTraits.map((trait, i) => {
-          const isSelected = selectedTraits.includes(trait);
-          return (
-            <div
-              className="traitCard"
-              key={trait}
-              onClick={() => toggleTrait(trait)}
-              style={{
-                cursor: "pointer",
-                background: isSelected ? "#F3EFE6" : "#FFFDF8",
-                borderColor: isSelected ? "#657E53" : "#E8DDCF",
-              }}
-            >
-              <span style={{ background: isSelected ? "#657E53" : "#DDE7D8", color: isSelected ? "white" : "#3F5944" }}>
-                {i + 1}
-              </span>
-              <b>{trait}</b>
-              <span style={{ fontSize: "16px", color: isSelected ? "#3F5944" : "#8A7664" }}>
-                {isSelected ? "✓" : "+"}
-              </span>
-            </div>
-          );
-        })}
       </div>
 
       <div className="bottomSpacer" />

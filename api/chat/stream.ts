@@ -1,3 +1,4 @@
+import { pastLoopInstruction } from '../../src/shared/conversation.js';
 type VercelRequest = any;
 type VercelResponse = any;
 import { GoogleGenAI } from '@google/genai';
@@ -119,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages, requestId, exerciseResult, loopGuide } = req.body || {};
+  const { messages, requestId, exerciseResult, loopGuide, pastLoopContext } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
@@ -247,7 +248,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model: modelCandidate,
           contents,
           config: {
-            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext),
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
             thinkingConfig: {
@@ -304,3 +305,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.write(`event: done\ndata: ${JSON.stringify({ requestId, fullText: errorText, source: 'error', structuredTurn: errorTurn, options: errorTurn.quick_replies })}\n\n`);
   res.end();
 }
+

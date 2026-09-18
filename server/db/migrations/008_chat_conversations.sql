@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS chat_conversations (
+  id VARCHAR(160) PRIMARY KEY,
+  user_id VARCHAR(80) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_trace_id VARCHAR(160),
+  draft_trace_id VARCHAR(160),
+  messages_json TEXT NOT NULL DEFAULT '[]',
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMPTZ
+);

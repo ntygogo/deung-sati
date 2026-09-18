@@ -1,0 +1,65 @@
+.screen.future-self { background: #fbf8f4; color: #343d34; font-family: inherit; }
+.future-self * { box-sizing: border-box; }
+.fs-top { display: flex; align-items: center; justify-content: space-between; padding: 22px 22px 10px; }
+.fs-top > span { font-size: 11px; letter-spacing: 2.2px; color: #74756d; font-weight: 600; }
+.fs-top button { background: none; border: none; padding: 10px; color: #384736; }
+.fs-top .fs-top-seed { color: #7d8c6c; }
+.fs-content { padding: 0 22px 24px; max-width: 620px; margin: 0 auto; }
+.fs-intro { position: relative; padding: 26px 0 32px; }
+.fs-eyebrow { color: #727c64; font-size: 12px; letter-spacing: .2px; }
+.fs-intro h1 { font-size: 32px; line-height: 1.5; font-weight: 500; margin: 10px 0; letter-spacing: -.6px; }
+.fs-intro em { font-style: normal; color: #74835d; }
+.fs-intro p { color: #77786f; font-size: 13px; line-height: 1.9; margin: 12px 0 0; }
+.fs-seed { position: absolute; right: 0; bottom: 32px; height: 90px; width: 90px; border-radius: 50%; background: #eef0e5; color: #849368; display: grid; place-items: center; }
+.fs-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fs-content h2 { font-size: 17px; font-weight: 600; margin: 0; line-height: 1.7; }
+.fs-section-head h2 { display: flex; align-items: center; gap: 7px; }
+.fs-soft { font-size: 12px; color: #75766e; line-height: 1.8; margin: 7px 0 18px; }
+.fs-choice { width: 100%; display: flex; align-items: center; gap: 12px; padding: 20px 0; border: 0; border-bottom: 1px solid #e8e6dd; background: none; color: inherit; text-align: left; }
+.fs-choice > span:nth-child(2) { flex: 1; }
+.fs-choice-number { color: #949983; font-size: 12px; }
+.fs-choice strong { display: block; font-size: 15px; line-height: 1.7; font-weight: 500; }
+.fs-choice small { display: block; color: #808077; font-size: 11px; margin-top: 4px; }
+.fs-content button { font-family: inherit; cursor: pointer; }
+.fs-content button:disabled { opacity: .45; cursor: default; }
+.fs-outline { width: 100%; padding: 15px; margin: 22px 0 8px; border: 1px solid #d4d9c8; border-radius: 16px; background: transparent; color: #566348; font-size: 14px; }
+.fs-help { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 16px 0; border: 0; background: none; color: #6c625f; width: 100%; font-size: 13px; }
+.fs-direction { background: #eaf0e3; padding: 22px; border-radius: 24px; margin-bottom: 26px; }
+.fs-direction h2 { margin: 10px 0; font-size: 21px; font-weight: 500; }
+.fs-direction p { font-size: 13px; line-height: 1.85; color: #646f59; }
+.fs-text-button { display: inline-flex; align-items: center; gap: 4px; padding: 6px 0; border: 0; background: none; color: #73815e; font-size: 12px; flex-shrink: 0; }
+.fs-today { background: #fffefa; border: 1px solid #e9e6da; border-radius: 24px; padding: 20px; margin-bottom: 20px; }
+.fs-energy { display: flex; background: #f0eee6; padding: 4px; border-radius: 14px; margin: 20px 0; gap: 3px; }
+.fs-energy button { flex: 1; padding: 10px 5px; border-radius: 10px; border: 0; background: none; font-size: 12px; color: #797a70; }
+.fs-energy button[aria-pressed=true] { background: #fffefa; color: #425637; box-shadow: 0 1px 4px #343d3410; }
+.fs-if { border-left: 2px solid #e0e5d6; padding-left: 15px; margin: 24px 0; }
+.fs-if span, .fs-then > span { font-size: 11px; color: #727262; }
+.fs-if p { margin: 6px 0; font-size: 14px; line-height: 1.85; }
+.fs-then h3 { margin: 8px 0 20px; color: #465b3b; font-size: 19px; line-height: 1.8; font-weight: 500; }
+.fs-primary { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 15px 14px; background: #687e54; color: #fff; border: 0; border-radius: 15px; width: 100%; font-size: 14px; line-height: 1.6; }
+.fs-secondary-actions { display: flex; justify-content: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.fs-secondary-actions button { padding: 9px 0; background: none; border: none; font-size: 12px; color: #726f60; }
+.fs-content details { font-size: 12px; line-height: 1.8; color: #706f63; margin: 20px 0; }
+.fs-content summary { cursor: pointer; }
+.fs-content summary span { color: #747265; margin-left: 5px; }
+.fs-history { margin-top: 30px; }
+.fs-history .fs-section-head > span { font-size: 11px; color: #717163; }
+.fs-empty { text-align: center; color: #747a65; padding: 20px; border-top: 1px solid #e8e6dd; }
+.fs-empty p { font-size: 12px; line-height: 1.9; }
+.fs-plan, .fs-review { padding: 20px; border-radius: 24px; background: #fffefa; border: 1px solid #e9e6da; }
+.fs-content label { display: block; font-size: 13px; color: #5f6556; line-height: 1.8; margin: 18px 0; }
+.fs-content textarea { display: block; width: 100%; resize: vertical; min-height: 74px; border: 1px solid #dddccd; border-radius: 12px; background: #fffefa; padding: 12px; margin-top: 7px; color: #3f4938; font-family: inherit; font-size: 16px; line-height: 1.65; }
+.fs-outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fs-outcomes button { padding: 13px 5px; border-radius: 12px; border: 1px solid #dfdece; background: #fffefa; font-size: 12px; color: #6b705f; }
+.fs-outcomes button[aria-pressed=true] { border-color: #738361; background: #eaf0e3; color: #435836; }
+.fs-notice { display: flex; align-items: flex-start; gap: 10px; background: #edece1; color: #687456; padding: 18px; border-radius: 16px; margin-top: 18px; }
+.fs-notice svg { flex-shrink: 0; }
+.fs-notice p { margin: 0; font-size: 13px; line-height: 1.85; }
+.fs-history article { border-top: 1px solid #e4e3d8; padding: 16px 0; }
+.fs-entry-date { display: flex; justify-content: space-between; gap: 10px; color: #717263; font-size: 11px; }
+.fs-entry-date span { color: #647a54; }
+.fs-history article > p { color: #505d46; font-size: 14px; line-height: 1.8; }
+.fs-history blockquote { font-size: 13px; line-height: 1.8; color: #787768; margin: 10px 0; }
+.fs-storage { color: #747265; font-size: 11px; line-height: 1.9; text-align: center; margin: 32px 0 12px; }
+.fs-error { color: #99493d; font-size: 13px; line-height: 1.8; }
+@media(max-width: 370px) { .fs-content { padding-left: 16px; padding-right: 16px; } .fs-intro h1 { font-size: 29px; } .fs-seed { width: 62px; height: 62px; } .fs-seed svg { width: 42px; } .fs-section-head { flex-wrap: wrap; } }

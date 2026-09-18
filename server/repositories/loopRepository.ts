@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { ConversationRepository } from './conversationRepository.js';
 import { db } from '../db/database.js';
 import type { IDatabaseAdapter } from '../db/types.js';
 import { companionRepository } from './companionRepository.js';
@@ -113,6 +114,7 @@ export class LoopRepository {
 
     let traceId = data.id || data.traceId;
     const sessionId = data.sessionId || data.conversationId || null;
+    await new ConversationRepository(this.adapter).assertCanCreateTrace(userId, sessionId);
 
     // Check if an existing draft exists for this ID or this conversation to prevent duplicate drafts on retries
     let existingTrace: LoopTraceRecord | null = null;
@@ -390,6 +392,8 @@ export class LoopRepository {
       traceId = data.loopTraceId;
     }
 
+    await new ConversationRepository(this.adapter).assertCanCreateTrace(userId, data.conversationId);
+
     if (!data.idempotencyKey) {
       data.idempotencyKey = `growth_${traceId}`;
     }
@@ -502,7 +506,8 @@ export class LoopRepository {
         }
       }
 
-      const loopId = `cloop_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+      await new ConversationRepository(this.adapter).assertCanCreateTrace(userId, data.conversationId);
+    const loopId = `cloop_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
       const snapshotData = {
         trigger: data.trigger,
         emotionOrBody: data.emotionOrBody || '',
