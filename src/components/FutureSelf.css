@@ -63,3 +63,10 @@
 .fs-storage { color: #747265; font-size: 11px; line-height: 1.9; text-align: center; margin: 32px 0 12px; }
 .fs-error { color: #99493d; font-size: 13px; line-height: 1.8; }
 @media(max-width: 370px) { .fs-content { padding-left: 16px; padding-right: 16px; } .fs-intro h1 { font-size: 29px; } .fs-seed { width: 62px; height: 62px; } .fs-seed svg { width: 42px; } .fs-section-head { flex-wrap: wrap; } }
+
+.fs-sync { margin: 0 0 20px; border: 1px solid #e3e5d9; border-radius: 16px; padding: 12px 15px; color: #59654e; font-size: 12px; line-height: 1.8; }
+.fs-sync > p { margin: 0; }
+.fs-conflict article { background: #fffefa; padding: 14px; border-radius: 12px; margin-top: 10px; }
+.fs-conflict p { margin: 6px 0; overflow-wrap: anywhere; }
+.fs-conflict .fs-outline { margin: 8px 0 0; }
+.fs-import { border-top: 1px solid #e3e5d9; margin-top: 12px; padding-top: 8px; }
