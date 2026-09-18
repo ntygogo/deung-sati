@@ -58,4 +58,8 @@ const skipped=applyLoopChat(prepareLoopChat([u(boundary)],stale),{loopTrace:{nee
 assert.equal(skipped.loop_guide.fields.needs,'อยากมีเวลาพักที่ไม่ถูกขัด');
 assert.ok(skipped.loop_guide.skipped.includes('options'));
 assert.ok(skipped.loop_guide.skipped.includes('micro_action'));
+const tears=applyLoopChat(prepareLoopChat([u('ไม่ร้องไห้แปลว่าเราใจดำไหม')]),{}, {...base,assistant_message:'ใจของเธอกำลังปรับตัวและต้องการเวลา'});
+assert.match(tears.assistant_message,/ไม่ได้บอกว่าเธอเป็นคนใจดำ/);
+assert.doesNotMatch(tears.assistant_message,/ปรับตัว|ป้องกัน|ต้องการเวลา|ไหม/);
+assert.equal(applyLoopChat(prepareLoopChat([u('ไม่ร้องไห้แปลว่าเราใจดำไหม')]),{}, {...base,safety_state:'crisis',assistant_message:'safety first'}).assistant_message,'safety first');
 console.log('PASS: source speaker, help requests, label preferences, proposals versus commitments, facts and cached-field cleanup.');

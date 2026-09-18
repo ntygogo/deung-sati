@@ -343,6 +343,10 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     // Keep this transition independent of model wrap-up/exercise suggestions.
     message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
     replies = [];
+  } else if (state.mode === 'listening' && /(?:ไม่|ไม่ได้)ร้องไห้.*(?:ใจดำ|ไร้หัวใจ).*(?:ไหม|หรือเปล่า)/u.test(context.latest)) {
+    // Answer the moral self-judgment without inventing an emotional/clinical cause.
+    message = 'การไม่ร้องไห้เพียงอย่างเดียวไม่ได้บอกว่าเธอเป็นคนใจดำหรือไม่ใส่ใจนะ ไม่ต้องฝืนร้องไห้เพื่อพิสูจน์ความรู้สึกให้ใครเห็น';
+    replies = [];
   } else if (state.mode === 'listening' && parsed?.guideSupport?.needed === true &&
       /ไม่เข้าใจ|ช่วย(?:ยกตัวอย่าง|อธิบาย)|ขอตัวอย่าง|หมายถึงอะไร/u.test(context.latest) &&
       typeof parsed.guideSupport.message === 'string' && parsed.guideSupport.message.trim().length >= 10 && parsed.guideSupport.message.length <= 900) {
