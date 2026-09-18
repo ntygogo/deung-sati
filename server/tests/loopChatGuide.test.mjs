@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { prepareLoopChat, applyLoopChat, loopChatReview, LOOP_CHAT_FIELDS, LOOP_CHAT_START, LOOP_CHAT_VENT, LOOP_CHAT_SKIP } from '../../src/shared/chat-protocol/loopChatGuide.ts';
+import { prepareLoopChat, applyLoopChat, loopChatReview, isChatWrapUpIntent, LOOP_CHAT_FIELDS, LOOP_CHAT_START, LOOP_CHAT_VENT, LOOP_CHAT_SKIP } from '../../src/shared/chat-protocol/loopChatGuide.ts';
 const base = { assistant_message: 'รับฟังอยู่', safety_state: 'normal', mode: 'HOLD', capacity: 'medium', user_intent: 'vent', readiness: 'story' };
 const u = content => ({role:'user',content});
+for (const text of ['อยากระบายต่อ', 'ขอระบายต่อ', 'วันนี้สบายใจขึ้น', 'ยังไม่พร้อม']) assert.equal(isChatWrapUpIntent(text),false,text);
+for (const text of ['บาย', 'บ๊ายบาย', 'บายจ้า', 'วันนี้พอแค่นี้', 'ไปนอนแล้ว']) assert.equal(isChatWrapUpIntent(text),true,text);
 const event = 'หัวหน้าขอแก้งานสองจุด';
 const feeling = 'เสียใจ';
 let messages = [u(event)];

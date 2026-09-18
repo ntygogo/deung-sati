@@ -25,6 +25,12 @@ const questions: Record<LoopChatField, string> = {
   reflection: 'จากที่คุยกัน เธอเห็นหรือเข้าใจอะไรเกี่ยวกับตัวเองเพิ่มขึ้นบ้าง?',
 };
 const controls = new Set([LOOP_CHAT_START, LOOP_CHAT_VENT, LOOP_CHAT_SKIP, LOOP_CHAT_REVIEW]);
+export function isChatWrapUpIntent(text: string): boolean {
+  const input = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  // A farewell must not match the syllable บาย inside ระบาย or สบาย.
+  return /^(?:บ๊าย)?บาย(?:(?:นะ|จ้ะ|จ้า|ครับ|ค่ะ|คะ)|[ !.ๆ…])*$/u.test(input) ||
+    ['พอแค่นี้', 'ไปนอนแล้ว', 'ไปทำงานก่อน', 'ขอตัวก่อน', 'แค่นี้ก่อน', 'ขอบคุณนะ', 'ขอบคุณมากนะ', 'จบการคุย', 'จบแค่นี้'].some(k => input.includes(k));
+}
 const textOf = (m: Message) => (m.content || m.text || '').trim();
 export function prepareLoopChat(messages: Message[], previous?: unknown) {
   const input = previous && typeof previous === 'object' ? previous as Partial<LoopChatGuide> : {};

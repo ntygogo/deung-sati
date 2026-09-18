@@ -29,7 +29,7 @@ import { ConversationalOnboarding } from "./components/ConversationalOnboarding"
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
 import { AuthModal } from "./components/AuthModal";
-import { loopChatReview, LOOP_CHAT_FIELDS } from "./shared/chat-protocol/loopChatGuide";
+import { loopChatReview, LOOP_CHAT_FIELDS, isChatWrapUpIntent } from "./shared/chat-protocol/loopChatGuide";
 
 const SvgIcon = ({
   name,
@@ -1371,7 +1371,7 @@ function ChatScreen({
       "ช่วยดึงสติหน่อย",
     ];
 
-    if (exerciseKeywords.some((k) => trimmed.includes(k))) {
+    if ((!activeLoopGuide || activeLoopGuide.mode === 'listening') && !trimmed.includes('ยังไม่พร้อม') && exerciseKeywords.some((k) => trimmed.includes(k))) {
       const lastAiMsg = [...messages].reverse().find((m) => m.role === "ai" && m.structuredTurn?.recommended_exercise);
       if (lastAiMsg?.structuredTurn?.recommended_exercise?.id) {
         setActiveInlineExercise({
@@ -1427,22 +1427,7 @@ function ChatScreen({
     }
 
     // 2. Wrap-up / End-of-conversation Intent
-    const wrapUpKeywords = [
-      "พอแค่นี้",
-      "พอแค่นี้ก่อน",
-      "วันนี้พอแค่นี้",
-      "ไปนอนแล้ว",
-      "ไปทำงานก่อน",
-      "ขอตัวก่อน",
-      "แค่นี้ก่อน",
-      "ขอบคุณนะ",
-      "ขอบคุณมากนะ",
-      "บาย",
-      "บ๊ายบาย",
-      "จบการคุย",
-      "จบแค่นี้",
-    ];
-    const isWrapUpIntent = wrapUpKeywords.some((k) => normalizedInput.includes(k));
+    const isWrapUpIntent = isChatWrapUpIntent(normalizedInput);
 
     if (isWrapUpIntent) {
       const userMessage: ChatMessage = {
