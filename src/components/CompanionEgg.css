@@ -46,7 +46,11 @@
 .egg-bubbles{position:absolute;inset:-165% -5% 0}.egg-bubbles i{position:absolute;width:9px;height:9px;border:1px solid #fff9f0d9;border-radius:50%;box-shadow:inset 2px 2px 3px #fff,0 0 8px #efc6ff;animation:bubble-rise 5s ease-in infinite}.egg-bubbles i:nth-child(1){left:8%;top:68%;animation-delay:-1s}.egg-bubbles i:nth-child(2){left:78%;top:47%;width:6px;height:6px;animation-delay:-3.2s}.egg-bubbles i:nth-child(3){left:87%;top:78%;width:13px;height:13px;animation-delay:-.4s}.egg-bubbles i:nth-child(4){left:24%;top:34%;width:5px;height:5px;animation-delay:-4.2s}
 .living-egg[data-variant=room] .living-egg-shell{z-index:7;inset:-1px;background:linear-gradient(116deg,#fff 0 2%,#ffffff52 7%,transparent 22% 67%,#ffcae64d 86%,#fff8f08c);border:1px solid #fff9edab;box-shadow:inset 8px 3px 15px #fffafa70,inset -8px -5px 18px #805b9a42}
 .living-egg[data-touched=true] .embryo-body{animation:embryo-happy .65s ease-in-out 1}.living-egg[data-touched=true] .embryo-tail{animation-duration:.55s}.living-egg[data-touched=true] .embryo-feeler{filter:brightness(1.18)}
+.living-egg[data-variant=room] .embryo-placeholder{width:82%;height:82%;margin:4% 9% 0;object-fit:contain;opacity:.9;filter:saturate(.8) brightness(1.07) drop-shadow(0 7px 8px #773f7661);animation:embryo-placeholder-breathe 4.2s ease-in-out infinite;transform-origin:52% 55%}
+.living-egg[data-touched=true] .embryo-placeholder{animation:embryo-placeholder-greet .7s ease-in-out 1}
 @keyframes embryo-float{0%,100%{transform:translate(-3%,3%) rotate(-4deg)}42%{transform:translate(3%,-4%) rotate(3deg)}70%{transform:translate(1%,-1%) rotate(0)}}
+@keyframes embryo-placeholder-breathe{0%,100%{transform:scale(.84) rotate(-6deg)}50%{transform:scale(.88,.86) rotate(-2deg)}}
+@keyframes embryo-placeholder-greet{0%,100%{transform:scale(.84) rotate(-6deg)}40%{transform:scale(.94,.8) rotate(5deg)}70%{transform:scale(.86,.91) rotate(-9deg)}}
 @keyframes embryo-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035,.975)}}
 @keyframes embryo-happy{0%,100%{transform:scale(1)}35%{transform:scale(1.09,.94) rotate(-3deg)}65%{transform:scale(.98,1.06) rotate(3deg)}}
 @keyframes tail-wriggle{0%,100%{transform:rotate(-29deg) skewX(0)}45%{transform:rotate(-15deg) skewX(7deg)}70%{transform:rotate(-35deg) skewX(-3deg)}}
