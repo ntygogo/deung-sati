@@ -29,9 +29,25 @@ export function CompanionEgg({ traceCount = 0, size = 320, onPet, isInteracting 
       <span className="living-egg-waterlight" />
       <span className="living-egg-reaction">
         <span className="living-egg-swim">
-          <img className="living-egg-baby" src="/images/companion_dna_base.png" alt="" draggable={false} data-testid="egg-embryo" />
+          {variant === 'room' ? <span className="embryo-creature" data-testid="egg-embryo">
+            <span className="embryo-tail"><i /></span>
+            <span className="embryo-body">
+              <span className="embryo-gill gill-left"><i /><i /><i /></span>
+              <span className="embryo-gill gill-right"><i /><i /><i /></span>
+              <span className="embryo-face"><i className="embryo-eye left" /><i className="embryo-eye right" /><i className="embryo-mouth" /></span>
+              <i className="embryo-arm arm-left" /><i className="embryo-arm arm-right" />
+              <i className="embryo-leg leg-left" /><i className="embryo-leg leg-right" />
+              <span className="embryo-feeler"><i /></span>
+            </span>
+          </span> : <img className="living-egg-baby" src="/images/companion_dna_base.png" alt="" draggable={false} data-testid="egg-embryo" />}
         </span>
       </span>
+      {variant === 'room' && <span className="living-egg-habitat" aria-hidden="true">
+        <i className="habitat-coral coral-one" /><i className="habitat-coral coral-two" />
+        <i className="habitat-leaf leaf-one" /><i className="habitat-leaf leaf-two" />
+        <span className="habitat-pebbles"><i /><i /><i /><i /><i /></span>
+        <span className="egg-bubbles"><i /><i /><i /><i /></span>
+      </span>}
       <span className="living-egg-shell" />
       <span className="living-egg-dust">{Array.from({ length: 9 }, (_, i) =>
         <i key={i} style={{ left: `${13 + i * 9}%`, top: `${22 + ((i * 17) % 60)}%`, animationDelay: `${i * -.7}s` }} />)}</span>
