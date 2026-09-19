@@ -16,13 +16,7 @@ import {
   AppDrawer,
   type DrawerMenuItemId,
 } from "./components/Navigation";
-import {
-  EmotionalTerrariumHero,
-  QuickChatCard,
-  MindfulToolsSection,
-  EmergencyPauseCard,
-  FutureSelfCard,
-} from "./components/HomeComponents";
+import { DreamyHome } from "./components/DreamyHome";
 import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio";
 import { CompanionRoom } from "./components/CompanionRoom";
 import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
@@ -528,6 +522,7 @@ export default function App() {
             setScreen={setScreen}
             onOpenMenu={() => setIsDrawerOpen(true)}
             onStartChat={handleStartChatFromHome}
+            onOpenSaved={() => setShowSavedLoops(true)}
           />
         )}
 
@@ -608,7 +603,7 @@ export default function App() {
         )}
 
         {showSavedLoops && <div role="dialog" aria-modal="true" aria-label="ลูปที่บันทึก" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
-          <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>กลับไปแชท</button>
+          <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>{screen === "home" ? "กลับห้องพักใจ" : "กลับไปแชท"}</button>
           <h2>ลูปที่บันทึก</h2>
           {traces.length === 0 && <p>เมื่อบันทึกลูปแล้ว กลับมาคุยต่อได้ที่นี่</p>}
           {selectedChatTrace ? <><h3>{selectedChatTrace.title}</h3><p>{selectedChatTrace.summary}</p><TraceConversationActions trace={selectedChatTrace} history={chats.history} resume={resumeTrace} remove={chats.removeHistory} isGuest={chats.isGuest} /><button onClick={() => setSelectedChatTrace(null)}>ดูลูปอื่น</button></> : traces.map(t => <button key={t.id} onClick={() => setSelectedChatTrace(t)} style={{ display: 'block', padding: 16, margin: '12px 0', width: '100%', textAlign: 'left' }}>{t.title}</button>)}
@@ -921,53 +916,28 @@ function Home({
   setScreen,
   onOpenMenu,
   onStartChat,
+  onOpenSaved,
 }: {
   setScreen: (s: Screen) => void;
   onOpenMenu: () => void;
   onStartChat: (text: string) => void;
+  onOpenSaved: () => void;
 }) {
   const { companion, traceCount } = useCompanion();
 
   return (
     <div className="screen scrollArea homeScreenRoot">
-      <AppHeader
-        title="วันนี้"
-        onEmergency={() => setScreen("pause")}
-        onOpenMenu={onOpenMenu}
-      />
-
-      {/* 1. EMOTIONAL TERRARIUM HERO: 35-45% of Screen Height, Translucent Egg with Living Embryo */}
-      <EmotionalTerrariumHero
+      <DreamyHome
         companion={companion}
         traceCount={traceCount}
-        onOpenCompanionRoom={() => setScreen("companion")}
-        onPetCompanion={() => {}}
-      />
-
-      {/* 2. QUICK CHAT — START VENTING / CONVERSATION IMMEDIATELY */}
-      <QuickChatCard
-        onStartChat={onStartChat}
+        onOpenMenu={onOpenMenu}
+        onEmergency={() => setScreen("pause")}
+        onOpenCompanion={() => setScreen("companion")}
+        onOpenJourney={onOpenSaved}
+        onOpenFuture={() => setScreen("profile")}
         onOpenChat={() => setScreen("chat")}
+        onStartChat={onStartChat}
       />
-
-      {/* 3. MINDFUL TOOLS: Organic Sacred Resonance Orbit Path */}
-      <MindfulToolsSection
-        onBeforeSpeak={() => setScreen("beforeSpeak")}
-        onPerspective={() => setScreen("perspective")}
-        onAwareness={() => onStartChat("ตอนนี้ฉันรู้สึกรู้ทันความคิดตัวเองแล้ว อยากบันทึกดู")}
-      />
-
-      {/* 4. EMERGENCY PAUSE: Compact Amber-Coral Glowing Glass Pill */}
-      <EmergencyPauseCard onTriggerEmergency={() => setScreen("pause")} />
-
-      {/* 5. FUTURE SELF: Cosmic Glass Letter from Future Self */}
-      <FutureSelfCard
-        trait="ค่อย ๆ เป็นฉันที่อยากเป็น"
-        evidence="เลือกก้าวเล็ก ๆ ที่ทำไหว แล้วกลับมาดูว่าอะไรช่วย"
-        onClick={() => setScreen("profile")}
-      />
-
-      <div className="bottomSpacer" style={{ height: "40px" }} />
     </div>
   );
 }

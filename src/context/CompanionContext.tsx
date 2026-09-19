@@ -18,13 +18,15 @@ export interface GrowthDnaData {
 export interface CompanionData {
   id: string;
   user_id?: string;
-  seed: number;
+  seed: number | string;
   name: string;
   stage: number; // 0 = Egg, 1 = Hatchling, 2 = Adolescent, 3 = Mature
   unlocked_max_stage: number;
   mood_state: string;
   last_interacted_at: string;
   dna?: GrowthDnaData;
+  /** Immutable birth record returned by the hatch endpoint; used for stable DNA projection. */
+  snapshot?: { dna_json?: unknown; skillsSummary?: unknown; seed?: number | string } | unknown;
   equippedItems?: Record<string, string>;
 }
 
