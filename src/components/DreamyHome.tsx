@@ -1,8 +1,7 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
-import { CompanionAppearance } from './CompanionAppearance';
-import { resolveCompanionAppearance } from '../shared/companionAppearance';
+import { LivingCompanion3D } from './LivingCompanion3D';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
 
@@ -36,7 +35,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <span className="room-pedestal" aria-hidden="true" />
         {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" /> :
           <div className="dreamy-hatched-garden" data-paused={paused}>
-            <CompanionAppearance appearance={resolveCompanionAppearance(companion)} size={280} />
+            <LivingCompanion3D paused={paused} />
           </div>}
       </div>
       <header className="dreamy-header">
