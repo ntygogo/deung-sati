@@ -69,14 +69,26 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
           if ('isMesh' in object && object.isMesh) (object as import('three').Mesh).frustumCulled = false;
         });
 
-        const animatedNames = [
-          'Bone_019', 'Bone_018', 'Bone_017',
+        const boneNames = [
+          'Bone_001', 'Bone_002', 'Bone_028', 'Bone_029',
+          'Bone_017', 'Bone_018', 'Bone_019',
           'Bone_034', 'Bone_037', 'Bone_043', 'Bone_046', 'Bone_049', 'Bone_052', 'Bone_055',
-          'Bone_028', 'Bone_029',
-        ];
-        const bones = animatedNames.map(name => model.getObjectByName(name)).filter(Boolean) as import('three').Object3D[];
-        const rests = bones.map(bone => bone.quaternion.clone());
+          'Bone_023', 'Bone_027', 'Bone_009', 'Bone_014',
+        ] as const;
+        const bones = new Map(boneNames.map(name => [name, model.getObjectByName(name)]));
+        const rests = new Map(
+          [...bones].flatMap(([name, bone]) => bone ? [[name, bone.quaternion.clone()] as const] : []),
+        );
+        const pose = (name: typeof boneNames[number], x = 0, y = 0, z = 0) => {
+          const bone = bones.get(name);
+          const rest = rests.get(name);
+          if (!bone || !rest) return;
+          bone.quaternion.copy(rest).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z)));
+        };
         const clock = new THREE.Clock();
+        let nextCuriousLook = 2.4;
+        let lookStarted = 0;
+        let lookDirection = 1;
 
         const resize = () => {
           const width = Math.max(1, mount.clientWidth);
@@ -96,17 +108,49 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
           if (!pausedRef.current) {
             const hello = Math.max(0, greetingRef.current - performance.now()) / 850;
             const happy = Math.sin((1 - hello) * Math.PI * 4) * hello;
-            pivot.position.y = -0.03 + Math.sin(t * 1.35) * 0.025 + Math.abs(happy) * 0.07;
-            pivot.rotation.y = Math.sin(t * 0.52) * 0.035 + happy * 0.08;
-            pivot.rotation.z = Math.sin(t * 0.72) * 0.012 - happy * 0.035;
-            pivot.scale.setScalar(1 + Math.sin(t * 1.5) * 0.008);
-            bones.forEach((bone, index) => {
-              bone.quaternion.copy(rests[index]);
-              const isTail = index < 3;
-              const wave = Math.sin(t * (isTail ? 1.7 : 1.25) - index * 0.67);
-              const amount = isTail ? 0.045 + index * 0.012 : index < 10 ? 0.025 : 0.012;
-              bone.rotateZ(wave * amount + happy * (isTail ? 0.09 : 0.035));
+            const breath = Math.sin(t * 2.15);
+
+            if (t > nextCuriousLook) {
+              lookStarted = t;
+              lookDirection *= -1;
+              nextCuriousLook = t + 4.2 + Math.random() * 3.2;
+            }
+            const lookAge = t - lookStarted;
+            const lookEnvelope = lookAge < 2.2 ? Math.sin((lookAge / 2.2) * Math.PI) : 0;
+            const curious = lookEnvelope * lookDirection;
+
+            // The body settles a fraction after the head so the character has weight.
+            pivot.position.y = -0.03 + Math.sin(t * 1.18) * 0.018 + Math.abs(happy) * 0.085;
+            pivot.rotation.y = Math.sin(t * 0.43) * 0.025 + happy * 0.11;
+            pivot.rotation.z = Math.sin(t * 0.61) * 0.01 - happy * 0.045;
+            pivot.scale.set(1 + breath * 0.004, 1 + breath * 0.009, 1 - breath * 0.003);
+
+            pose('Bone_001', breath * 0.008, Math.sin(t * 0.48) * 0.018, Math.sin(t * 0.72) * 0.012);
+            pose('Bone_002', -breath * 0.014, curious * 0.035, -curious * 0.012);
+            pose('Bone_028', breath * 0.01, curious * 0.13 + happy * 0.08, curious * -0.055 - happy * 0.04);
+            pose('Bone_029', Math.sin(t * 1.05) * 0.025, curious * 0.04, Math.sin(t * 1.42) * 0.035 + happy * 0.09);
+
+            // Tail wave travels outward rather than rotating as one rigid piece.
+            pose('Bone_017', 0, Math.sin(t * 1.55) * 0.045, Math.sin(t * 1.55) * 0.07 + happy * 0.1);
+            pose('Bone_018', 0, Math.sin(t * 1.55 - 0.65) * 0.055, Math.sin(t * 1.55 - 0.65) * 0.105 + happy * 0.14);
+            pose('Bone_019', 0, Math.sin(t * 1.55 - 1.25) * 0.065, Math.sin(t * 1.55 - 1.25) * 0.14 + happy * 0.18);
+
+            // Six gills ripple in offset pairs, like soft fronds moving through water.
+            const gills: Array<[typeof boneNames[number], number, number]> = [
+              ['Bone_034', -1, 0], ['Bone_037', 1, 0.45],
+              ['Bone_046', -1, 0.8], ['Bone_049', 1, 1.2],
+              ['Bone_052', -1, 1.55], ['Bone_055', 1, 1.95],
+            ];
+            gills.forEach(([name, side, phase]) => {
+              const flutter = Math.sin(t * 2.05 + phase) * 0.035 + Math.sin(t * 0.74 + phase) * 0.022;
+              pose(name, flutter * 0.45, curious * side * 0.025, side * (flutter + happy * 0.055));
             });
+
+            // Tiny limb shifts stop the silhouette from reading as a rubber figurine.
+            pose('Bone_023', breath * 0.014, 0, Math.sin(t * 0.92) * 0.018 + happy * 0.06);
+            pose('Bone_027', -breath * 0.014, 0, -Math.sin(t * 0.92 + 0.5) * 0.018 - happy * 0.06);
+            pose('Bone_009', 0, Math.sin(t * 0.7) * 0.012, Math.sin(t * 0.86) * 0.012);
+            pose('Bone_014', 0, -Math.sin(t * 0.7) * 0.012, -Math.sin(t * 0.86 + 0.4) * 0.012);
           }
           renderer?.render(scene, camera);
         };
