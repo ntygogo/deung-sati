@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   type Screen,
   type EvidenceType,
@@ -28,6 +28,8 @@ import { traceFields, type Conversation } from "./shared/conversation";
 import { TraceConversationActions } from "./components/TraceConversationActions";
 import { AuthModal } from "./components/AuthModal";
 import { loopChatReview, LOOP_CHAT_FIELDS, isChatWrapUpIntent } from "./shared/chat-protocol/loopChatGuide";
+
+const SelfDiscoveryView = lazy(() => import('./components/SelfDiscoveryView').then(module => ({ default: module.SelfDiscoveryView })));
 
 const SvgIcon = ({
   name,
@@ -364,7 +366,9 @@ const DevDebugPanel = ({
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>(() => new URLSearchParams(window.location.search).get('view') === 'discovery' ? 'discover' : 'home');
+  const [discoveryActive, setDiscoveryActive] = useState(() => new URLSearchParams(window.location.search).get('view') === 'discovery');
+  useEffect(() => { if (screen === 'discover') setDiscoveryActive(true); }, [screen]);
   const [showEvidence, setShowEvidence] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -471,6 +475,7 @@ export default function App() {
   const handleDrawerSelect = (routeId: DrawerMenuItemId) => {
     setIsDrawerOpen(false);
     if (routeId === 'account' || routeId === 'membership_status') setIsAuthOpen(true);
+    if (routeId === 'discover') setScreen('discover');
   };
 
   const handleStartChatFromHome = (textToSend: string) => {
@@ -509,7 +514,7 @@ export default function App() {
         {isDebugMode && <DevDebugPanel debugInfo={debugInfo} />}
 
         {/* Conversational Onboarding if new user or pending reveal (Decoupled lifecycle) */}
-        {(onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
+        {!["discover", "pause"].includes(screen) && (onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
           <ConversationalOnboarding
             initialStep={onboardingLifecycle === "reveal_only" ? 5 : 1}
             onComplete={handleOnboardingComplete}
@@ -543,7 +548,7 @@ export default function App() {
           />
         )}
 
-        {screen === "pause" && <PauseScreen setScreen={setScreen} />}
+        {screen === "pause" && <PauseScreen setScreen={next => setScreen(discoveryActive && next === 'home' ? 'discover' : next)} />}
 
         {screen === "chat" && (
           <ChatScreen
@@ -598,7 +603,13 @@ export default function App() {
           <FutureSelf onBack={() => setScreen('home')} onChat={text => void handleFutureChat(text)} />
         )}
 
-        {!["pause", "beforeSpeak", "perspective"].includes(screen) && (
+        {(screen === 'discover' || discoveryActive) && <div style={{ display: screen === 'discover' ? 'contents' : 'none' }}>
+          <Suspense fallback={<div className="screen scrollArea"><p role="status" style={{ padding: 24 }}>กำลังเปิดพื้นที่สำรวจตัวเอง…</p></div>}>
+            <SelfDiscoveryView onBack={() => { setDiscoveryActive(false); setScreen('home'); }} onEmergency={() => { setDiscoveryActive(true); setScreen('pause'); }} />
+          </Suspense>
+        </div>}
+
+        {!["pause", "beforeSpeak", "perspective", "discover"].includes(screen) && (
           <BottomNav screen={screen} setScreen={setScreen} />
         )}
 
@@ -935,6 +946,7 @@ function Home({
         onOpenCompanion={() => setScreen("companion")}
         onOpenJourney={onOpenSaved}
         onOpenFuture={() => setScreen("profile")}
+        onOpenDiscovery={() => setScreen('discover')}
         onOpenChat={() => setScreen("chat")}
         onStartChat={onStartChat}
       />

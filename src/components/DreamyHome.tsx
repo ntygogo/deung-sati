@@ -9,11 +9,12 @@ export interface DreamyHomeProps {
   companion: CompanionData | null; traceCount: number; userName?: string; level?: number;
   onOpenMenu: () => void; onEmergency: () => void; onOpenCompanion: () => void;
   onOpenJourney: () => void; onOpenFuture: () => void; onOpenChat: () => void;
+  onOpenDiscovery: () => void;
   onStartChat: (text: string) => void;
 }
 
 export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenMenu, onEmergency,
-  onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat }: DreamyHomeProps) {
+  onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onOpenDiscovery, onStartChat }: DreamyHomeProps) {
   const [message, setMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const progress = eggProgress(traceCount);
@@ -83,6 +84,11 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </form>
       <span className="dreamy-composer-caption">คุยกับเรา</span>
     </section>
+
+    <button type="button" className="dreamy-discovery-link" onClick={onOpenDiscovery}>
+      <span className="dreamy-discovery-icon"><Eye size={24} aria-hidden="true" /></span>
+      <span><strong>รู้จักตัวฉัน</strong><small>สำรวจอารมณ์ · แบบประเมินพร้อมคะแนน · แบบฝึก</small></span><ChevronRight size={19} aria-hidden="true" />
+    </button>
 
     <section className="dreamy-path" aria-labelledby="dreamy-path-heading">
       <div className="dreamy-section-heading"><h2 id="dreamy-path-heading">เส้นทางวันนี้ <span aria-hidden="true">〰</span></h2><p>ค่อย ๆ ไปด้วยกันนะ ☺</p></div>

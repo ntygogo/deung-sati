@@ -12,7 +12,8 @@
     "test:db": "tsx server/tests/dbIntegration.test.ts",
     "test:acceptance": "tsx server/runAllAcceptanceTests.ts",
     "test:regression": "tsx server/verifyPhaseACRegression.ts",
-    "test:browser": "tsx server/tests/browserScrollVerification.ts"
+    "test:browser": "tsx server/tests/browserScrollVerification.ts",
+    "test:discovery": "node server/tests/discoveryScoring.test.mjs && node --import tsx server/tests/discoveryPersistence.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.17.1",

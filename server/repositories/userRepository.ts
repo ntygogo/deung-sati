@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { db } from '../db/database.js';
 import type { IDatabaseAdapter } from '../db/types.js';
 import type { UserRecord } from '../services/authService.js';
+import { DiscoveryRepository } from './discoveryRepository.js';
 
 export interface ConsentRecord {
   id: string;
@@ -65,6 +66,7 @@ export class UserRepository {
     const loops = await this.adapter.query('SELECT * FROM loop_patterns WHERE user_id = $1', [userId]);
     const wallet = await this.adapter.queryOne('SELECT xp, level, shells, memory_crystals FROM wallets WHERE user_id = $1', [userId]);
     const transactions = await this.adapter.query('SELECT id, currency, amount, balance_after, event_type, created_at FROM currency_transactions WHERE user_id = $1', [userId]);
+    const discovery = await new DiscoveryRepository(this.adapter).get(userId);
 
     return {
       profile: { id: user.id, name: user.name, email: user.email, tier: user.tier, createdAt: user.created_at },
@@ -75,6 +77,7 @@ export class UserRepository {
       loopPatterns: loops,
       wallet,
       currencyLedger: transactions,
+      selfDiscovery: discovery.records,
       exportedAt: new Date().toISOString(),
     };
   }
