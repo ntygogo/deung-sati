@@ -11,6 +11,7 @@ export type Screen =
   | 'perspective'
   | 'journey'
   | 'profile'
+  | 'discover'
   | 'companion';
 
 export type EvidenceType =

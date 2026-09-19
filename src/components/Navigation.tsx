@@ -3,6 +3,7 @@ import { bookConfig } from '../config/bookConfig';
 import { useAuth } from '../context/AuthContext';
 
 export type DrawerMenuItemId =
+  | 'discover'
   | 'account'
   | 'membership_status'
   | 'book_info'
@@ -320,6 +321,9 @@ export const AppDrawer: React.FC<{
 
         {/* Scrollable Drawer Body with Future-Ready Sections */}
         <div className="drawerBody scrollArea">
+          <DrawerSection title="รู้จักตัวฉัน" icon="🧭">
+            <DrawerItem id="discover" label="สำรวจตัวเองและฝึกทีละเรื่อง" subtitle="แบบประเมินพร้อมคะแนน · สำรวจอารมณ์ · แบบฝึก" onClick={handleItemClick} />
+          </DrawerSection>
           {/* Section 1: Account */}
           <DrawerSection title="บัญชีของฉัน" icon="👤">
             <DrawerItem
