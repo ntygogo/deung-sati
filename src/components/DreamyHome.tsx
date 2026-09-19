@@ -17,7 +17,8 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   const [message, setMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const progress = eggProgress(traceCount);
-  const isEgg = !companion || companion.stage === 0;
+  const previewCompanion = new URLSearchParams(window.location.search).get('previewCompanion') === '1';
+  const isEgg = !previewCompanion && (!companion || companion.stage === 0);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (message.trim()) { onStartChat(message.trim()); setMessage(''); }
