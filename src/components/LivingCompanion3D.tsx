@@ -31,7 +31,7 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(29, 1, 0.01, 100);
-        camera.position.set(0, 0.03, 4.05);
+        camera.position.set(0, 0.03, 4.25);
         camera.lookAt(0, 0.05, 0);
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
@@ -54,15 +54,17 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
         const gltf = await loader.loadAsync('/models/deung-sati-companion.glb');
         if (disposed) return;
         const model = gltf.scene;
-        scene.add(model);
+        const pivot = new THREE.Group();
+        pivot.add(model);
+        scene.add(pivot);
 
         const bounds = new THREE.Box3().setFromObject(model);
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3());
         model.position.sub(center);
-        const fittedScale = 2.05 / Math.max(size.x, size.y);
+        const fittedScale = 1.75 / Math.max(size.x, size.y);
         model.scale.setScalar(fittedScale);
-        model.position.y = -0.05;
+        pivot.position.y = -0.03;
         model.traverse((object) => {
           if ('isMesh' in object && object.isMesh) (object as import('three').Mesh).frustumCulled = false;
         });
@@ -94,10 +96,10 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
           if (!pausedRef.current) {
             const hello = Math.max(0, greetingRef.current - performance.now()) / 850;
             const happy = Math.sin((1 - hello) * Math.PI * 4) * hello;
-            model.position.y = -0.05 + Math.sin(t * 1.35) * 0.025 + Math.abs(happy) * 0.07;
-            model.rotation.y = Math.sin(t * 0.52) * 0.035 + happy * 0.08;
-            model.rotation.z = Math.sin(t * 0.72) * 0.012 - happy * 0.035;
-            model.scale.setScalar(fittedScale * (1 + Math.sin(t * 1.5) * 0.008));
+            pivot.position.y = -0.03 + Math.sin(t * 1.35) * 0.025 + Math.abs(happy) * 0.07;
+            pivot.rotation.y = Math.sin(t * 0.52) * 0.035 + happy * 0.08;
+            pivot.rotation.z = Math.sin(t * 0.72) * 0.012 - happy * 0.035;
+            pivot.scale.setScalar(1 + Math.sin(t * 1.5) * 0.008);
             bones.forEach((bone, index) => {
               bone.quaternion.copy(rests[index]);
               const isTail = index < 3;
