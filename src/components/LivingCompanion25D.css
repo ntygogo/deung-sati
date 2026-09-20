@@ -1,4 +1,4 @@
-.living-companion-25d{display:grid;place-items:center;isolation:isolate;filter:none;-webkit-tap-highlight-color:transparent}
+.living-companion-25d{display:grid;place-items:center;isolation:isolate;filter:none;-webkit-tap-highlight-color:transparent;touch-action:none}
 .companion-model-sprite{display:block;width:100%;aspect-ratio:1;background-repeat:no-repeat;pointer-events:none;filter:drop-shadow(0 12px 10px #57334f24)}
 .companion-model-message{position:absolute;bottom:12%;left:4%;right:4%;font-size:12px;color:#643e5d;text-align:center;background:#fff5edd9;padding:8px;border-radius:12px}
 .companion-model-heart,.companion-model-sleep{position:absolute;right:15%;top:21%;color:#e87bad;font-size:24px;pointer-events:none;text-shadow:0 1px 4px #fff}

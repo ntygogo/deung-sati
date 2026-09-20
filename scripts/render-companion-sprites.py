@@ -12,6 +12,8 @@ Then mechanically pack the RGBA renders with Python + Pillow:
     --frames /tmp/companion-frames --output public/sprites/companion-model-v1
 
 Use --proof to render only representative frames for visual inspection first.
+Use --clips wave curious nuzzle stretch to add selected clips without rendering
+or repacking existing atlases; subset packing merges the existing manifest.
 """
 
 import argparse
@@ -29,6 +31,10 @@ CLIPS = {
     "greet": {"frames": 18, "fps": 12},
     "play": {"frames": 18, "fps": 12},
     "sleep": {"frames": 12, "fps": 12},
+    "wave": {"frames": 24, "fps": 12},
+    "curious": {"frames": 24, "fps": 12},
+    "nuzzle": {"frames": 24, "fps": 12},
+    "stretch": {"frames": 24, "fps": 12},
 }
 
 
@@ -40,6 +46,7 @@ def arguments():
     parser.add_argument("--pack", action="store_true")
     parser.add_argument("--proof", action="store_true")
     parser.add_argument("--samples", type=int, default=12)
+    parser.add_argument("--clips", nargs="+", choices=CLIPS, help="Render/pack only selected clips, preserving other existing atlases")
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
     return parser.parse_args(argv)
 
@@ -51,6 +58,7 @@ def smooth(x):
 
 def render(args):
     import bpy
+    from mathutils import Quaternion, Vector
 
     if not args.source:
         raise ValueError("--source must point to the existing .blend model")
@@ -85,6 +93,18 @@ def render(args):
 
     def bone(name, x=0, y=0, z=0):
         rig.pose.bones[name].rotation_euler = (x, y, z)
+
+    def bone_world(name, axis, angle):
+        """Rotate around a known rest-space world axis without guessing bone roll.
+
+        Existing UniRig limb bones have different local orientations. Converting
+        the anatomical axis into each bone's rest coordinates keeps shoulder and
+        forearm rotations mirrored correctly without modifying the rig itself.
+        """
+        item = rig.pose.bones[name]
+        rest_rotation = (rig.matrix_world @ item.bone.matrix_local).to_quaternion()
+        local_axis = rest_rotation.inverted() @ Vector(axis)
+        item.rotation_euler = Quaternion(local_axis, angle).to_euler("XYZ")
 
     def expression(name, value):
         if name in keys.key_blocks:
@@ -150,9 +170,67 @@ def render(args):
             for i, name in enumerate(["Bone_034", "Bone_037", "Bone_046", "Bone_049", "Bone_052", "Bone_055"]):
                 bone(name, z=.024 * rest * (-1 if i % 2 else 1))
 
+        elif clip == "wave":
+            # Raise one original forearm into a recognisable hand greeting,
+            # hold briefly with two wrist/elbow waves, then return to rest.
+            raised = smooth(t / .24) * (1 - smooth((t - .76) / .24))
+            flutter = math.sin((t - .24) * math.tau * 2.8) * raised
+            bone_world("Bone_027", (0, 1, 0), -1.22 * raised)
+            bone_world("Bone_026", (0, 1, 0), (-.30 + .20 * flutter) * raised)
+            bone_world("Bone_025", (0, 1, 0), .16 * flutter)
+            bone("Bone_029", y=-.035 * raised, z=-.075 * raised)
+            expression("Smile", .12 + .43 * raised)
+            expression("Gaze_Z", .12 * raised)
+            for i, name in enumerate(["Bone_019", "Bone_018", "Bone_017"]):
+                bone(name, z=.08 * raised * math.sin(t * math.tau * 2 - i * .4))
+
+        elif clip == "curious":
+            # A deliberate side-to-side look with a large, readable head tilt.
+            look = math.sin(t * math.tau) * beat
+            bone("Bone_029", x=.015 * beat, y=.16 * look, z=.18 * beat)
+            bone("Bone_043", z=-.035 * beat)
+            bone("Bone_042", z=.035 * beat)
+            expression("Gaze_X", .72 * look)
+            expression("Gaze_Z", .35 * beat)
+            expression("Smile", .12 + .12 * beat)
+            bone_world("Bone_023", (0, 1, 0), .12 * beat)
+            bone_world("Bone_027", (0, 1, 0), -.12 * beat)
+
+        elif clip == "nuzzle":
+            # Lean the existing head into a gentle pet, smile/squint, and relax.
+            lean = smooth(t / .30) * (1 - smooth((t - .70) / .30))
+            rig.location.x += .025 * lean
+            bone("Bone_029", x=.035 * lean, y=-.045 * lean, z=-.17 * lean)
+            expression("Happy_Eyes", .78 * lean)
+            expression("Smile", .12 + .52 * lean)
+            bone_world("Bone_023", (0, 1, 0), -.12 * lean)
+            bone_world("Bone_027", (0, 1, 0), .12 * lean)
+            for i, name in enumerate(["Bone_019", "Bone_018", "Bone_017"]):
+                bone(name, z=.075 * lean * math.sin(t * math.tau * 1.5 - i * .45))
+            for i, name in enumerate(["Bone_034", "Bone_037", "Bone_046", "Bone_049", "Bone_052", "Bone_055"]):
+                bone(name, z=.024 * lean * (-1 if i % 2 else 1))
+
+        elif clip == "stretch":
+            # Both arms open away from the body, feet shift outward a little,
+            # the head tips upward, and every joint settles back to neutral.
+            reach = smooth(t / .38) * (1 - smooth((t - .68) / .32))
+            rig.location.z += .018 * reach
+            bone_world("Bone_023", (0, 1, 0), 1.02 * reach)
+            bone_world("Bone_027", (0, 1, 0), -1.02 * reach)
+            bone_world("Bone_022", (0, 1, 0), .20 * reach)
+            bone_world("Bone_026", (0, 1, 0), -.20 * reach)
+            bone_world("Bone_009", (0, 1, 0), .15 * reach)
+            bone_world("Bone_014", (0, 1, 0), -.15 * reach)
+            bone("Bone_029", x=.085 * reach)
+            expression("Happy_Eyes", .60 * reach)
+            expression("Smile", .12 + .40 * reach)
+            bone("Bone_043", z=.025 * reach)
+
         bpy.context.view_layer.update()
 
     for clip, spec in CLIPS.items():
+        if args.clips and clip not in args.clips:
+            continue
         target = args.frames / clip
         target.mkdir(parents=True, exist_ok=True)
         count = spec["frames"]
@@ -174,8 +252,13 @@ def pack(args):
     if not args.output:
         raise ValueError("--output is required for --pack")
     args.output.mkdir(parents=True, exist_ok=True)
-    manifest = {"tileSize": TILE_SIZE, "columns": COLUMNS, "clips": {}}
+    manifest_path = args.output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if args.clips and manifest_path.exists() else {"tileSize": TILE_SIZE, "columns": COLUMNS, "clips": {}}
+    if manifest.get("tileSize") != TILE_SIZE or manifest.get("columns") != COLUMNS:
+        raise ValueError("Cannot merge atlases with a different tile size or column count")
     for clip, spec in CLIPS.items():
+        if args.clips and clip not in args.clips:
+            continue
         count = spec["frames"]
         rows = math.ceil(count / COLUMNS)
         atlas = Image.new("RGBA", (COLUMNS * TILE_SIZE, rows * TILE_SIZE), (0, 0, 0, 0))
@@ -203,10 +286,11 @@ def pack(args):
         print(f"COMPANION_ATLAS {clip}: {destination.stat().st_size} bytes {atlas.size}")
 
     # A first-paint frame allows a visible original model before clip preloading.
-    poster = Image.open(args.frames / "idle" / "000.png").convert("RGBA")
-    poster.save(args.output / "poster.webp", "WEBP", quality=95, method=6, exact=True)
-    manifest["poster"] = "/sprites/companion-model-v1/poster.webp"
-    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    if not args.clips or "idle" in args.clips:
+        poster = Image.open(args.frames / "idle" / "000.png").convert("RGBA")
+        poster.save(args.output / "poster.webp", "WEBP", quality=95, method=6, exact=True)
+        manifest["poster"] = "/sprites/companion-model-v1/poster.webp"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest))
 
 

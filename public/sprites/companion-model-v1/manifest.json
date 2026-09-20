@@ -26,6 +26,26 @@
       "src": "/sprites/companion-model-v1/sleep.webp",
       "frames": 12,
       "fps": 12
+    },
+    "wave": {
+      "src": "/sprites/companion-model-v1/wave.webp",
+      "frames": 24,
+      "fps": 12
+    },
+    "curious": {
+      "src": "/sprites/companion-model-v1/curious.webp",
+      "frames": 24,
+      "fps": 12
+    },
+    "nuzzle": {
+      "src": "/sprites/companion-model-v1/nuzzle.webp",
+      "frames": 24,
+      "fps": 12
+    },
+    "stretch": {
+      "src": "/sprites/companion-model-v1/stretch.webp",
+      "frames": 24,
+      "fps": 12
     }
   },
   "poster": "/sprites/companion-model-v1/poster.webp"

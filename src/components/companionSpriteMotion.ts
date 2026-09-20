@@ -1,4 +1,7 @@
-export type SpriteClipName = 'idle' | 'blink' | 'greet' | 'play' | 'sleep';
+export const SPRITE_CLIPS = ['idle', 'blink', 'greet', 'play', 'sleep', 'wave', 'curious', 'nuzzle', 'stretch'] as const;
+export type SpriteClipName = typeof SPRITE_CLIPS[number];
+const TAP_GESTURES: SpriteClipName[] = ['wave', 'play', 'curious', 'stretch', 'greet'];
+const IDLE_GESTURES: SpriteClipName[] = ['curious', 'stretch', 'greet', 'wave', 'play'];
 export type SpriteManifest = {
   tileSize: number;
   columns: number;
@@ -14,13 +17,16 @@ export class CompanionSpriteMotion {
   nextBlink = 3;
   nextGesture = 8;
   touches = 0;
+  lastGesture: SpriteClipName | null = null;
   active: { clip: SpriteClipName; at: number; reverse?: boolean } | null = null;
   constructor(private readonly random = Math.random) {}
 
-  touch() {
+  touch(interaction: 'tap' | 'pet' = 'tap') {
     const waking = this.time - this.lastTouch >= 50;
     this.lastTouch = this.time;
-    this.active = { clip: waking ? 'sleep' : this.touches++ % 2 === 0 ? 'greet' : 'play', at: this.time, reverse: waking };
+    const clip = waking ? 'sleep' : interaction === 'pet' ? 'nuzzle' : TAP_GESTURES[this.touches++ % TAP_GESTURES.length];
+    this.active = { clip, at: this.time, reverse: waking };
+    if (!waking) this.lastGesture = clip;
     this.nextGesture = this.time + 8 + this.random() * 10;
     this.nextBlink = this.time + 3 + this.random() * 4;
   }
@@ -39,7 +45,10 @@ export class CompanionSpriteMotion {
         return { clip: 'sleep', frame, mood: 'sleep', action: 'dozing' };
       }
       if (!reducedMotion && quiet < 30 && this.time >= this.nextGesture) {
-        this.active = { clip: this.random() > .5 ? 'greet' : 'play', at: this.time };
+        const options = IDLE_GESTURES.filter(clip => clip !== this.lastGesture);
+        const clip = options[Math.min(options.length - 1, Math.floor(this.random() * options.length))];
+        this.active = { clip, at: this.time };
+        this.lastGesture = clip;
         this.nextGesture = this.time + 8 + this.random() * 10;
       } else if (!reducedMotion && this.time >= this.nextBlink) {
         this.active = { clip: 'blink', at: this.time };
