@@ -26,7 +26,7 @@
 
 .dreamy-hero:after{content:"";position:absolute;z-index:0;left:0;right:0;bottom:0;height:28px;pointer-events:none;background:linear-gradient(transparent,#f7e7dd)}
 .dreamy-chat-heading p,.dreamy-section-heading p,.dreamy-future-link{color:#806578}.dreamy-progress-inner>span{font-size:9px}.room-object-label,.room-companion-caption{font-size:11px}
-.dreamy-hatched-garden{width:300px;height:315px;animation:none}.dreamy-hatched-garden>.living-companion-3d{max-width:none}
+.dreamy-hatched-garden{width:300px;height:315px;animation:none;transform:translateY(24px)}.dreamy-hatched-garden>.living-companion-3d{max-width:none}
 
 /* Dreamy terrarium art direction: dusk, warm glass, rose light and cream paper surfaces. */
 .dreamy-home{--dream-ink:#28253f;--dream-rose:#ef4f94;--dream-blue:#788be6;background:radial-gradient(circle at 15% 27%,#ffccac80 0 8%,transparent 27%),radial-gradient(circle at 87% 30%,#8fa1ed55,transparent 32%),linear-gradient(180deg,#565774 0,#8b7186 28%,#f2c7bb 58%,#fff2e8 76%,#fff9f3 100%);color:var(--dream-ink)}
