@@ -1,10 +1,114 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import './LivingCompanion3D.css';
 
 type LivingCompanion3DProps = { paused?: boolean; className?: string };
 type CompanionReaction = 'wave' | 'hop' | 'wiggle' | 'nuzzle';
 
+// The public entry point now uses native SVG. Keep the GLB renderer below intact
+// for future comparison; it is never mounted or imported by this SVG path.
 export function LivingCompanion3D({ paused = false, className = '' }: LivingCompanion3DProps) {
+  const id = useId().replace(/:/g, '');
+  const runtime = useRef({ time: 0, touched: 0, next: 7, blink: 2, blinkUntil: 0, actionAt: -10, action: 'wave', count: 0, look: 0 });
+  const [pose, setPose] = useState({ time: 0, action: 'idle', strength: 0, closed: false, sleepy: false, rest: false, look: 0, happy: false });
+  useEffect(() => {
+    if (paused) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+    let last = performance.now();
+    let painted = last;
+    const tick = (now: number) => {
+      frame = requestAnimationFrame(tick);
+      const dt = Math.min((now - last) / 1000, .05);
+      last = now;
+      if (document.hidden) return;
+      const r = runtime.current;
+      r.time += dt;
+      if (now - painted < 33) return;
+      painted = now;
+      const idle = r.time - r.touched;
+      if (r.time >= r.blink) { r.blinkUntil = r.time + .15; r.blink = r.time + 2.5 + Math.random() * 4; }
+      if (r.time >= r.next && idle < 30 && r.time - r.actionAt > 2) {
+        const actions = ['wave', 'wiggle', 'curious'];
+        r.action = actions[Math.floor(Math.random() * actions.length)];
+        r.actionAt = r.time;
+        r.next = r.time + 8 + Math.random() * 10;
+      }
+      const age = r.time - r.actionAt;
+      const strength = age < 1.8 ? Math.sin(age / 1.8 * Math.PI) : 0;
+      setPose({ time: reduced.matches ? 0 : r.time, action: r.action, strength: reduced.matches ? 0 : strength,
+        closed: r.time < r.blinkUntil, sleepy: idle > 50, rest: idle > 30,
+        look: reduced.matches ? 0 : r.look, happy: idle < 2.2 && r.count > 0 });
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [paused]);
+  const greet = () => {
+    if (paused) return;
+    const r = runtime.current;
+    r.action = ['wave', 'hop', 'wiggle', 'nuzzle'][r.count++ % 4];
+    r.actionAt = r.time;
+    r.touched = r.time;
+    r.next = r.time + 8 + Math.random() * 10;
+  };
+  const { time: t, strength: s, sleepy, rest, happy } = pose;
+  const action = (name: string) => pose.action === name ? s : 0;
+  const breath = Math.sin(t * (sleepy ? 1.4 : 2)) * (sleepy ? .006 : .009);
+  const tilt = action('curious') * 10 + action('nuzzle') * -13 + pose.look * 3 + (sleepy ? 9 : 0);
+  const wave = action('wave') * (50 + Math.sin(t * 16) * 24);
+  const bounce = action('hop') * Math.abs(Math.sin(s * Math.PI * 2)) * -15;
+  const wiggle = Math.sin(t * 12) * action('wiggle') * 8;
+  const tail = Math.sin(t * 9) * (s * 18 + (happy ? 10 : 0));
+  const fill = `url(#${id}-body)`;
+  return <button type="button" className={`living-companion-3d ${className}`} data-renderer="svg" data-status="ready"
+    data-mood={sleepy ? 'sleep' : rest ? 'rest' : happy ? 'happy' : 'awake'} data-action={s > 0 ? pose.action : 'idle'}
+    aria-label="แตะเล่นกับน้องดึงสติ" onClick={greet}
+    onPointerMove={e => { if (!paused) { const box = e.currentTarget.getBoundingClientRect(); runtime.current.look = Math.max(-1, Math.min(1, (e.clientX - box.left) / box.width * 2 - 1)); } }}
+    onPointerLeave={() => { runtime.current.look = 0; }}>
+    <svg viewBox="0 0 240 250" role="img" aria-label="น้องแอกโซลอเติลสีชมพู โต้ตอบได้โดยไม่ใช้ WebGL" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+      <defs>
+        <radialGradient id={`${id}-body`} cx="35%" cy="24%" r="80%"><stop stopColor="#fff2f5"/><stop offset=".5" stopColor="#ffb7cc"/><stop offset="1" stopColor="#d97da6"/></radialGradient>
+        <linearGradient id={`${id}-gill`} x2="0" y2="1"><stop stopColor="#ffa6c4"/><stop offset="1" stopColor="#e75691"/></linearGradient>
+      </defs>
+      <ellipse cx="120" cy="220" rx={49 + bounce * .4} ry="8" fill="#895c8224"/>
+      <g transform={`translate(${wiggle} ${bounce + (rest ? 5 : 0)}) translate(120 211) scale(${1 - breath / 2} ${1 + breath}) translate(-120 -211)`}>
+        <g transform={`rotate(${tail} 153 174)`}>
+          <path d="M145 184 Q211 206 197 148 Q190 130 173 138 Q193 178 145 162Z" fill={fill}/>
+          <path d="M174 138 Q201 132 208 158 Q210 181 192 189 Q204 160 174 138" fill="#a7cfe6" opacity=".65"/>
+        </g>
+        <ellipse cx="120" cy="169" rx="44" ry="42" fill={fill}/>
+        <ellipse cx="120" cy="172" rx="30" ry="31" fill="#fff0f0" opacity=".85"/>
+        <g transform={`rotate(${action('hop') * -18} 96 200)`}><ellipse cx="94" cy="205" rx="17" ry="11" fill={fill}/><path d="M87 207v3m7-3v3" stroke="#d580a1" strokeWidth="1.5" strokeLinecap="round"/></g>
+        <g transform={`rotate(${action('hop') * 18} 145 200)`}><ellipse cx="146" cy="205" rx="17" ry="11" fill={fill}/><path d="M145 207v3m7-3v3" stroke="#d580a1" strokeWidth="1.5" strokeLinecap="round"/></g>
+        <g transform={`rotate(${wave} 84 156)`}><ellipse cx="79" cy="174" rx="11" ry="21" transform="rotate(18 79 174)" fill={fill}/><ellipse cx="75" cy="185" rx="6" ry="5" fill="#f393b6"/></g>
+        <g transform={`rotate(${-action('wiggle') * 24} 157 156)`}><ellipse cx="161" cy="174" rx="11" ry="21" transform="rotate(-18 161 174)" fill={fill}/><ellipse cx="165" cy="185" rx="6" ry="5" fill="#f393b6"/></g>
+        <g transform={`rotate(${tilt} 120 140)`}>
+          {[-1, 1].map(side => <g key={side} transform={`translate(120 112) scale(${side} 1) rotate(${Math.sin(t * 1.8) * 2 + s * 5} 48 0)`}>
+            {[[-20, -26], [0, 0], [20, 27]].map(([y, tip], i) => <g key={i}>
+              <path d={`M47 ${y} Q70 ${y - 3} 91 ${tip}`} fill="none" stroke={`url(#${id}-gill)`} strokeWidth="10" strokeLinecap="round"/>
+              <path d={`M67 ${y} l4 -10 M78 ${tip} l5 -9 M72 ${y + 2} l5 8`} fill="none" stroke="#f889b1" strokeWidth="5" strokeLinecap="round"/>
+            </g>)}
+          </g>)}
+          <path d="M57 110 C53 57 181 55 184 106 C190 159 51 164 57 110Z" fill={fill}/>
+          <ellipse cx="80" cy="126" rx="11" ry="6" fill="#ee7da5" opacity=".55"/>
+          <ellipse cx="160" cy="126" rx="11" ry="6" fill="#ee7da5" opacity=".55"/>
+          {sleepy || pose.closed || happy ? <g fill="none" stroke="#543346" strokeWidth="3.5" strokeLinecap="round">
+            <path d={happy ? 'M85 111 Q95 99 105 111' : 'M85 109 Q95 118 105 109'}/><path d={happy ? 'M135 111 Q145 99 155 111' : 'M135 109 Q145 118 155 109'}/>
+          </g> : <g transform={`translate(${pose.look * 3} 0)`}>
+            {[95, 145].map(x => <g key={x}><ellipse cx={x} cy="108" rx="9" ry={rest ? 7 : 12} fill="#483046"/><ellipse cx={x - 2.5} cy="103" rx="3" ry="4" fill="white"/><circle cx={x + 3} cy="113" r="1.5" fill="#fff"/></g>)}
+          </g>}
+          <path d={happy ? 'M109 127 Q120 147 132 127Z' : 'M112 129 Q120 136 129 129'} fill={happy ? '#a44d73' : 'none'} stroke="#694057" strokeWidth="2.5" strokeLinecap="round"/>
+          {happy && <ellipse cx="121" cy="136" rx="5" ry="2.5" fill="#ffb3cc"/>}
+          <path d="M120 72 Q115 53 123 43" fill="none" stroke="#ec9bb6" strokeWidth="5" strokeLinecap="round"/>
+          <circle cx="124" cy="39" r="12" fill="#ffe393" opacity=".25"/><circle cx="124" cy="39" r="7" fill="#ffe49a"/><circle cx="122" cy="37" r="2.5" fill="#fffbed"/>
+        </g>
+      </g>
+      {happy && <text x="189" y="65" fill="#e869a1" fontSize="24">♥</text>}
+      {sleepy && <text x="180" y="65" fill="#8274a4" fontSize="15">z Z</text>}
+    </svg>
+  </button>;
+}
+
+export function LegacyLivingCompanion3D({ paused = false, className = '' }: LivingCompanion3DProps) {
   const mountRef = useRef<HTMLSpanElement>(null);
   const pausedRef = useRef(paused);
   const greetingRef = useRef(0);
