@@ -243,8 +243,8 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
   return <button type="button" className={`living-companion-3d ${className}`} onClick={greet}
     aria-label="แตะทักทายน้อง" data-status={status} data-greeting={greeting}>
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
-    {status !== 'ready' && <video src="/videos/deung-sati-puppy-v2-preview.mp4" className="living-companion-fallback"
-      style={{ mixBlendMode: 'screen' }} autoPlay loop muted playsInline preload="auto" aria-hidden="true" />}
+    {status !== 'ready' && <video src="/videos/deung-sati-puppy-v2-transparent.webm" className="living-companion-fallback"
+      autoPlay loop muted playsInline preload="auto" aria-hidden="true" />}
     {status === 'loading' && <span className="living-companion-loading" aria-hidden="true" />}
     {greeting && <span className="living-companion-heart" aria-hidden="true">♥</span>}
   </button>;
