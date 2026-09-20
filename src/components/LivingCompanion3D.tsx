@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import './LivingCompanion3D.css';
+export { LivingCompanion25D as LivingCompanion3D } from './LivingCompanion25D';
 
 type LivingCompanion3DProps = { paused?: boolean; className?: string };
 type CompanionReaction = 'wave' | 'hop' | 'wiggle' | 'nuzzle';
 
 // The public entry point now uses native SVG. Keep the GLB renderer below intact
 // for future comparison; it is never mounted or imported by this SVG path.
-export function LivingCompanion3D({ paused = false, className = '' }: LivingCompanion3DProps) {
+export function ExperimentalSvgCompanion({ paused = false, className = '' }: LivingCompanion3DProps) {
   const id = useId().replace(/:/g, '');
   const runtime = useRef({ time: 0, touched: 0, next: 7, blink: 2, blinkUntil: 0, actionAt: -10, action: 'wave', count: 0, look: 0 });
   const [pose, setPose] = useState({ time: 0, action: 'idle', strength: 0, closed: false, sleepy: false, rest: false, look: 0, happy: false });

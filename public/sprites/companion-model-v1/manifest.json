@@ -1,0 +1,32 @@
+{
+  "tileSize": 448,
+  "columns": 4,
+  "clips": {
+    "idle": {
+      "src": "/sprites/companion-model-v1/idle.webp",
+      "frames": 12,
+      "fps": 12
+    },
+    "blink": {
+      "src": "/sprites/companion-model-v1/blink.webp",
+      "frames": 6,
+      "fps": 12
+    },
+    "greet": {
+      "src": "/sprites/companion-model-v1/greet.webp",
+      "frames": 18,
+      "fps": 12
+    },
+    "play": {
+      "src": "/sprites/companion-model-v1/play.webp",
+      "frames": 18,
+      "fps": 12
+    },
+    "sleep": {
+      "src": "/sprites/companion-model-v1/sleep.webp",
+      "frames": 12,
+      "fps": 12
+    }
+  },
+  "poster": "/sprites/companion-model-v1/poster.webp"
+}
