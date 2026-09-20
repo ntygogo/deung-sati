@@ -23,6 +23,11 @@ These assets are native Blender renders of the existing `DeungSati_Puppy_V2.blen
 | `curious` | 24 | 2 seconds | Tilts the head, looks side to side, and settles |
 | `nuzzle` | 24 | 2 seconds | Leans into a gentle pet with smiling, relaxed eyes |
 | `stretch` | 24 | 2 seconds | Opens both arms, lifts the head, and shifts both feet outward |
+| `look` | 36 | 3 seconds | Eyes lead a gentle head turn, then return to face the user |
+| `shift` | 36 | 3 seconds | Small weight transfer through feet and arms with a relaxed blink |
+| `tail` | 36 | 3 seconds | A gentle, delayed tail-chain swish with independent gill motion |
+
+Natural idle timing: small details alternate without consecutive repeats and leave 1.5–4.5 seconds after their duration before the next detail is due. Larger spontaneous gestures wait 18–30 seconds after their duration. Blinks have their own timer, and every automatic action leaves at least a 0.7-second neutral gap. Idle details become less frequent after 90 seconds without interaction; sleep begins after 180 seconds. Taps and petting interrupt idle details immediately. Pausing, hidden tabs, and reduced-motion preferences are respected.
 
 The application chooses finite actions in response to input and elapsed time; no video is used. New limb gestures convert a known world-space anatomical rotation axis into each existing UniRig bone's rest coordinates, so the original rig is preserved and mirrored arms move correctly.
 

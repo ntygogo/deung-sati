@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CompanionSpriteMotion, SPRITE_CLIPS, type SpriteManifest, type SpritePose } from './companionSpriteMotion';
 import './LivingCompanion25D.css';
 
-const MANIFEST_URL = '/sprites/companion-model-v1/manifest.json?v=gestures-2';
+const MANIFEST_URL = '/sprites/companion-model-v1/manifest.json?v=natural-idle-3';
 const INITIAL_POSE: SpritePose = { clip: 'idle', frame: 0, mood: 'awake', action: 'idle' };
 
 export function LivingCompanion25D({ paused = false, className = '' }: { paused?: boolean; className?: string }) {

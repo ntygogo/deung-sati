@@ -46,6 +46,21 @@
       "src": "/sprites/companion-model-v1/stretch.webp",
       "frames": 24,
       "fps": 12
+    },
+    "look": {
+      "src": "/sprites/companion-model-v1/look.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "shift": {
+      "src": "/sprites/companion-model-v1/shift.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "tail": {
+      "src": "/sprites/companion-model-v1/tail.webp",
+      "frames": 36,
+      "fps": 12
     }
   },
   "poster": "/sprites/companion-model-v1/poster.webp"

@@ -35,6 +35,9 @@ CLIPS = {
     "curious": {"frames": 24, "fps": 12},
     "nuzzle": {"frames": 24, "fps": 12},
     "stretch": {"frames": 24, "fps": 12},
+    "look": {"frames": 36, "fps": 12},
+    "shift": {"frames": 36, "fps": 12},
+    "tail": {"frames": 36, "fps": 12},
 }
 
 
@@ -130,6 +133,34 @@ def render(args):
             for i, name in enumerate(["Bone_034", "Bone_037", "Bone_046", "Bone_049", "Bone_052", "Bone_055"]):
                 bone(name, z=.009 * math.sin(phase) * (-1 if i % 2 else 1))
             bone("Bone_043", z=.007 * math.sin(phase))
+
+        elif clip in ("look", "shift", "tail"):
+            # Finite, neutral-to-neutral idle details. Separate clocks avoid a
+            # synchronized whole-body sway; eyes lead the head when exploring.
+            rig.scale.z *= 1 + .006 * beat
+            for i, name in enumerate(["Bone_034", "Bone_037", "Bone_046", "Bone_049", "Bone_052", "Bone_055"]):
+                bone(name, z=.018 * beat * math.sin(t * math.tau * 1.3 - i * .65))
+            if clip == "look":
+                gaze = smooth(t / .18) - 2 * smooth((t - .38) / .18) + smooth((t - .78) / .22)
+                head = smooth((t - .08) / .22) - 2 * smooth((t - .48) / .20) + smooth((t - .82) / .18)
+                expression("Gaze_X", .65 * gaze)
+                bone("Bone_029", y=.085 * head, z=.045 * head)
+                bone("Bone_043", z=.025 * beat)
+            elif clip == "shift":
+                weight = beat * math.sin(t * math.tau)
+                rig.location.x += .020 * weight
+                bone("Bone_029", z=-.055 * weight)
+                bone_world("Bone_009", (0, 1, 0), .065 * weight)
+                bone_world("Bone_014", (0, 1, 0), .065 * weight)
+                bone_world("Bone_023", (0, 1, 0), .055 * weight)
+                bone_world("Bone_027", (0, 1, 0), .040 * weight)
+                expression("Blink_L", .65 * max(0, 1 - abs(t - .52) / .065))
+                expression("Blink_R", .65 * max(0, 1 - abs(t - .52) / .065))
+            else:
+                for i, name in enumerate(["Bone_019", "Bone_018", "Bone_017"]):
+                    bone(name, z=.14 * beat * math.sin(t * math.tau * 1.5 - i * .5))
+                bone("Bone_029", x=.025 * beat, z=-.035 * beat)
+                expression("Smile", .12 + .13 * beat)
 
         elif clip == "blink":
             amount = [0, .3, .92, .92, .3, 0][index]
