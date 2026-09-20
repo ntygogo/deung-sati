@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import './LivingCompanion3D.css';
 
 type LivingCompanion3DProps = { paused?: boolean; className?: string };
+type CompanionReaction = 'wave' | 'hop' | 'wiggle' | 'nuzzle';
 
 export function LivingCompanion3D({ paused = false, className = '' }: LivingCompanion3DProps) {
   const mountRef = useRef<HTMLSpanElement>(null);
   const pausedRef = useRef(paused);
   const greetingRef = useRef(0);
+  const hoverRef = useRef(false);
+  const reactionRef = useRef<{ kind: CompanionReaction; startedAt: number }>({ kind: 'wave', startedAt: -10_000 });
+  const reactionIndexRef = useRef(0);
   const greetingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [greeting, setGreeting] = useState(false);
@@ -121,6 +125,10 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
         let blinkAt = 1.6;
         let blinkStarted = -10;
         let nextCuriousLook = 2.4;
+        let nextSpontaneousGesture = 7;
+        let nextTailWag = 3.5;
+        let tailWagStarted = -10;
+        let tailWagDuration = 1.8;
         let lookStarted = 0;
         let lookDirection = 1;
 
@@ -152,12 +160,27 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
             if (t >= blinkAt) { blinkStarted = t; blinkAt = t + 2.2 + Math.random() * 3; }
             const blink = Math.max(0, 1 - Math.abs(t - blinkStarted - 0.1) / 0.1);
             const touched = Math.max(0, 1 - (t - lastTouch) / 2);
+            const reactionAge = (performance.now() - reactionRef.current.startedAt) / 1000;
+            const reactionEnvelope = reactionAge < 1.7 ? Math.sin((reactionAge / 1.7) * Math.PI) : 0;
+            const isReaction = (kind: CompanionReaction) => reactionRef.current.kind === kind ? reactionEnvelope : 0;
+            const wave = isReaction('wave');
+            const hop = isReaction('hop');
+            const wiggle = isReaction('wiggle');
+            const nuzzle = isReaction('nuzzle');
+            const interested = hoverRef.current ? 1 : 0;
+            if (t > nextTailWag && idle < 38) {
+              tailWagStarted = t;
+              tailWagDuration = 1.25 + Math.random() * 1.45;
+              nextTailWag = t + 8 + Math.random() * 10;
+            }
+            const tailWagAge = t - tailWagStarted;
+            const tailWag = tailWagAge < tailWagDuration ? Math.sin((tailWagAge / tailWagDuration) * Math.PI) : 0;
             const blend = 1 - Math.exp(-dt * 20);
             morph('Blink_L', Math.max(blink, sleepy, resting * 0.4), blend);
             morph('Blink_R', Math.max(blink, sleepy, resting * 0.36), blend);
-            morph('Happy_Eyes', touched * 0.65, blend);
-            morph('Smile', 0.22 + playful * 0.5 + touched * 0.28 - sleepy * 0.16, blend);
-            morph('Gaze_X', Math.sin(t * 1.3) * 0.55 * (1 - sleepy), blend);
+            morph('Happy_Eyes', Math.max(touched * 0.65, interested * 0.34), blend);
+            morph('Smile', 0.22 + playful * 0.5 + touched * 0.28 + interested * 0.12 - sleepy * 0.16, blend);
+            morph('Gaze_X', Math.sin(t * 1.3) * 0.55 * (1 - sleepy) * (1 - interested), blend);
             morph('Gaze_Z', Math.sin(t * 1.6) * 0.16 * (1 - sleepy), blend);
             const hello = Math.max(0, greetingRef.current - performance.now()) / 850;
             const happy = Math.sin((1 - hello) * Math.PI * 4) * hello;
@@ -168,23 +191,28 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
               lookDirection *= -1;
               nextCuriousLook = t + 4.2 + Math.random() * 3.2;
             }
+            if (t > nextSpontaneousGesture && idle < 25 && reactionEnvelope === 0) {
+              const spontaneous: CompanionReaction[] = ['nuzzle', 'wiggle', 'wave'];
+              reactionRef.current = { kind: spontaneous[Math.floor(Math.random() * spontaneous.length)], startedAt: performance.now() };
+              nextSpontaneousGesture = t + 7 + Math.random() * 6;
+            }
             const lookAge = t - lookStarted;
             const lookEnvelope = lookAge < 2.2 ? Math.sin((lookAge / 2.2) * Math.PI) : 0;
             const curious = lookEnvelope * lookDirection;
+            const activeBody = Math.max(touched, reactionEnvelope, interested * .35, lookEnvelope * .25);
 
             // The body settles a fraction after the head so the character has weight.
-            pivot.position.y = -0.03 + Math.sin(t * 1.18) * 0.018 + Math.abs(happy) * 0.085;
-            pivot.rotation.y = Math.sin(t * 0.43) * 0.025 + happy * 0.11;
-            pivot.rotation.z = Math.sin(t * 0.61) * 0.01 - happy * 0.045;
+            pivot.position.y = -0.03 + Math.sin(t * 1.18) * 0.018 + Math.abs(happy) * 0.085 + Math.sin(Math.min(reactionAge / .82, 1) * Math.PI) * .18 * hop;
+            pivot.rotation.y = Math.sin(t * 0.43) * 0.025 + happy * 0.11 + Math.sin(reactionAge * 15) * .16 * wiggle;
+            pivot.rotation.z = Math.sin(t * 0.61) * 0.01 - happy * 0.045 - .08 * nuzzle;
             pivot.scale.set(1 + breath * 0.004, 1 + breath * 0.009, 1 - breath * 0.003);
-            if (!reducedMotion.matches) pivot.position.y += Math.max(0, Math.sin(t * 5)) ** 2 * 0.035 * playful;
             pivot.rotation.y *= motionStrength;
             pivot.rotation.z *= motionStrength;
 
             pose('Bone_001', breath * 0.008, Math.sin(t * 0.48) * 0.018, Math.sin(t * 0.72) * 0.012);
             pose('Bone_002', -breath * 0.014, curious * 0.035, -curious * 0.012);
-            pose('Bone_028', breath * 0.01, curious * 0.13 + happy * 0.08, curious * -0.055 - happy * 0.04);
-            pose('Bone_029', Math.sin(t * 1.05) * 0.025, curious * 0.04, Math.sin(t * 1.42) * 0.035 + happy * 0.09);
+            pose('Bone_028', breath * 0.01 - .08 * nuzzle, curious * 0.13 + happy * 0.08, curious * -0.055 - happy * 0.04 - .1 * nuzzle);
+            pose('Bone_029', Math.sin(t * 1.05) * 0.025 - .16 * nuzzle, curious * 0.04 + .08 * nuzzle, Math.sin(t * 1.42) * 0.035 + happy * 0.09 + .16 * nuzzle);
             if (sleepy > 0) {
               const head = bones.get('Bone_029');
               head?.rotateX(-0.12 * sleepy);
@@ -192,9 +220,10 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
             }
 
             // Tail wave travels outward rather than rotating as one rigid piece.
-            pose('Bone_017', 0, Math.sin(t * 1.55) * 0.045, Math.sin(t * 1.55) * 0.07 + happy * 0.1);
-            pose('Bone_018', 0, Math.sin(t * 1.55 - 0.65) * 0.055, Math.sin(t * 1.55 - 0.65) * 0.105 + happy * 0.14);
-            pose('Bone_019', 0, Math.sin(t * 1.55 - 1.25) * 0.065, Math.sin(t * 1.55 - 1.25) * 0.14 + happy * 0.18);
+            const tailEnergy = Math.min(1.3, tailWag * .72 + touched * .7 + wiggle + interested * .22);
+            pose('Bone_017', 0, Math.sin(t * 1.55) * 0.012, Math.sin(t * 5.2) * 0.11 * tailEnergy + happy * 0.1);
+            pose('Bone_018', 0, Math.sin(t * 1.55 - 0.65) * 0.014, Math.sin(t * 5.2 - .65) * 0.17 * tailEnergy + happy * 0.14);
+            pose('Bone_019', 0, Math.sin(t * 1.55 - 1.25) * 0.016, Math.sin(t * 5.2 - 1.25) * 0.24 * tailEnergy + happy * 0.18);
 
             // Six gills ripple in offset pairs, like soft fronds moving through water.
             const gills: Array<[typeof boneNames[number], number, number]> = [
@@ -208,10 +237,10 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
             });
 
             // Tiny limb shifts stop the silhouette from reading as a rubber figurine.
-            pose('Bone_023', breath * 0.014, 0, Math.sin(t * 0.92) * 0.018 + happy * 0.06);
-            pose('Bone_027', -breath * 0.014, 0, -Math.sin(t * 0.92 + 0.5) * 0.018 - happy * 0.06);
-            pose('Bone_009', 0, Math.sin(t * 0.7) * 0.012, Math.sin(t * 0.86) * 0.012);
-            pose('Bone_014', 0, -Math.sin(t * 0.7) * 0.012, -Math.sin(t * 0.86 + 0.4) * 0.012);
+            pose('Bone_023', breath * 0.006 - .25 * wave, 0, Math.sin(t * 1.8) * 0.035 * activeBody + happy * 0.06 + (.42 + Math.sin(reactionAge * 14) * .18) * wave);
+            pose('Bone_027', -breath * 0.006, 0, -Math.sin(t * 1.8 + 0.5) * 0.03 * activeBody - happy * 0.06);
+            pose('Bone_009', 0, Math.sin(t * 1.45) * 0.025 * activeBody, Math.sin(t * 1.7) * 0.022 * activeBody);
+            pose('Bone_014', 0, -Math.sin(t * 1.45) * 0.025 * activeBody, -Math.sin(t * 1.7 + 0.4) * 0.022 * activeBody);
           }
           renderer?.render(scene, camera);
         };
@@ -234,6 +263,9 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
   }, []);
 
   const greet = () => {
+    const reactions: CompanionReaction[] = ['wave', 'hop', 'wiggle', 'nuzzle'];
+    const kind = reactions[reactionIndexRef.current++ % reactions.length];
+    reactionRef.current = { kind, startedAt: performance.now() };
     greetingRef.current = performance.now() + 850;
     setGreeting(true);
     clearTimeout(greetingTimer.current);
@@ -241,11 +273,11 @@ export function LivingCompanion3D({ paused = false, className = '' }: LivingComp
   };
 
   return <button type="button" className={`living-companion-3d ${className}`} onClick={greet}
+    onPointerEnter={() => { hoverRef.current = true; }} onPointerLeave={() => { hoverRef.current = false; }}
     aria-label="แตะทักทายน้อง" data-status={status} data-greeting={greeting}>
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
-    {status !== 'ready' && <video src="/videos/deung-sati-puppy-v2-transparent.webm" className="living-companion-fallback"
-      autoPlay loop muted playsInline preload="auto" aria-hidden="true" />}
     {status === 'loading' && <span className="living-companion-loading" aria-hidden="true" />}
+    {status === 'error' && <span aria-live="polite" style={{ position: 'absolute', inset: '42% 8% auto', color: '#fff', fontSize: 13 }}>อุปกรณ์นี้ยังแสดงน้อง 3D ไม่ได้</span>}
     {greeting && <span className="living-companion-heart" aria-hidden="true">♥</span>}
   </button>;
 }
