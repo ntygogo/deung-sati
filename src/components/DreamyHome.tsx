@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
 import { LivingCompanion3D } from './LivingCompanion3D';
+import type { CompanionCommand } from './companionSpriteMotion';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
 
@@ -16,6 +17,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat }: DreamyHomeProps) {
   const [message, setMessage] = useState('');
   const [paused, setPaused] = useState(false);
+  const [companionCommand, setCompanionCommand] = useState<{ id: number; action: CompanionCommand }>();
   const progress = eggProgress(traceCount);
   const previewCompanion = new URLSearchParams(window.location.search).get('previewCompanion') === '1';
   const isEgg = !previewCompanion && (!companion || companion.stage === 0);
@@ -36,7 +38,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <span className="room-pedestal" aria-hidden="true" />
         {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" /> :
           <div className="dreamy-hatched-garden" data-paused={paused}>
-            <LivingCompanion3D paused={paused} />
+            <LivingCompanion3D paused={paused} command={companionCommand} />
           </div>}
       </div>
       <header className="dreamy-header">
@@ -65,6 +67,11 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         </span>
       </button>
       <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : 'สหายที่เติบโตไปพร้อมเธอ'}</p>
+      {!isEgg && <div className="dreamy-companion-actions" role="group" aria-label="ชวนเล่นกับน้อง">
+        {([['sit', 'นั่งพัก'], ['sleep', 'นอนพัก'], ['spin', 'หมุนเล่น']] as const).map(([action, label]) =>
+          <button type="button" key={action} disabled={paused}
+            onClick={() => setCompanionCommand(previous => ({ id: (previous?.id ?? 0) + 1, action }))}>{label}</button>)}
+      </div>}
       <button type="button" className="dreamy-motion" onClick={() => setPaused(value => !value)}
         aria-pressed={paused} aria-label={paused ? 'เล่นการเคลื่อนไหว' : 'พักการเคลื่อนไหว'}>
         {paused ? <Play size={13} /> : <Pause size={13} />}<span>{paused ? 'ให้ขยับ' : 'พักภาพ'}</span>

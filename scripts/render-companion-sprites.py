@@ -38,6 +38,12 @@ CLIPS = {
     "look": {"frames": 36, "fps": 12},
     "shift": {"frames": 36, "fps": 12},
     "tail": {"frames": 36, "fps": 12},
+    "sitDown": {"frames": 24, "fps": 12},
+    "seated": {"frames": 36, "fps": 12},
+    "lieDown": {"frames": 36, "fps": 12},
+    "sleeping": {"frames": 36, "fps": 12},
+    "rise": {"frames": 36, "fps": 12},
+    "spin": {"frames": 48, "fps": 12},
 }
 
 
@@ -69,6 +75,7 @@ def render(args):
     scene = bpy.context.scene
     model = bpy.data.objects["Mesh_0"]
     rig = bpy.data.objects["UniRigArmature"]
+    rig.rotation_mode = "XYZ"
     keys = model.data.shape_keys
     scene.frame_set(1)
     rig.animation_data_clear()
@@ -93,6 +100,9 @@ def render(args):
     neutral_location = rig.location.copy()
     neutral_location.z = 0
     neutral_scale = rig.scale.copy()
+    neutral_rotation = rig.rotation_euler.copy()
+    rest_rig_matrix = rig.matrix_world.copy()
+    rest_floor = None
 
     def bone(name, x=0, y=0, z=0):
         rig.pose.bones[name].rotation_euler = (x, y, z)
@@ -105,7 +115,7 @@ def render(args):
         forearm rotations mirrored correctly without modifying the rig itself.
         """
         item = rig.pose.bones[name]
-        rest_rotation = (rig.matrix_world @ item.bone.matrix_local).to_quaternion()
+        rest_rotation = (rest_rig_matrix @ item.bone.matrix_local).to_quaternion()
         local_axis = rest_rotation.inverted() @ Vector(axis)
         item.rotation_euler = Quaternion(local_axis, angle).to_euler("XYZ")
 
@@ -122,11 +132,61 @@ def render(args):
             item.scale = (1, 1, 1)
         rig.location = neutral_location
         rig.scale = neutral_scale
+        rig.rotation_euler = neutral_rotation
         t = index / max(1, count - 1)
         beat = math.sin(math.pi * t) ** 2
         expression("Smile", .12)
 
-        if clip == "idle":
+        if clip in ("sitDown", "seated", "lieDown", "sleeping", "rise"):
+            sitting = smooth(t) if clip == "sitDown" else 1.0
+            lying = smooth(t) if clip == "lieDown" else 1.0 if clip == "sleeping" else 1 - smooth(t) if clip == "rise" else 0.0
+            if clip == "rise":
+                sitting = 1 - smooth(t)
+            # Fold the original short hind legs forward into a seated pose.
+            for upper, lower, foot in [("Bone_009", "Bone_008", "Bone_007"), ("Bone_014", "Bone_013", "Bone_012")]:
+                bone_world(upper, (1, 0, 0), -1.35 * sitting)
+                bone_world(lower, (1, 0, 0), 1.65 * sitting)
+                bone_world(foot, (1, 0, 0), -.30 * sitting)
+            # Lower the torso forward and turn slightly so the tucked body and
+            # resting head read as lying down, rather than standing with shut eyes.
+            bone_world("Bone_001", (1, 0, 0), .12 * lying)
+            bone_world("Bone_029", (0, 1, 0), -.12 * lying)
+            rig.rotation_euler.y = 1.35 * lying
+            rig.rotation_euler.z = -.15 * lying
+            centre = Vector((.094, -.052, .75))
+            rig.location += centre - rig.rotation_euler.to_matrix() @ centre
+            for upper, lower in [("Bone_023", "Bone_022"), ("Bone_027", "Bone_026")]:
+                bone_world(upper, (1, 0, 0), -.40 * sitting - .55 * lying)
+                bone_world(lower, (1, 0, 0), .55 * sitting + .50 * lying)
+            bone_world("Bone_019", (0, 1 - lying, -2.44 * lying), .45 * sitting + .65 * lying)
+            bone_world("Bone_018", (0, 0, 1), -.35 * lying)
+            expression("Blink_L", .98 * lying)
+            expression("Blink_R", .98 * lying)
+            expression("Smile", .12 * (1 - lying))
+            if clip in ("seated", "sleeping"):
+                phase = index / count * math.tau
+                breath = (1 - math.cos(phase)) / 2
+                rig.scale.z *= 1 + .006 * breath
+                if clip == "seated":
+                    bone("Bone_029", y=.028 * math.sin(phase), z=.022 * math.sin(phase))
+                    expression("Gaze_X", .16 * math.sin(phase))
+                    blink = max(0, 1 - abs(index / count - .68) / .055)
+                    expression("Blink_L", .85 * blink)
+                    expression("Blink_R", .85 * blink)
+
+        elif clip == "spin":
+            angle = math.tau * smooth(t)
+            rig.rotation_euler.z = angle
+            # Turn around the body centre instead of orbiting the rig origin.
+            centre = Vector((.094, -.052, 0))
+            rig.location += centre - rig.rotation_euler.to_matrix() @ centre
+            for name, phase in [("Bone_009", 0), ("Bone_014", math.pi)]:
+                bone_world(name, (1, 0, 0), .15 * beat * math.sin(t * math.tau * 3 + phase))
+            expression("Smile", .12 + .32 * beat)
+            for i, name in enumerate(["Bone_019", "Bone_018", "Bone_017"]):
+                bone(name, z=.07 * beat * math.sin(t * math.tau * 2 - i * .4))
+
+        elif clip == "idle":
             phase = index / count * math.tau
             breath = (1 - math.cos(phase)) / 2
             rig.scale.z *= 1 + .003 * breath
@@ -258,6 +318,17 @@ def render(args):
             bone("Bone_043", z=.025 * reach)
 
         bpy.context.view_layer.update()
+        # Keep every contact pose planted on the original floor after folding.
+        if clip in ("sitDown", "seated", "lieDown", "sleeping", "rise", "spin"):
+            evaluated = model.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            bottom = min((evaluated.matrix_world @ v.co).z for v in evaluated.data.vertices)
+            rig.location.z += rest_floor - bottom
+            bpy.context.view_layer.update()
+
+    # Measure the neutral floor once without altering the source model.
+    pose("idle", 0, CLIPS["idle"]["frames"])
+    evaluated = model.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    rest_floor = min((evaluated.matrix_world @ v.co).z for v in evaluated.data.vertices)
 
     for clip, spec in CLIPS.items():
         if args.clips and clip not in args.clips:
@@ -265,7 +336,7 @@ def render(args):
         target = args.frames / clip
         target.mkdir(parents=True, exist_ok=True)
         count = spec["frames"]
-        indices = [count - 1 if clip == "sleep" else count // 2] if args.proof else range(count)
+        indices = [count - 1 if clip in ("sleep", "sitDown", "lieDown") else 0 if clip in ("seated", "sleeping", "rise") else count // 2] if args.proof else range(count)
         for index in indices:
             path = target / f"{index:03d}.png"
             # Deterministic already-rendered proof frames are reused unchanged.

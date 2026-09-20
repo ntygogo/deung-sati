@@ -61,6 +61,36 @@
       "src": "/sprites/companion-model-v1/tail.webp",
       "frames": 36,
       "fps": 12
+    },
+    "sitDown": {
+      "src": "/sprites/companion-model-v1/sitDown.webp",
+      "frames": 24,
+      "fps": 12
+    },
+    "seated": {
+      "src": "/sprites/companion-model-v1/seated.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "lieDown": {
+      "src": "/sprites/companion-model-v1/lieDown.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "sleeping": {
+      "src": "/sprites/companion-model-v1/sleeping.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "rise": {
+      "src": "/sprites/companion-model-v1/rise.webp",
+      "frames": 36,
+      "fps": 12
+    },
+    "spin": {
+      "src": "/sprites/companion-model-v1/spin.webp",
+      "frames": 48,
+      "fps": 12
     }
   },
   "poster": "/sprites/companion-model-v1/poster.webp"

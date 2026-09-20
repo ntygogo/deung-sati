@@ -10,7 +10,7 @@ These assets are native Blender renders of the existing `DeungSati_Puppy_V2.blen
 - Transparent background is rendered natively, not removed afterward.
 - WebP atlases use quality 92 and preserve alpha; the initial poster uses quality 95.
 
-`manifest.json` is the runtime contract. Every clip uses 12 fps. Finite actions return to the neutral pose, except `sleep`, whose final dozing pose is held until waking; `idle` is a continuous subtle breathing loop.
+`manifest.json` is the runtime contract. Every clip uses 12 fps. Play gestures return to standing; rest transitions connect the matching standing, seated and lying poses. `idle`, `seated`, and `sleeping` contain subtle breathing loops. The old `sleep` atlas is retained for compatibility but is no longer selected by the controller.
 
 | Clip | Frames | Duration | Model motion |
 | --- | ---: | ---: | --- |
@@ -26,8 +26,16 @@ These assets are native Blender renders of the existing `DeungSati_Puppy_V2.blen
 | `look` | 36 | 3 seconds | Eyes lead a gentle head turn, then return to face the user |
 | `shift` | 36 | 3 seconds | Small weight transfer through feet and arms with a relaxed blink |
 | `tail` | 36 | 3 seconds | A gentle, delayed tail-chain swish with independent gill motion |
+| `sitDown` | 24 | 2 seconds | Folds the hind legs forward and lowers into sitting; reverse to stand |
+| `seated` | 36 | 3 seconds | Seated breathing, small gaze movement and a relaxed blink |
+| `lieDown` | 36 | 3 seconds | Settles from sitting onto the side, curls the tail and closes the eyes |
+| `sleeping` | 36 | 3 seconds | Side-lying sleep with subtle breathing |
+| `rise` | 36 | 3 seconds | Opens the eyes, uncurls and rises from lying to standing |
+| `spin` | 48 | 4 seconds | A full rig rotation with small foot steps; actual side/back geometry |
 
-Natural idle timing: small details alternate without consecutive repeats and leave 1.5–4.5 seconds after their duration before the next detail is due. Larger spontaneous gestures wait 18–30 seconds after their duration. Blinks have their own timer, and every automatic action leaves at least a 0.7-second neutral gap. Idle details become less frequent after 90 seconds without interaction; sleep begins after 180 seconds. Taps and petting interrupt idle details immediately. Pausing, hidden tabs, and reduced-motion preferences are respected.
+Natural idle timing: small details alternate without consecutive repeats and leave 1.5–4.5 seconds after their duration before the next detail is due. Larger spontaneous gestures wait 18–30 seconds after their duration. Blinks have their own timer, and standing automatic actions leave at least a 0.7-second neutral gap. After 90 quiet seconds the pet sits down; after 180 it lies down to sleep. Connected posture transitions play without neutral-standing gaps. A touch during lowering reverses from the displayed frame, then stands and stretches. A touch during sleep plays rise then stretch. Repeated touches cannot restart waking. The room also offers sit, sleep and spin controls. Pausing, hidden tabs and reduced-motion preferences are respected.
+
+All rest/spin poses keep the lowest evaluated model vertex on the original floor. Anatomical rotation axes use a fixed rest rig matrix, independent of the previous frame's whole-body rotation. This makes renders deterministic across proof/subset/full runs. Rest assets are preloaded together before playback so missing transition frames cannot cause standing flashes; failed loading offers a retry by tapping the pet.
 
 The application chooses finite actions in response to input and elapsed time; no video is used. New limb gestures convert a known world-space anatomical rotation axis into each existing UniRig bone's rest coordinates, so the original rig is preserved and mirrored arms move correctly.
 

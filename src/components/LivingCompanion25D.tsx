@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { CompanionSpriteMotion, SPRITE_CLIPS, type SpriteManifest, type SpritePose } from './companionSpriteMotion';
+import { CompanionSpriteMotion, SPRITE_CLIPS, type CompanionCommand, type SpriteManifest, type SpritePose } from './companionSpriteMotion';
 import './LivingCompanion25D.css';
 
-const MANIFEST_URL = '/sprites/companion-model-v1/manifest.json?v=natural-idle-3';
+const MANIFEST_URL = '/sprites/companion-model-v1/manifest.json?v=rest-spin-4';
 const INITIAL_POSE: SpritePose = { clip: 'idle', frame: 0, mood: 'awake', action: 'idle' };
 
-export function LivingCompanion25D({ paused = false, className = '' }: { paused?: boolean; className?: string }) {
+export function LivingCompanion25D({ paused = false, className = '', command }: { paused?: boolean; className?: string; command?: { id: number; action: CompanionCommand } }) {
   const [manifest, setManifest] = useState<SpriteManifest | null>(null);
   const [pose, setPose] = useState(INITIAL_POSE);
   const [loadError, setLoadError] = useState(false);
@@ -13,6 +13,11 @@ export function LivingCompanion25D({ paused = false, className = '' }: { paused?
   const clock = useRef(new CompanionSpriteMotion());
   const loaded = useRef(new Set<string>());
   const stroke = useRef({ x: 0, y: 0, distance: 0, at: -10, handled: false });
+  const pendingCommand = useRef<CompanionCommand | null>(null);
+
+  useEffect(() => {
+    if (command) pendingCommand.current = command.action;
+  }, [command]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,6 +69,13 @@ export function LivingCompanion25D({ paused = false, className = '' }: { paused?
       const dt = Math.min((now - previous) / 1000, .2);
       previous = now;
       if (document.hidden) return;
+      // Wait for the connected rest sequence before starting it, so a slow
+      // download cannot replace a half-finished lie-down with a standing frame.
+      if (!SPRITE_CLIPS.every(name => loaded.current.has(name))) return;
+      if (pendingCommand.current) {
+        clock.current.request(pendingCommand.current);
+        pendingCommand.current = null;
+      }
       const next = clock.current.step(dt, manifest, reduced.matches);
       if (!loaded.current.has(next.clip)) { next.clip = 'idle'; next.frame = 0; next.action = 'loading-action'; }
       setPose(current => current.clip === next.clip && current.frame === next.frame && current.mood === next.mood && current.action === next.action ? current : next);
@@ -72,8 +84,8 @@ export function LivingCompanion25D({ paused = false, className = '' }: { paused?
   }, [manifest, paused]);
 
   const greet = () => {
-    if (loadError && !manifest) { setRetry(n => n + 1); return; }
-    if (paused || !manifest) return;
+    if (loadError) { setRetry(n => n + 1); return; }
+    if (paused || !manifest || !SPRITE_CLIPS.every(name => loaded.current.has(name))) return;
     clock.current.touch();
   };
   const clip = manifest?.clips[pose.clip];
@@ -88,13 +100,13 @@ export function LivingCompanion25D({ paused = false, className = '' }: { paused?
   return <button type="button" className={`living-companion-3d living-companion-25d ${className}`}
     data-renderer="model-sprites" data-status={manifest ? 'ready' : loadError ? 'error' : 'loading'}
     data-action={pose.action} data-mood={pose.mood} data-frame={pose.frame} aria-label="แตะเล่นกับน้องดึงสติ"
-    aria-description="แตะเพื่อเล่น หรือลากลูบเบา ๆ เพื่อให้น้องอ้อน"
+    aria-description="แตะเพื่อเล่นหรือปลุกน้อง หรือลากลูบเบา ๆ เพื่อให้น้องอ้อน"
     onClick={event => {
       if (event.detail > 0 && stroke.current.handled) { stroke.current.handled = false; return; }
       greet();
     }} onPointerDown={event => { stroke.current = { ...stroke.current, x: event.clientX, y: event.clientY, distance: 0, handled: false }; }}
     onPointerMove={event => {
-      if (!event.buttons || paused || !manifest) return;
+      if (!event.buttons || paused || !manifest || !SPRITE_CLIPS.every(name => loaded.current.has(name))) return;
       const state = stroke.current;
       state.distance += Math.hypot(event.clientX - state.x, event.clientY - state.y);
       state.x = event.clientX; state.y = event.clientY;
@@ -102,7 +114,7 @@ export function LivingCompanion25D({ paused = false, className = '' }: { paused?
     }}>
     <span className="companion-model-sprite" role="img" aria-label="น้องจากโมเดล 3D เดิม แสดงแบบ 2.5D" style={spriteStyle}/>
     {!manifest && !loadError && <span className="companion-model-message" role="status">กำลังพาน้องมาหา…</span>}
-    {loadError && <span className="companion-model-message" role="status">{manifest ? 'บางท่าโหลดไม่ครบ แต่น้องยังเล่นได้' : 'โหลดภาพน้องไม่ครบ · แตะเพื่อลองใหม่'}</span>}
+    {loadError && <span className="companion-model-message" role="status">โหลดท่าน้องไม่ครบ · แตะเพื่อลองใหม่</span>}
     {pose.mood === 'happy' && <span className="companion-model-heart" aria-hidden="true">♥</span>}
     {pose.mood === 'sleep' && <span className="companion-model-sleep" aria-hidden="true">z Z</span>}
   </button>;

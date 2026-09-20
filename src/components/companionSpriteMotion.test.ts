@@ -18,6 +18,12 @@ const manifest: SpriteManifest = {
     look: { src: '/look.webp', frames: 36, fps: 12 },
     shift: { src: '/shift.webp', frames: 36, fps: 12 },
     tail: { src: '/tail.webp', frames: 36, fps: 12 },
+    sitDown: { src: '/sitDown.webp', frames: 24, fps: 12 },
+    seated: { src: '/seated.webp', frames: 36, fps: 12 },
+    lieDown: { src: '/lieDown.webp', frames: 36, fps: 12 },
+    sleeping: { src: '/sleeping.webp', frames: 36, fps: 12 },
+    rise: { src: '/rise.webp', frames: 36, fps: 12 },
+    spin: { src: '/spin.webp', frames: 48, fps: 12 },
   },
 };
 
@@ -50,9 +56,9 @@ test('touch produces a finite wave followed by finite play', () => {
   assert.equal(clock.step(1.51, manifest).clip, 'idle');
 });
 
-test('repeated taps visit all five gestures and repeat the cycle without consuming idle actions', () => {
+test('repeated taps visit all six gestures and repeat the cycle without consuming idle actions', () => {
   const clock = quietClock();
-  const expected = ['wave', 'play', 'curious', 'stretch', 'greet', 'wave', 'play', 'curious', 'stretch', 'greet'];
+  const expected = ['wave', 'play', 'spin', 'curious', 'stretch', 'greet', 'wave', 'play', 'spin', 'curious', 'stretch', 'greet'];
   for (const name of expected) {
     clock.touch();
     const pose = clock.step(0, manifest);
@@ -94,8 +100,8 @@ test('spontaneous gestures use bounded randomized delays and action choices', ()
   assert.equal(low.nextGesture, 38);
   const high = new CompanionSpriteMotion(() => 1);
   high.nextBlink = Number.POSITIVE_INFINITY;
-  assert.equal(high.step(18, manifest).clip, 'play');
-  assert.equal(high.nextGesture, 49.5);
+  assert.equal(high.step(18, manifest).clip, 'spin');
+  assert.equal(high.nextGesture, 52);
 });
 
 test('spontaneous gestures do not repeat consecutively, even with a constant random source', () => {
@@ -121,59 +127,69 @@ test('spontaneous gestures also exclude the immediately preceding user gesture',
   assert.notEqual(next.clip, 'idle');
 });
 
-test('quiet time suppresses large gestures after the longer awake period', () => {
+test('quiet time transitions into seated rest and suppresses standing gestures', () => {
   const clock = quietClock();
   clock.nextGesture = REST_AFTER;
-  assert.deepEqual(clock.step(REST_AFTER, manifest), { clip: 'idle', frame: 0, mood: 'rest', action: 'idle' });
-  assert.equal(clock.step(10, manifest).clip, 'idle');
+  assert.equal(clock.step(REST_AFTER, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'seated');
+  assert.equal(clock.posture, 'seated');
+  assert.equal(clock.step(10, manifest).mood, 'rest');
   assert.equal(clock.active, null);
 });
 
-test('a gesture already playing can finish across the rest boundary', () => {
+test('an active gesture finishes before sitting down', () => {
   const clock = quietClock();
   clock.nextGesture = REST_AFTER - 1;
-  assert.equal(clock.step(REST_AFTER - 1, manifest).clip, 'greet');
-  const resting = clock.step(1.1, manifest);
-  assert.equal(resting.clip, 'greet');
-  assert.equal(resting.mood, 'rest');
-  assert.equal(clock.step(.5, manifest).clip, 'idle');
+  assert.equal(clock.step(REST_AFTER - 1, manifest).clip, 'wave');
+  assert.equal(clock.step(1.1, manifest).clip, 'wave');
+  assert.equal(clock.step(.91, manifest).clip, 'sitDown');
 });
 
-test('sleep begins after three quiet minutes, then holds the final pose', () => {
+test('automatic rest goes standing to seated to lying, with sleeping breathing frames', () => {
   const clock = quietClock();
-  assert.equal(clock.step(SLEEP_AFTER - .5, manifest).mood, 'rest');
-  assert.deepEqual(clock.step(.5, manifest), { clip: 'sleep', frame: 0, mood: 'sleep', action: 'dozing' });
+  assert.equal(clock.step(REST_AFTER, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'seated');
+  assert.equal(clock.step(SLEEP_AFTER - clock.time, manifest).clip, 'lieDown');
+  assert.equal(clock.step(3, manifest).clip, 'sleeping');
+  assert.equal(clock.posture, 'lying');
   assert.equal(clock.step(.5, manifest).frame, 6);
-  assert.equal(clock.step(.5, manifest).frame, 11);
-  assert.equal(clock.step(120, manifest).frame, 11);
+  assert.equal(clock.step(.5, manifest).mood, 'sleep');
+  assert.equal(clock.step(120, manifest).clip, 'sleeping');
 });
 
-test('touch wakes a sleeping companion by reversing the sleep clip once', () => {
+test('touch wakes a lying companion, rises, stretches, then returns to idle', () => {
   const clock = quietClock();
-  clock.step(SLEEP_AFTER + 1, manifest);
+  clock.request('sleep');
+  assert.equal(clock.step(0, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'lieDown');
+  assert.equal(clock.step(3, manifest).clip, 'sleeping');
   clock.touch();
-  assert.deepEqual(clock.step(0, manifest), { clip: 'sleep', frame: 11, mood: 'happy', action: 'wake' });
-  assert.equal(clock.step(.5, manifest).frame, 5);
-  assert.equal(clock.step(.5, manifest).clip, 'idle');
-  assert.equal(clock.lastTouch, SLEEP_AFTER + 1);
+  assert.deepEqual(clock.step(0, manifest), { clip: 'rise', frame: 0, mood: 'happy', action: 'wake' });
+  assert.equal(clock.step(3, manifest).clip, 'stretch');
+  assert.equal(clock.step(2, manifest).clip, 'idle');
+  assert.equal(clock.posture, 'standing');
 });
 
 test('waking by tap or pet does not consume the next tap gesture', () => {
   for (const interaction of ['tap', 'pet'] as const) {
     const clock = quietClock();
     clock.touch();
-    assert.equal(clock.step(0, manifest).clip, 'wave');
-    clock.step(SLEEP_AFTER + 1, manifest);
+    clock.step(2, manifest);
+    clock.request('sleep');
+    clock.step(0, manifest);
+    clock.step(2, manifest);
+    clock.step(3, manifest);
     clock.touch(interaction);
     assert.equal(clock.step(0, manifest).action, 'wake');
     assert.equal(clock.touches, 1);
-    assert.equal(clock.step(1, manifest).clip, 'idle');
+    clock.step(3, manifest);
+    clock.step(2, manifest);
     clock.touch();
     assert.equal(clock.step(0, manifest).clip, 'play');
   }
 });
 
-test('reduced motion freezes frames, suppresses automatic actions, and supports touch', () => {
+test('reduced motion freezes ambient and resting frames and supports commands', () => {
   const clock = new CompanionSpriteMotion(() => .5);
   assert.equal(clock.step(8, manifest, true).clip, 'idle');
   assert.equal(clock.step(8, manifest, true).frame, 0);
@@ -181,7 +197,11 @@ test('reduced motion freezes frames, suppresses automatic actions, and supports 
   assert.equal(clock.step(0, manifest, true).frame, 12);
   assert.equal(clock.step(.5, manifest, true).frame, 12);
   assert.equal(clock.step(1.6, manifest, true).clip, 'idle');
-  assert.equal(clock.step(SLEEP_AFTER, manifest, true).frame, 11);
+  clock.request('sleep');
+  assert.equal(clock.step(0, manifest, true).frame, 23);
+  assert.equal(clock.step(2, manifest, true).frame, 35);
+  assert.equal(clock.step(3, manifest, true).clip, 'sleeping');
+  assert.equal(clock.step(1, manifest, true).frame, 0);
 });
 
 test('pausing an active-time clock does not skip frames or finish an action', () => {
@@ -219,14 +239,14 @@ test('small idle details finish, leave a pause and avoid consecutive repeats', (
   }
 });
 
-test('rest keeps occasional small details while suppressing large gestures', () => {
+test('seated breathing stays seated rather than returning to standing details', () => {
   const clock = quietClock();
-  clock.nextDetail = REST_AFTER;
-  clock.nextGesture = REST_AFTER;
-  const pose = clock.step(REST_AFTER, manifest);
-  assert.equal(pose.clip, 'shift');
-  assert.equal(pose.mood, 'rest');
-  assert.ok(clock.nextDetail >= clock.time + 8);
+  clock.request('sit');
+  assert.equal(clock.step(0, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'seated');
+  assert.equal(clock.step(.5, manifest).frame, 6);
+  assert.equal(clock.step(3, manifest).frame, 6);
+  assert.equal(clock.posture, 'seated');
 });
 
 test('touch immediately interrupts a small detail without consuming the tap cycle', () => {
@@ -251,4 +271,97 @@ test('unattended first minute stays awake and contains varied small details with
   }
   assert.ok(details.size >= 2);
   assert.ok(idleFrames > 24 * 10, 'natural gaps between movements');
+});
+
+test('touch reverses a partially completed sit from the displayed frame', () => {
+  const clock = quietClock();
+  clock.request('sit');
+  clock.step(0, manifest);
+  const midway = clock.step(.75, manifest);
+  assert.equal(midway.frame, 9);
+  clock.touch();
+  const wake = clock.step(0, manifest);
+  assert.equal(wake.clip, 'sitDown');
+  assert.equal(wake.frame, midway.frame);
+  assert.equal(wake.action, 'wake');
+  assert.equal(clock.step(10 / 12, manifest).clip, 'stretch');
+});
+
+test('touch while lying down reverses to seated, stands, and stretches', () => {
+  const clock = quietClock();
+  clock.request('sleep');
+  clock.step(0, manifest);
+  clock.step(2, manifest);
+  const midway = clock.step(1, manifest);
+  assert.equal(midway.clip, 'lieDown');
+  clock.touch();
+  assert.equal(clock.step(0, manifest).frame, midway.frame);
+  assert.equal(clock.step(13 / 12, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'stretch');
+  assert.equal(clock.posture, 'standing');
+});
+
+test('repeated touches cannot restart an in-flight wake', () => {
+  const clock = quietClock();
+  clock.request('sleep');
+  clock.step(0, manifest);
+  clock.step(2, manifest);
+  clock.step(3, manifest);
+  clock.touch();
+  clock.step(.5, manifest);
+  const at = clock.active?.at;
+  clock.touch('pet');
+  assert.equal(clock.active?.at, at);
+  assert.equal(clock.step(2.5, manifest).clip, 'stretch');
+});
+
+test('spin request wakes a lying companion before turning', () => {
+  const clock = quietClock();
+  clock.request('sleep');
+  clock.step(0, manifest);
+  clock.step(2, manifest);
+  clock.step(3, manifest);
+  clock.request('spin');
+  assert.equal(clock.step(0, manifest).clip, 'rise');
+  assert.equal(clock.step(3, manifest).clip, 'spin');
+  assert.equal(clock.step(4, manifest).clip, 'idle');
+  assert.equal(clock.posture, 'standing');
+});
+
+test('asking a sleeping companion to sit reverses only the lie-down transition', () => {
+  const clock = quietClock();
+  clock.request('sleep');
+  clock.step(0, manifest);
+  clock.step(2, manifest);
+  clock.step(3, manifest);
+  clock.request('sit');
+  assert.equal(clock.step(0, manifest).clip, 'lieDown');
+  assert.equal(clock.step(3, manifest).clip, 'seated');
+});
+
+test('all commands and interruptions keep frames inside their atlas bounds', () => {
+  const clock = new CompanionSpriteMotion(() => .37);
+  for (let tick = 0; tick < 300 * 24; tick++) {
+    if (tick % 719 === 0) clock.request('sit');
+    if (tick % 953 === 0) clock.request('sleep');
+    if (tick % 1171 === 0) clock.request('spin');
+    if (tick % 157 === 0) clock.touch(tick % 2 ? 'pet' : 'tap');
+    const pose = clock.step(1 / 24, manifest);
+    assert.ok(Number.isInteger(pose.frame));
+    assert.ok(pose.frame >= 0 && pose.frame < manifest.clips[pose.clip].frames, JSON.stringify(pose));
+  }
+});
+
+test('touch while returning from lying to sitting still stands before stretching', () => {
+  const clock = quietClock();
+  clock.request('sleep');
+  clock.step(0, manifest);
+  clock.step(2, manifest);
+  clock.step(3, manifest);
+  clock.request('sit');
+  clock.step(1, manifest);
+  clock.touch();
+  assert.equal(clock.step(2, manifest).clip, 'sitDown');
+  assert.equal(clock.step(2, manifest).clip, 'stretch');
+  assert.equal(clock.posture, 'standing');
 });
