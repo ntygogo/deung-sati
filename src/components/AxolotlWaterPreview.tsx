@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import './LivingCompanion3D.css';
 
 type Props = { paused?: boolean };
+const FLIP_DURATION = 3.2;
 type Reaction = 'content' | 'squish' | 'blep' | 'flip';
 const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish', 'flip'];
 // The eye line on this Meshy export is turned about 21 degrees from +Z.
@@ -39,7 +40,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     if (pausedRef.current || status !== 'ready') return;
     const t = elapsedRef.current;
     const previous = reactionRef.current;
-    if (previous.kind === 'flip' && t - previous.started < 2.6) return;
+    if (previous.kind === 'flip' && t - previous.started < FLIP_DURATION) return;
     let kind = REACTIONS[reactionCountRef.current++ % REACTIONS.length];
     if (kind === 'flip' && (t - lastFlipRef.current < 9 || window.matchMedia('(prefers-reduced-motion: reduce)').matches)) kind = 'blep';
     if (kind === 'flip') lastFlipRef.current = t;
@@ -94,6 +95,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           const mesh = object as import('three').SkinnedMesh;
           const positions = mesh.geometry.getAttribute('position');
           const smile = new Float32Array(positions.count * 3);
+          const happySqueeze = new Float32Array(positions.count * 3);
           const eyes = [[0.1503, 0.9447, 1.9278], [-0.3378, 0.8956, 1.7373]];
           for (let i = 0; i < positions.count; i++) {
             const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
@@ -103,6 +105,16 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               const radius = Math.sqrt((horizontal / 0.145) ** 2 + ((y - cy) / 0.18) ** 2 + (depth / 0.15) ** 2);
               const weight = 1 - THREE.MathUtils.smoothstep(radius, 0.58, 1.1);
               smile[i * 3 + 1] += (cy - y) * 0.16 * weight;
+              // Broad, smooth support retracts the eye bulge and raises the cheek.
+              // Do not collapse the sparse eye vertices to a single crease.
+              const squeezeRadius = Math.sqrt((horizontal / 0.19) ** 2 + ((y - cy) / 0.21) ** 2 + (depth / 0.20) ** 2);
+              const squeezeWeight = 1 - THREE.MathUtils.smoothstep(squeezeRadius, 0.35, 1.25);
+              const retract = Math.max(0, depth + 0.035) * 0.52 * squeezeWeight;
+              happySqueeze[i * 3] += retract * 0.363;
+              happySqueeze[i * 3 + 2] -= retract * 0.932;
+              happySqueeze[i * 3 + 1] += ((cy - y) * 0.46 + 0.012) * squeezeWeight;
+              const cheek = Math.exp(-((horizontal / 0.17) ** 2 + ((y - cy + 0.13) / 0.085) ** 2 + (depth / 0.15) ** 2));
+              happySqueeze[i * 3 + 1] += cheek * 0.018;
             }
             const horizontal = (x + 0.08) * 0.932 + (z - 1.94) * 0.363;
             const depth = -(x + 0.08) * 0.363 + (z - 1.94) * 0.932;
@@ -111,14 +123,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             smile[i * 3 + 1] += Math.min(1, Math.abs(horizontal) / 0.14) * 0.025 * mouthWeight;
           }
           mesh.geometry.morphTargetsRelative = true;
-          mesh.geometry.morphAttributes.position = [new THREE.BufferAttribute(smile, 3)];
+          mesh.geometry.morphAttributes.position = [new THREE.BufferAttribute(smile, 3), new THREE.BufferAttribute(happySqueeze, 3)];
           // Keep cheek lighting consistent with the small smile deformation.
           const normalGeometry = new THREE.BufferGeometry();
           normalGeometry.setIndex(mesh.geometry.index);
           normalGeometry.setAttribute('position', positions.clone());
           normalGeometry.computeVertexNormals();
           const restNormals = normalGeometry.getAttribute('normal').clone();
-          mesh.geometry.morphAttributes.normal = [smile].map(offsets => {
+          mesh.geometry.morphAttributes.normal = [smile, happySqueeze].map(offsets => {
             const morphed = normalGeometry.getAttribute('position');
             for (let i = 0; i < positions.count; i++) morphed.setXYZ(i,
               positions.getX(i) + offsets[i * 3], positions.getY(i) + offsets[i * 3 + 1], positions.getZ(i) + offsets[i * 3 + 2]);
@@ -163,14 +175,16 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                     float lid = region * smoothstep(aperture - 0.008, aperture + 0.006, abs(d.y)) * smoothstep(0.0, 0.12, closure);
                     lid = max(lid, region * smoothstep(0.75, 0.98, closure));
                     color = mix(color, skin * mix(0.97, 1.025, smoothstep(-0.08, 0.08, d.y)), lid);
-                    float curve = -0.002 + 0.009 * pow(x / 0.07, 2.0);
+                    float curve = -0.002 + 0.009 * (x * x / 0.0049);
                     float line = (1.0 - smoothstep(0.001, 0.004, abs(d.y - curve))) * (1.0 - smoothstep(0.055, 0.075, abs(x)));
                     line *= smoothstep(0.83, 0.98, axolotlBlink);
-                    // Two diagonal strokes point toward the nose: >.<.
-                    float chevron = (1.0 - smoothstep(0.002, 0.006, abs(abs(d.y) - (side * x + 0.027) * 0.75)))
-                      * (1.0 - smoothstep(0.029, 0.043, abs(x)));
-                    line = mix(line, chevron, axolotlSquish) * region;
-                    color = mix(color, vec3(0.23, 0.085, 0.13), line);
+                    // A tapered lid seam spans the eye, following the raised cheek.
+                    // The happy expression comes from the morph, not a drawn > symbol.
+                    float happyCurve = 0.012 - 0.028 * (x * x / 0.007569) - side * x * 0.045;
+                    float taper = 1.0 - smoothstep(0.055, 0.096, abs(x));
+                    float happyLine = (1.0 - smoothstep(0.0015, 0.007, abs(d.y - happyCurve))) * taper;
+                    line = mix(line, happyLine, axolotlSquish) * region;
+                    color = mix(color, mix(skin * 0.36, vec3(0.23, 0.085, 0.13), 0.45), line);
                     coverage = max(coverage, lid);
                   }`)
                 .replace('#include <map_fragment>', `#include <map_fragment>
@@ -179,7 +193,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-playful-lids-v2';
+            material.customProgramCacheKey = () => 'axolotl-sculpted-happy-lids-v3';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -254,6 +268,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         const flipAxis = new THREE.Vector3(0.932, 0, 0.363).normalize();
         let affection = 0;
         let flipAngle = 0;
+        let jumpHeight = 0;
         const antennaTip = model.getObjectByName('Bone_037');
         const glowCanvas = document.createElement('canvas');
         glowCanvas.width = glowCanvas.height = 128;
@@ -299,7 +314,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         pivot.add(model);
         scene.add(pivot);
 
-        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016'] as const;
+        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_036', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016'] as const;
         const bones = new Map(names.map(name => [name, model.getObjectByName(name)]));
         const rest = new Map([...bones].flatMap(([name, bone]) => bone ? [[name, bone.quaternion.clone()] as const] : []));
         const delta = new THREE.Quaternion();
@@ -348,8 +363,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const blep = reaction.kind === 'blep' ? envelope : 0;
             tongue.visible = blep > 0.01;
             tongue.scale.set(0.85 + blep * 0.15, blep, blep);
-            const flipping = reaction.kind === 'flip' && age >= 0 && age < 2.6 && !reducedMotion.matches;
-            const turn = flipping ? THREE.MathUtils.smoothstep(age, 0.38, 2.05) : 0;
+            const flipping = reaction.kind === 'flip' && age >= 0 && age < FLIP_DURATION && !reducedMotion.matches;
+            // Lift first, turn near the apex, then unfold before drifting down.
+            const flight = flipping ? THREE.MathUtils.clamp((age - 0.4) / 2.3, 0, 1) : 0;
+            jumpHeight = Math.pow(Math.max(0, Math.sin(Math.PI * flight)), 1.3) * 0.48;
+            const anticipation = flipping && age < 0.4 ? Math.sin(Math.PI * age / 0.4) ** 2 : 0;
+            const settle = flipping && age > 2.7 ? Math.sin(Math.PI * (age - 2.7) / 0.5) ** 2 : 0;
+            const launch = flipping ? Math.exp(-(((age - 0.58) / 0.18) ** 2)) : 0;
+            const turn = flipping ? THREE.MathUtils.smoothstep(age, 0.72, 2.25) : 0;
             flipAngle = turn * Math.PI * 2;
             const tuck = flipping ? Math.sin(Math.PI * turn) : 0;
             if (t >= nextBlink) {
@@ -361,32 +382,36 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             eyelids.value = Math.max(reducedMotion.matches ? 0 : blink, content * 0.98, blep * 0.3);
             faces.forEach(mesh => {
               if (!mesh.morphTargetInfluences) return;
-              mesh.morphTargetInfluences[0] = response;
+              mesh.morphTargetInfluences[0] = response * (1 - squish.value * 0.7);
+              mesh.morphTargetInfluences[1] = squish.value;
             });
             TAIL.forEach((bone, index) => {
               const phase = t * 1.45 - index * 0.51;
               const spread = 0.035 + index * 0.013;
+              const follow = flipping ? Math.sin(Math.PI * THREE.MathUtils.clamp((age - 0.5 - index * 0.07) / 2.4, 0, 1)) : 0;
               pose(bone,
-                motion * (Math.sin(phase - 0.3) * spread * 0.28),
+                motion * (Math.sin(phase - 0.3) * spread * 0.28 + follow * (0.075 + index * 0.009)),
                 motion * (Math.sin(phase) * spread + Math.sin(t * 0.47 - index * 0.33) * 0.018 + response * Math.sin(t * 5 - index * 0.6) * 0.065),
                 motion * Math.sin(phase + 0.6) * spread * 0.35);
             });
             GILLS.forEach(({ root, tip, phase, side }) => {
-              const current = Math.sin(t * 1.33 + phase) * 0.038 + Math.sin(t * 0.54 + phase * 0.6) * 0.014;
+              const follow = flipping ? Math.sin((age - phase * 0.06) * 4.2) * Math.sin(Math.PI * flight) * 0.035 : 0;
+              const current = follow + Math.sin(t * 1.33 + phase) * 0.038 + Math.sin(t * 0.54 + phase * 0.6) * 0.014;
               pose(root, motion * current * 0.3, motion * side * current * 0.5, motion * side * (current + response * 0.035));
               pose(tip, motion * Math.sin(t * 1.33 + phase - 0.55) * 0.027,
                 motion * side * Math.sin(t * 0.92 + phase - 0.4) * 0.022,
                 motion * side * Math.sin(t * 1.33 + phase - 0.65) * 0.052);
             });
             // A small attentive tilt accompanies the smile; the antenna follows.
-            pose('Bone_035', motion * response * -0.018, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * (Math.sin(t * 0.77) * 0.012 + response * 0.05));
-            pose('Bone_034', -motion * content * 0.035, motion * gazeRef.current * (0.035 + affection * 0.055), motion * (Math.sin(t * 1.12 - 0.85) * 0.015 + content * 0.06));
-            pose('Bone_032', tuck * 0.18, 0, -tuck * 0.12);
-            pose('Bone_027', tuck * 0.18, 0, tuck * 0.12);
-            pose('Bone_011', tuck * -0.12, 0, -tuck * 0.1);
-            pose('Bone_016', tuck * -0.12, 0, tuck * 0.1);
+            pose('Bone_036', -tuck * 0.07 + launch * 0.025, 0, tuck * 0.045);
+            pose('Bone_035', motion * response * -0.018 - tuck * 0.08, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * (Math.sin(t * 0.77) * 0.012 + response * 0.05));
+            pose('Bone_034', -motion * content * 0.035 + launch * 0.055 - tuck * 0.04, motion * gazeRef.current * (0.035 + affection * 0.055), motion * (Math.sin(t * 1.12 - 0.85) * 0.015 + content * 0.06));
+            pose('Bone_032', tuck * 0.28 - launch * 0.14, 0, -tuck * 0.12);
+            pose('Bone_027', tuck * 0.28 - launch * 0.14, 0, tuck * 0.12);
+            pose('Bone_011', tuck * -0.18 + launch * 0.16, 0, -tuck * 0.1);
+            pose('Bone_016', tuck * -0.18 + launch * 0.16, 0, tuck * 0.1);
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
-            pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018);
+            pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018 + (flipping ? Math.sin(age * 5 - 0.8) * Math.sin(Math.PI * flight) * 0.035 : 0));
             // Inhale brightens the antenna; exhale releases it gradually.
             const breath = (1 + Math.sin(t * 1.3 - 0.4)) / 2;
             const shimmer = 0.035 * Math.sin(t * 3.2) * Math.sin(t * 2.1);
@@ -394,17 +419,19 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             halo.scale.setScalar(0.34 + motion * 0.12 * breath);
             light.intensity = 0.24 + motion * 0.24 * breath;
             pivot.position.y = motion * (Math.sin(t * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
-            const anticipation = flipping && age < 0.38 ? Math.sin(Math.PI * age / 0.38) : 0;
-            const settle = flipping && age > 2.05 ? Math.sin(Math.PI * (age - 2.05) / 0.55) : 0;
-            pivot.position.y += tuck * 0.12 - anticipation * 0.035 - settle * 0.025;
-            pivot.scale.setScalar(1 - tuck * 0.12);
+            pivot.position.y += jumpHeight - anticipation * 0.075 - settle * 0.04;
+            const squash = anticipation * 0.055 + settle * 0.025;
+            pivot.scale.set(1 + squash * 0.5, 1 - squash, 1 + squash * 0.5);
             pivot.quaternion.setFromAxisAngle(flipAxis, -flipAngle)
               .multiply(delta.setFromEuler(euler.set(0, motion * Math.sin(t * 0.39) * 0.013, 0)));
           }
           // Manual viewing remains available when animation is paused.
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
-          camera.position.set(Math.sin(viewYaw) * 3.8, 0.35, Math.cos(viewYaw) * 3.8);
-          camera.lookAt(0, 0.04, 0);
+          // Make room above the head while preserving the visible upward leap.
+          const viewRadius = 3.8 + jumpHeight * 1.15;
+          const framingLift = jumpHeight * 0.38;
+          camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
+          camera.lookAt(0, 0.04 + framingLift, 0);
           renderer?.render(scene, camera);
           crown.getWorldPosition(projectedCrown).project(camera);
           const headSize = 0.56 / (3.8 - 0.9 * Math.cos(viewYaw - FRONT_YAW)) / (2 * Math.tan(THREE.MathUtils.degToRad(17)));
