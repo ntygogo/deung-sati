@@ -1642,7 +1642,7 @@ function ChatScreen({
           }}
         >
           <span style={{ fontSize: "12px", fontWeight: 700, color: "#9D174D" }}>
-            ขั้น {currentJourneyStep.step}/4 · {currentJourneyStep.title}
+            ช่วงการคุย {currentJourneyStep.step}/4 · {currentJourneyStep.title}
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1717,7 +1717,7 @@ function ChatScreen({
 
       {(activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review') && (
         <div role="status" style={{ padding: '8px 16px', background: '#FFF7FA', color: '#9D174D', fontSize: '12px' }}>
-          สำรวจลูปในแชต · มีข้อมูล {LOOP_CHAT_FIELDS.filter(key => activeLoopGuide.fields[key]).length}/8 ส่วน
+          รายละเอียดที่เห็นแล้ว {LOOP_CHAT_FIELDS.filter(key => activeLoopGuide.fields[key]).length}/8 ส่วน
           <span> · ตอบเท่าที่พร้อม ไม่ต้องครบวันนี้</span>
           <button type="button" onClick={handleOpenLoopReview} style={{ display: 'block', marginTop: '6px', padding: '4px 10px', border: '1px solid #FDA4AF', borderRadius: '999px', background: 'white', color: '#9D174D', cursor: 'pointer' }}>
             ดูสรุปที่คุยไว้
@@ -3472,7 +3472,9 @@ button {
 .chatBody {
   height: calc(100% - 68px - 62px - 84px - 62px);
   overflow-y: auto;
-  padding: 12px 20px 20px;
+  padding: 12px 20px 104px;
+  scroll-padding-bottom: 104px;
+  box-sizing: border-box;
 }
 
 .dateLabel {

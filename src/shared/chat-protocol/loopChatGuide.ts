@@ -7,6 +7,7 @@ export const LOOP_CHAT_VENT = 'อยากระบายต่อ';
 export const LOOP_CHAT_SKIP = 'ข้ามข้อนี้ก่อน';
 export const LOOP_CHAT_HELP = 'ยังไม่รู้ ช่วยไกด์หน่อย';
 export const LOOP_CHAT_REVIEW = 'สรุปแล้วบันทึก';
+const LOOP_CHAT_ACTION_REPLIES = ['ขอตัวเลือกที่ทำได้จริง', 'เลือกให้หน่อย', 'ขอพักก่อน'];
 export interface LoopChatGuide {
   mode: 'listening' | 'offered' | 'guided' | 'review';
   fields: Partial<Record<LoopChatField, string>>;
@@ -17,6 +18,8 @@ export interface LoopChatGuide {
   helpAttempts?: Partial<Record<LoopChatField, number>>;
   emotionSourceAfter?: number;
   storySourceAfter?: number;
+  /** The user explicitly asked for practical options, so keep the next turns on choosing and sizing an action. */
+  actionPlanning?: boolean;
 }
 type Message = { role: string; content?: string; text?: string };
 const questions: Record<LoopChatField, string> = {
@@ -60,6 +63,16 @@ function isHelpText(text: string): boolean {
     /^(?:(?:เรา|ฉัน|ผม|หนู|ยัง|ก็))*(?:ไม่รู้|ไม่เข้าใจ|ไม่แน่ใจ)(?:ว่า)?(?:ต้องการอะไร|จะตอบอะไร|จะตอบยังไง|คำถาม|ตัวเอง|ใจตัวเอง)/u.test(t) ||
     /^(?:ช่วยอธิบาย|ช่วยยกตัวอย่าง|ขอตัวอย่าง|ขอคำอธิบาย|หมายถึงอะไร|หมายความว่า|ต้องตอบยังไง|ต้องตอบอะไร)/u.test(t) ||
     /^(?:ความต้องการ|ข้อเท็จจริง|ความคิดอัตโนมัติ|ทางเลือก|การสะท้อนคิด)(?:คืออะไร|หมายถึงอะไร|คือยังไง)/u.test(t);
+}
+function requestsActionGuidance(text: string, asked: LoopChatField | null): boolean {
+  const input = text.normalize('NFC').trim();
+  const compact = input.replace(/\s+/gu, '').replace(/[.!?…。！？]+$/u, '');
+  if (!compact || /[“”"'「」]|(?:เขา|เธอ|แม่|พ่อ|เพื่อน|หัวหน้า)(?:เคย)?(?:ถาม|บอก)(?:ว่า|ให้)/u.test(compact)) return false;
+  if (/ไม่(?:อยาก|ต้องการ)(?:คำแนะนำ|ให้ช่วยคิด|หาทางออก)|ไม่ต้อง(?:แนะนำ|ช่วยคิด)/u.test(compact)) return false;
+  const directRequest = /(?:ต้อง|ควร|จะ)(?:ทำ|แก้|เริ่ม|ไปต่อ)(?:ยังไง|อย่างไร)|(?:ทำ|เอา|แก้)(?:ยังไง|อย่างไร)ดี|ช่วย(?:คิด|หา)(?:ทางออก|วิธี|แนวทาง|ไอเดีย)|ขอ(?:คำแนะนำ|แนวทาง|วิธี|ไอเดีย|ตัวเลือก(?:ที่ทำได้จริง)?)|แนะนำ(?:หน่อย|ให้หน่อย|ที(?:นะ|ค่ะ|ครับ|$))|เลือกให้หน่อย|ไป(?:ทาง|แนวทาง)ไหนดี|ช่วยวางแผน|ทำอะไรต่อดี/u.test(compact);
+  const actionFieldHelp = (asked === 'options' || asked === 'micro_action') &&
+    (compact === LOOP_CHAT_HELP.replace(/\s+/gu, '') || /(?:ไม่รู้|คิดไม่ออก|นึกไม่ออก).*(?:ช่วยไกด์|ขอไอเดีย|ช่วยคิด)/u.test(compact));
+  return directRequest || actionFieldHelp;
 }
 type LoopChatControl = 'start' | 'vent' | 'skip' | 'review' | 'explain' | 'pause';
 const terminalExplore = /(?:^|[\s,.!])(?:เรา|ฉัน|ผม|หนู)?(?:อยาก|ขอ|พร้อม)สำรวจ(?:ลูป|เรื่องนี้|ตัวเอง)?(?:ต่อ|เลย|ด้วยกัน)?(?:นะ|ค่ะ|ครับ|จ้ะ|จ้า)?[.!?]*$/u;
@@ -187,6 +200,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     asked: LOOP_CHAT_FIELDS.includes(input.asked as LoopChatField) ? input.asked! : null,
     nextOfferAt: typeof input.nextOfferAt === 'number' ? Math.max(2, input.nextOfferAt) : 2,
     preferListening: input.preferListening === true,
+    actionPlanning: input.actionPlanning === true,
   };
   const userTexts = messages.filter(m => m.role === 'user').map(textOf);
   for (const key of LOOP_CHAT_FIELDS) {
@@ -215,11 +229,11 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   }
   const count = userTexts.filter(t => observationText(t)).length;
   const control = loopChatControl(latest, state.mode === 'offered');
-  if (control === 'start') { state.mode = 'guided'; state.skipped = []; state.preferListening = false; }
+  if (control === 'start') { state.mode = 'guided'; state.skipped = []; state.preferListening = false; state.actionPlanning = false; }
   if (control === 'vent') {
-    state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3; state.preferListening = true;
+    state.mode = 'listening'; state.asked = null; state.nextOfferAt = count + 3; state.preferListening = true; state.actionPlanning = false;
   }
-  if (control === 'pause') { state.mode = 'listening'; state.asked = null; state.preferListening = true; }
+  if (control === 'pause') { state.mode = 'listening'; state.asked = null; state.preferListening = true; state.actionPlanning = false; }
   if (control === 'explain') { state.mode = 'offered'; state.asked = null; }
   // If the user keeps telling their story, listen instead of repeating the offer every turn.
   if (state.mode === 'offered' && !control) {
@@ -231,17 +245,62 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
     if (/(?:ยัง)?ไม่พร้อม(?:ทำอะไร|ลงมือ|คิดทางเลือก|เลือก|ตัดสินใจ)|ยังไม่อยากทำอะไร/u.test(latest)) {
       state.skipped = [...new Set([...state.skipped, 'options' as const, 'micro_action' as const])];
     }
+    if (state.actionPlanning) state.actionPlanning = false;
     state.asked = null;
   }
   const assistantTexts = messages.filter(m => m.role === 'assistant' || m.role === 'ai').map(textOf);
   const lastAssistantText = assistantTexts[assistantTexts.length - 1] || '';
   const understood = state.mode === 'guided' && Boolean(state.asked && state.helpAttempts?.[state.asked]) && !control && understandsExplanation(latest, lastAssistantText);
   const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && (isHelpText(latest) || understood);
+  const actionGuidanceRequested = !control && requestsActionGuidance(latest, state.asked);
   const requestedExercise = !/ไม่อยาก|ไม่ต้อง|อย่า|ยังไม่|บอกว่า/u.test(latest) && /(?:ขอ|อยาก|ช่วย|ลอง)(?:ฝึกหายใจ|ทำแบบฝึก|พาหายใจ|สอน(?:วิธี)?หายใจ|ทำgrounding)/u.test(latest.replace(/\s+/gu, ''));
   const deferOffer = /ไหม|เหรอ|หรือเปล่า|ยังไง|อย่างไร|หมายถึง|ขอ(?:แค่)?(?:ตัวอย่าง|ประโยค|คำอธิบาย)|อย่าเพิ่ง|ไม่ต้อง(?:สรุป|บอก|เรียก)/u.test(latest);
-  return { state, userTexts, latest, count, control, helpRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer };
+  return { state, userTexts, latest, count, control, helpRequested, actionGuidanceRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
+
+type ActionGuidance = {
+  reflection: string;
+  options: string[];
+  recommendation: string;
+  reason: string;
+  question: string;
+};
+
+function cleanGuidanceText(value: unknown, maxLength: number): string {
+  return typeof value === 'string' ? value.trim().replace(/[ \t]{2,}/gu, ' ').slice(0, maxLength) : '';
+}
+
+function readActionGuidance(value: unknown): ActionGuidance | null {
+  if (!value || typeof value !== 'object' || (value as any).needed !== true) return null;
+  const raw = value as any;
+  const options: string[] = Array.isArray(raw.options)
+    ? [...new Set<string>(raw.options.map((item: unknown): string => cleanGuidanceText(item, 180)).filter((item: string) => item.length >= 3))].slice(0, 3)
+    : [];
+  const recommendation = cleanGuidanceText(raw.recommendation, 260);
+  if (options.length < 2 || recommendation.length < 3) return null;
+  return {
+    reflection: cleanGuidanceText(raw.reflection, 240),
+    options,
+    recommendation,
+    reason: cleanGuidanceText(raw.reason, 220),
+    question: cleanGuidanceText(raw.question, 180),
+  };
+}
+
+function actionGuidanceMessage(guidance: ActionGuidance): string {
+  const optionList = guidance.options.map((option, index) => `${index + 1}. ${option}`).join('\n');
+  const recommendation = `จากที่เธอเล่า เราแนะนำให้เริ่มจาก ${guidance.recommendation}${guidance.reason ? ` เพราะ${guidance.reason.replace(/^เพราะ/u, '').trim()}` : ''}`;
+  return [guidance.reflection, optionList, recommendation, guidance.question].filter(Boolean).join('\n\n');
+}
+
+const fallbackActionGuidance: ActionGuidance = {
+  reflection: 'ตอนนี้เธอไม่จำเป็นต้องคิดทางออกทั้งหมดคนเดียวนะ เราช่วยย่อยให้เลือกได้',
+  options: ['ลดสิ่งที่จะทำให้เล็กพอเริ่มได้ทันที', 'พักให้พอ แล้วกำหนดเวลาชัด ๆ ว่าจะกลับมาลองเมื่อไหร่'],
+  recommendation: 'ข้อ 1 โดยเลือกแค่ก้าวที่ใช้เวลา 5 นาที',
+  reason: 'ยังได้ขยับไปข้างหน้าโดยไม่กดดันตัวเองให้ทำทั้งหมด',
+  question: 'สองทางนี้ ทางไหนใกล้กับสิ่งที่เธอพอทำไหวกว่า?',
+};
 
 export function loopChatInstruction(context: LoopChatContext): string {
   return `
@@ -255,6 +314,7 @@ The user owns their emotion description. Never persuade them that they are angry
 Emotion correction this turn: ${context.emotionCorrection}. Challenged observations have been removed; an unaffected description may remain in current fields. Preserve that remaining description and extract any new preferred wording only from the latest USER message, preserving uncertainty. If no endorsed description remains, leave emotion_or_body absent. Consent with "ขอใช้คำว่า..." can also contain the user's preferred emotion wording. Never extract an emotion word from a denial, question about that word, or someone else's feeling. A feeling is not proof of the other person's intent.
 User says their automatic thought is unknown this turn: ${context.storyCorrection}. If true, leave that field empty and respect the pause on it. Do not substitute a reason for relief or other people's expectations for a thought they have not identified.
 Help requested: ${context.helpRequested}. Previous support attempts: ${JSON.stringify(context.state.helpAttempts || {})}.
+Practical action guidance explicitly requested: ${context.actionGuidanceRequested}. Action-planning mode already active: ${context.state.actionPlanning === true}.
 Concrete scaffold for the current field: ${context.state.asked ? helpText[context.state.asked][Math.min(1, context.state.helpAttempts?.[context.state.asked] || 0)] : 'none'}
 When helping, use that scaffold and adapt its people/events to what the user actually said. Do not replace it with another broad question about deep needs, desired feelings, or desired outcomes. Ask about one small, observable thing instead.
 The user's navigation choice has already been handled: ${context.control || 'none'}. In guided mode, never ask again whether they want to explore. Brief agreement or a navigation choice is not a new topic or an observation.
@@ -266,9 +326,11 @@ Add these keys to the existing JSON response:
 "newLoopTopic": false,
 "guideSupport": {"needed": false, "message": ""}
 "guideQuestion": {"field": "the next missing field after your extraction, or null", "message": "ONE short concrete Thai question using the actual situation"}
+"actionGuidance": {"needed": false, "reflection": "", "options": [], "recommendation": "", "reason": "", "question": ""}
+When practical action guidance is explicitly requested, answer it NOW instead of asking another discovery question. Set actionGuidance.needed=true. Give 2 or 3 specific, feasible options based only on the user's real situation and constraints; recommend ONE starting option and explain briefly why it fits. The recommendation must include a first step small enough to do. End with at most one easy choice question. Do not make the user generate all the options, do not merely summarize, and do not suggest pausing as the only answer unless immediate rest is genuinely one of several useful options. Keep agency with the user: options are invitations, not orders.
 For guideQuestion, choose the first missing non-skipped field AFTER your valid loopTrace extraction. Ask about that field naturally in the user's situation, without importing a boss, partner or other person not mentioned. The app checks the field before using it. For facts, use the actual observable event and gently distinguish it from its meaning; acknowledge that their feelings are real. Never require evidence that the other person cares, positive memories, or proof against their feelings. We can leave another person's intent unknown. For needs, ask about a small missing support or condition, not what another person must do or what they need deep inside. For options, if they cannot think of any, provide TWO specific feasible examples IN THE MESSAGE, clearly optional, then one simple question. Do not refer to invisible choices or rely on quickReplies; the application replaces them. If they already chose a concrete action, extract micro_action and do not ask for that action again.
 Field meaning matters: emotion_or_body holds sensations (e.g. "อัดแน่นในหัว") and feelings. automatic_story is the actual interpretation/prediction/self-talk (e.g. "เงินจะไม่พอ", "เราไม่สำคัญ"), NOT a sensation or the label "ด่าตัวเอง". If no thought content is known leave it absent. A quote must be copied EXACTLY, not summarized; prefer the latest explicit clarification over a vague older phrase. One USER sentence can support multiple fields. Do not discard an explicit action just because earlier turns expressed uncertainty.
-If the user does not understand, cannot find an answer, asks why/how, or still needs help exploring the current question, set guideSupport.needed=true. In guideSupport.message gently acknowledge that not knowing is okay, explain the current idea in plain Thai using their actual story, and ask at most ONE smaller, concrete observation question. Do not repeat the original abstract question. Stay with the current field; do not rush to the next field or invent an answer for them. Label examples as possibilities that may not fit; do not interpret examples or uncertainty as the user's answer. If they remain unsure, try a different angle and explicitly allow pausing. Brief genuine observations such as “เสียใจ” are valid answers, not a reason to interrogate them further.
+If the user does not understand, cannot find an answer, asks why/how, or still needs help exploring the current question, set guideSupport.needed=true. In guideSupport.message gently acknowledge that not knowing is okay, explain the current idea in plain Thai using their actual story, and ask at most ONE smaller, concrete observation question. Do not repeat the original abstract question. Stay with the current field unless practical action guidance was explicitly requested; in that case use actionGuidance and help them find a way forward now. Label examples as possibilities that may not fit; do not interpret examples or uncertainty as the user's answer. If they remain unsure, try a different angle and explicitly allow pausing. Brief genuine observations such as “เสียใจ” are valid answers, not a reason to interrogate them further.
 Only include fields supported by literal contiguous quotes from USER messages. Never copy the assistant's suggestions, questions, negated feelings, hypothetical claims, or another person's feelings as the user's own. In guided mode, interpret a short reply in the context of the last asked field. An unanswered/skipped/unknown field stays absent. Distinguish facts from interpretations. options means possible choices, not assumed habitual behavior.
 Source meaning and speaker must survive extraction. "ทุกคนคิดว่าเราต้องเศร้า" is OTHER PEOPLE's expectation, never the user's automatic_story. If they later say "เราเลยคิดว่าเราผิดปกติ", that later clause can be automatic_story. A request such as "มีตัวอย่างทางเลือกไหม" is not options; leave options absent and actually explain. "เรียกว่าอึดอัดไว้ก่อน" is a wording preference, not needs. "ฉันคิดว่าเขาไม่สนใจ" is a thought, not a fact, even if you copy only "เขาไม่สนใจ". Do not make fields look complete by moving a quote to an unrelated field.
 GROUNDING CHECK for assistantMessage, loopSummary, guideSupport and guideQuestion: use only details the user has given. Do not add events, causes, motives or a more intense emotion to sound empathetic. Keep tentative wording tentative. You may respond directly without a reflective preface. In listening mode, do not ask about bodily sensations by default; use one concrete moment from the story. An explanation is not a diagnosis or a hidden-cause claim.
@@ -285,6 +347,7 @@ When listening, respond with empathy and at most one natural question. When guid
 When enough context exists after two or three user messages, the application offers a choice to vent or explore. Do not replace that choice with a forced exercise.
 Never ask the vent-versus-explore choice yourself; the application owns that invitation and its cooldown. If the user continues their story without choosing, keep listening.
 When guideSupport is needed, its message REPLACES the routine next-field question. Explain only the current field with one easier question; do not include a second question in loopSummary. Do not repeat the previous assistant message.
+A direct request such as “ต้องทำยังไง”, “ช่วยคิดทางออก”, “ขอคำแนะนำ”, or “เลือกให้หน่อย” takes precedence over routine guideSupport and the next Loop Trace question. Reflection alone is not enough for that turn.
 When a listening user requests examples, provide the actual examples in assistantMessage as well as guideSupport.message. Saying that small tasks can be unrelated to work is not an example. If work is the given context, examples could be opening their existing file or writing a title, explicitly optional. Do not treat those suggestions as the user's choices until they choose.
 `;
 }
@@ -302,12 +365,12 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   const explicitReflection = state.mode === 'guided' && state.asked === 'reflection' && !context.control &&
     /^(?:ตอนนี้)?(?:เริ่ม|เพิ่ง)(?:เห็น|รู้|เข้าใจ)ว่า/u.test(context.latest) && !/ไหม|หรือเปล่า|บอกว่า/u.test(context.latest);
   if (explicitReflection) state.fields.reflection = context.latest.slice(0, 600);
-  let supportField = state.mode === 'guided' && state.asked && !context.control && !explicitAction && !explicitReflection &&
+  let supportField = state.mode === 'guided' && state.asked && !context.control && !context.actionGuidanceRequested && !explicitAction && !explicitReflection &&
     (context.helpRequested || parsed?.guideSupport?.needed === true) ? state.asked : null;
   if (supportField && /(?:ตัวอย่าง|อธิบาย).*ทางเลือก|ทางเลือก.*(?:คืออะไร|หมายถึง)/u.test(context.latest)) supportField = 'options';
   const newTopic = parsed?.newLoopTopic === true && !context.control && !supportField;
   if (newTopic) {
-    state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening'; state.helpAttempts = {};
+    state.fields = {}; state.skipped = []; state.asked = null; state.mode = 'listening'; state.helpAttempts = {}; state.actionPlanning = false;
     state.emotionSourceAfter = Math.max(0, context.userTexts.length - 1);
     state.storySourceAfter = Math.max(0, context.userTexts.length - 1);
     state.nextOfferAt = context.count + 1;
@@ -346,6 +409,15 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     // Keep this transition independent of model wrap-up/exercise suggestions.
     message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
     replies = [];
+  } else if (context.actionGuidanceRequested) {
+    const guidance = readActionGuidance(parsed?.actionGuidance) || fallbackActionGuidance;
+    state.mode = 'guided';
+    state.preferListening = false;
+    state.actionPlanning = true;
+    state.asked = 'options';
+    state.helpAttempts = { ...state.helpAttempts, options: 0, micro_action: 0 };
+    message = actionGuidanceMessage(guidance);
+    replies = guidance.options.every(option => option.length <= 80) ? guidance.options : [];
   } else if (state.mode === 'listening' && /(?:ไม่|ไม่ได้)ร้องไห้.*(?:ใจดำ|ไร้หัวใจ).*(?:ไหม|หรือเปล่า)/u.test(context.latest)) {
     // Answer the moral self-judgment without inventing an emotional/clinical cause.
     message = 'การไม่ร้องไห้เพียงอย่างเดียวไม่ได้บอกว่าเธอเป็นคนใจดำหรือไม่ใส่ใจนะ ไม่ต้องฝืนร้องไห้เพื่อพิสูจน์ความรู้สึกให้ใครเห็น';
@@ -362,13 +434,17 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     message = [summary || 'เราเริ่มเห็นประเด็นจากที่เธอเล่าแล้วนะ', 'ตอนนี้อยากระบายต่อ หรือค่อย ๆ สำรวจเรื่องนี้ไปด้วยกันทีละส่วน?'].join('\n\n');
     replies = [LOOP_CHAT_VENT, LOOP_CHAT_START];
   } else if (state.mode === 'guided') {
-    const missing = supportField || LOOP_CHAT_FIELDS.find(key => !state.fields[key] && !state.skipped.includes(key));
+    const actionFields: LoopChatField[] = ['options', 'micro_action'];
+    const missing = supportField || (state.actionPlanning
+      ? actionFields.find(key => !state.fields[key] && !state.skipped.includes(key))
+      : LOOP_CHAT_FIELDS.find(key => !state.fields[key] && !state.skipped.includes(key)));
     state.asked = missing || null;
     if (supportField && context.understood) {
       // Understanding an explanation is progress, but is not yet an answer to the trace field.
       state.helpAttempts![supportField] = 0;
       message = `ค่อย ๆ ลองจากเรื่องของเธอก็ได้นะ ${practiceQuestions[supportField]}`;
-      replies = [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+      replies = supportField === 'options' || supportField === 'micro_action'
+        ? LOOP_CHAT_ACTION_REPLIES : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else if (supportField) {
       const attempts = Math.min(3, (state.helpAttempts?.[supportField] || 0) + 1);
       state.helpAttempts![supportField] = attempts;
@@ -379,7 +455,9 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
         ? 'ยังหาคำตอบไม่ได้ก็ไม่เป็นไรนะ ไม่ต้องฝืนให้ครบ เราพักข้อนี้ไว้และเก็บสิ่งที่คุยแล้วได้ เธออยากระบายต่อหรือข้ามข้อนี้ไปก่อน?'
         : personalized && personalized.length <= 900 && personalized !== context.lastAssistantText && !vagueNeedsQuestion && !invisibleOptions && !personalized.includes(questions[supportField])
           ? personalized : helpText[supportField][attempts - 1];
-      replies = attempts >= 3 ? [LOOP_CHAT_SKIP, LOOP_CHAT_VENT] : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+      replies = attempts >= 3 ? [LOOP_CHAT_SKIP, LOOP_CHAT_VENT]
+        : supportField === 'options' || supportField === 'micro_action'
+          ? LOOP_CHAT_ACTION_REPLIES : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else if (missing) {
       const reflection = context.control === 'start'
         ? 'ได้เลย เราค่อย ๆ ดูไปด้วยกัน ตอบเท่าที่พร้อมก็พอนะ'
@@ -393,8 +471,10 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
         tailored.message.trim().length >= 10 && tailored.message.length <= 500 && tailored.message.trim() !== context.lastAssistantText
           ? tailored.message.trim() : questions[missing];
       message = [reflection, question].filter(Boolean).join('\n\n');
-      replies = [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
+      replies = missing === 'options' || missing === 'micro_action'
+        ? LOOP_CHAT_ACTION_REPLIES : [LOOP_CHAT_HELP, LOOP_CHAT_SKIP, LOOP_CHAT_VENT];
     } else {
+      state.actionPlanning = false;
       state.mode = 'review';
       const complete = LOOP_CHAT_FIELDS.every(key => state.fields[key]);
       message = complete
