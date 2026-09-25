@@ -364,7 +364,7 @@ const DevDebugPanel = ({
 };
 
 export default function App() {
-  const previewCompanion = new URLSearchParams(window.location.search).get("previewCompanion") === "1";
+  const previewCompanion = ['previewCompanion', 'previewAxolotl'].some(key => new URLSearchParams(window.location.search).get(key) === '1');
   const [screen, setScreen] = useState<Screen>("home");
   const [showEvidence, setShowEvidence] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
