@@ -4,6 +4,7 @@ import './LivingCompanion3D.css';
 type Props = { paused?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
+const HELLO_DURATION = 11.8;
 const WALK_START = 1.8;
 const WALK_STEPS = 32;
 const STEP_SECONDS = 0.45;
@@ -12,8 +13,8 @@ const WALK_END = WALK_START + WALK_STEPS * STEP_SECONDS + WALK_PAUSE;
 const SLEEP_SETTLE_DURATION = WALK_END + 4.7;
 const WAKE_DURATION = 7;
 type RestPhase = 'awake' | 'settling' | 'sleeping' | 'waking';
-type Reaction = 'content' | 'squish' | 'blep' | 'flip' | 'tickle';
-const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish', 'flip'];
+type Reaction = 'content' | 'squish' | 'blep' | 'flip' | 'tickle' | 'hello';
+const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish', 'flip', 'hello'];
 // The eye line on this Meshy export is turned about 21 degrees from +Z.
 const FRONT_YAW = -0.372;
 
@@ -69,7 +70,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     const t = elapsedRef.current;
     const reaction = reactionRef.current;
     if ((reaction.kind === 'tickle' && t - reaction.started < TICKLE_DURATION)
-      || (reaction.kind === 'flip' && t - reaction.started < FLIP_DURATION)) return;
+      || (reaction.kind === 'flip' && t - reaction.started < FLIP_DURATION)
+      || (reaction.kind === 'hello' && t - reaction.started < HELLO_DURATION)) return;
     restRef.current = { phase: 'settling', started: t, wakeAge: 0 };
     reactionRef.current = { kind: 'content', started: -100 };
     rapidPetsRef.current = [];
@@ -82,7 +84,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     const t = elapsedRef.current;
     const previous = reactionRef.current;
     if ((previous.kind === 'tickle' && t - previous.started < TICKLE_DURATION)
-      || (previous.kind === 'flip' && t - previous.started < FLIP_DURATION)) return true;
+      || (previous.kind === 'flip' && t - previous.started < FLIP_DURATION)
+      || (previous.kind === 'hello' && t - previous.started < HELLO_DURATION)) return true;
     const now = performance.now();
     rapidPetsRef.current = [...rapidPetsRef.current.filter(time => now - time < 1800), now];
     if (rapidPetsRef.current.length < 4 || t - lastTickleRef.current < TICKLE_DURATION + 2) return false;
@@ -102,8 +105,21 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     let kind = REACTIONS[reactionCountRef.current++ % REACTIONS.length];
     if (kind === 'flip' && (t - lastFlipRef.current < 9 || window.matchMedia('(prefers-reduced-motion: reduce)').matches)) kind = 'blep';
     if (kind === 'flip') lastFlipRef.current = t;
+    if (kind === 'hello') orbitRef.current += Math.atan2(Math.sin(FRONT_YAW - orbitRef.current), Math.cos(FRONT_YAW - orbitRef.current));
     reactionRef.current = { kind, started: t };
     touchedRef.current = t;
+  };
+
+  const sayHello = () => {
+    if (pausedRef.current || status !== 'ready' || wakeFromRest()) return;
+    const t = elapsedRef.current, previous = reactionRef.current;
+    if ((previous.kind === 'flip' && t - previous.started < FLIP_DURATION)
+      || (previous.kind === 'tickle' && t - previous.started < TICKLE_DURATION)
+      || (previous.kind === 'hello' && t - previous.started < HELLO_DURATION)) return;
+    orbitRef.current += Math.atan2(Math.sin(FRONT_YAW - orbitRef.current), Math.cos(FRONT_YAW - orbitRef.current));
+    reactionRef.current = { kind: 'hello', started: t };
+    touchedRef.current = t;
+    rapidPetsRef.current = [];
   };
 
   useEffect(() => {
@@ -328,6 +344,9 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         let flipAngle = 0;
         let jumpHeight = 0;
         let curlFraming = 0;
+        let helloFraming = 0;
+        let helloNear = 0;
+        let helloActive = false;
         const antennaTip = model.getObjectByName('Bone_037');
         const glowCanvas = document.createElement('canvas');
         glowCanvas.width = glowCanvas.height = 128;
@@ -437,22 +456,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           target.y = -0.635;
           return target;
         };
-        // CCD keeps stance paws planted while shoulders and hips travel over them.
-        // Each foot swings for one beat, then bears weight for the other three.
-        const plantWalkingFeet = (step: number, weight: number) => {
-          for (const foot of walkingFeet) {
-            const cycle = Math.floor((step - foot.offset) / 4);
-            const lift = cycle * 4 + foot.offset;
-            const phase = step - lift;
-            const previousPlant = lift < 4 ? 0 : lift - 1.5;
-            const nextPlant = lift < 0 ? 0 : lift + 2.5;
-            footPlant(foot, previousPlant, footFrom);
-            footPlant(foot, nextPlant, footTo);
-            foot.target.copy(footFrom).lerp(footTo, THREE.MathUtils.smoothstep(phase, 0, 1));
-            if (lift >= 0 && phase < 1 && step < WALK_STEPS) foot.target.y += Math.sin(Math.PI * phase) * 0.075;
-            // Blend into/out of planted walking without snapping the existing pose.
-            foot.tip.getWorldPosition(localTip);
-            foot.target.lerpVectors(localTip, foot.target, weight);
+        const solvePaw = (foot: typeof walkingFeet[number]) => {
             for (let iteration = 0; iteration < 16; iteration++) {
               for (let j = foot.chain.length - 1; j >= 0; j--) {
                 const joint = foot.chain[j];
@@ -480,8 +484,44 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 joint.updateMatrixWorld(true);
               }
             }
+        };
+        // CCD keeps stance paws planted while shoulders and hips travel over them.
+        // Each foot swings for one beat, then bears weight for the other three.
+        const plantWalkingFeet = (step: number, weight: number) => {
+          for (const foot of walkingFeet) {
+            const cycle = Math.floor((step - foot.offset) / 4);
+            const lift = cycle * 4 + foot.offset;
+            const phase = step - lift;
+            const previousPlant = lift < 4 ? 0 : lift - 1.5;
+            const nextPlant = lift < 0 ? 0 : lift + 2.5;
+            footPlant(foot, previousPlant, footFrom);
+            footPlant(foot, nextPlant, footTo);
+            foot.target.copy(footFrom).lerp(footTo, THREE.MathUtils.smoothstep(phase, 0, 1));
+            if (lift >= 0 && phase < 1 && step < WALK_STEPS) foot.target.y += Math.sin(Math.PI * phase) * 0.075;
+            // Blend into/out of planted walking without snapping the existing pose.
+            foot.tip.getWorldPosition(localTip);
+            foot.target.lerpVectors(localTip, foot.target, weight);
+            solvePaw(foot);
           }
         };
+        const rearSupport = walkingFeet.slice(2).map(foot => ({
+          foot, point: foot.neutral.clone().setY(-0.635),
+        }));
+        const rearCenter = rearSupport[0].point.clone().add(rearSupport[1].point).multiplyScalar(0.5);
+        const rearLocal = walkingFeet[2].chain[0].getWorldPosition(new THREE.Vector3())
+          .add(walkingFeet[3].chain[0].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+        pivot.worldToLocal(rearLocal);
+        const standOffset = new THREE.Vector3(), shoulderPoint = new THREE.Vector3();
+        const screenForward = new THREE.Vector3(-0.363, 0, 0.932).normalize();
+        const handGlowGeometry = new THREE.RingGeometry(0.055, 0.061, 32);
+        const handGlows = [0, 1].map(() => {
+          const material = new THREE.MeshBasicMaterial({ color: 0xffe1ed, transparent: true, opacity: 0, depthWrite: false, depthTest: false });
+          const mesh = new THREE.Mesh(handGlowGeometry, material);
+          scene.add(mesh);
+          return mesh;
+        });
+        const disposeRest = disposeModel;
+        disposeModel = () => { disposeRest?.(); handGlowGeometry.dispose(); handGlows.forEach(glow => glow.material.dispose()); };
         // A small sample of the torso/head surface anchors the roll to the floor.
         // Ignore the flexible gills, antenna and tail when finding back contact.
         const contactPoints = faces.map(mesh => {
@@ -569,6 +609,16 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const envelope = THREE.MathUtils.smoothstep(age, 0, 0.38) * (1 - THREE.MathUtils.smoothstep(age, 1.8, 2.8));
             tickleActive = reaction.kind === 'tickle' && age >= 0 && age < TICKLE_DURATION;
             const ticklePose = tickleActive && !reducedMotion.matches;
+            helloActive = reaction.kind === 'hello' && age >= 0 && age < HELLO_DURATION;
+            const hello = helloActive ? 1 : 0;
+            const helloGround = hello * smooth(age, 0, 0.8) * (1 - smooth(age, 10.6, HELLO_DURATION));
+            const stand = hello * smooth(age, 0.65, 2.1) * (1 - smooth(age, 9.3, 10.8));
+            const wave = hello * smooth(age, 2.05, 2.5) * (1 - smooth(age, 4.35, 4.9));
+            const glass = hello * smooth(age, 4.7, 5.6) * (1 - smooth(age, 8.4, 9.2));
+            const waveBeat = reducedMotion.matches ? 0 : Math.sin((age - 2.5) * 7.4);
+            const crouch = hello * smooth(age, 0.15, 0.5) * (1 - smooth(age, 0.65, 1.2));
+            helloFraming = stand;
+            helloNear = glass;
             const landing = ticklePose ? THREE.MathUtils.smoothstep(age, 0, 1.1) : 0;
             const rising = ticklePose ? THREE.MathUtils.smoothstep(age, 8.2, TICKLE_DURATION) : 0;
             const grounded = landing * (1 - rising);
@@ -578,10 +628,10 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const laughing = tickleActive ? THREE.MathUtils.smoothstep(age, 0.15, 1.25) * (1 - THREE.MathUtils.smoothstep(age, 3.65, 4.5)) : 0;
             const wriggle = reducedMotion.matches ? 0 : laughing;
             const tired = tickleActive ? THREE.MathUtils.smoothstep(age, 4.1, 4.7) * (1 - THREE.MathUtils.smoothstep(age, 6.5, 8)) : 0;
-            const stroking = resting.phase === 'awake' && !tickleActive && t - strokeRef.current < 0.3;
+            const stroking = resting.phase === 'awake' && !helloActive && !tickleActive && t - strokeRef.current < 0.3;
             affection += ((stroking ? 1 : 0) - affection) * (1 - Math.exp(-dt * (stroking ? 5 : 2.8)));
             const content = Math.max(affection, reaction.kind === 'content' ? envelope : 0, tired * 0.85);
-            const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22);
+            const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22, stand * 0.6);
             const squint = Math.max(reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)), sleepy * 0.35);
             squish.value += (squint - squish.value) * (1 - Math.exp(-dt * 12));
             const blep = Math.max(reaction.kind === 'blep' ? envelope : 0, tired * 0.6);
@@ -622,7 +672,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               // Tail bends toward the belly in a delayed arc, not a rigid spin.
               const tailCurl = flipping ? THREE.MathUtils.smoothstep(age, 0.83 + index * 0.035, 1.23 + index * 0.035)
                 * (1 - THREE.MathUtils.smoothstep(age, 1.85 + index * 0.04, 2.4 + index * 0.04)) : 0;
-              bendBody(bone, -tailCurl * (0.42 + index * 0.02));
+              bendBody(bone, -tailCurl * (0.42 + index * 0.02) + stand * (index < 3 ? 0.28 : 0.06));
               const tailRest = smooth(restAge, WALK_END - 0.2 + index * 0.13, WALK_END + 2 + index * 0.13) * uncoil;
               curlSideways(bone, tailRest * (0.54 - index * 0.035) - leading * (0.8 - index * 0.08));
             });
@@ -680,11 +730,13 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               curlSideways(name, leading * (name === 'Bone_003' || name === 'Bone_002' ? -0.35 : 0.2));
               bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
-            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18);
-            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16);
-            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13);
+            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18 + stand * 0.3);
+            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16 + stand * 0.3);
+            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13 + stand * 0.25);
             curlSideways('Bone_036', -restCurl * 0.1 + leading);
             curlSideways('Bone_035', -restCurl * 0.12 + leading * 0.7);
+            const neck = bones.get('Bone_034');
+            if (neck) neck.quaternion.multiply(delta.setFromEuler(euler.set(0, 0, glass * Math.sin(age * 1.6) * 0.09 * motion)));
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
             if (antennaBase) antennaBase.quaternion.multiply(delta.setFromAxisAngle(antennaLieAxis, belly * 1.4 + lieDown * 0.1));
             pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018 + (flipping ? Math.sin(age * 5 - 0.8) * Math.sin(Math.PI * flight) * 0.035 : 0));
@@ -713,13 +765,20 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, restYaw));
               pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase + 0.35) * 0.018));
             }
+            if (helloActive) {
+              pivot.quaternion.premultiply(delta.setFromAxisAngle(flipAxis, -stand * 1.1));
+              // Rotate around the hips, then solve the two supporting rear paws.
+              standOffset.copy(rearLocal).applyQuaternion(pivot.quaternion);
+              pivot.position.x += stand * (rearCenter.x - standOffset.x);
+              pivot.position.z += stand * (rearCenter.z - standOffset.z + glass * 0.08);
+            }
             if (ticklePose) {
               // Roll onto the back, rest, then unwind onto the paws before rising.
               const roll = belly * (Math.PI * 0.91 + wriggle * Math.sin(age * 7.1) * 0.10);
               pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, roll));
               pivot.quaternion.multiply(delta.setFromAxisAngle(flipAxis, belly * 0.12));
             }
-            if (ticklePose || restGround > 0) {
+            if (ticklePose || restGround > 0 || helloGround > 0) {
               pivot.position.y = 0;
               scene.updateMatrixWorld(true);
               let lowest = Infinity;
@@ -733,14 +792,40 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               }
               const floorY = -0.68;
               const floorOffset = Number.isFinite(lowest) ? floorY - lowest : -0.3;
-              pivot.position.y = THREE.MathUtils.lerp(Math.sin(t * 1.3) * 0.018, floorOffset, Math.max(grounded, restGround));
+              pivot.position.y = THREE.MathUtils.lerp(Math.sin(t * 1.3) * 0.018, floorOffset, Math.max(grounded, restGround, helloGround));
               pivot.position.y -= walk * (0.025 + Math.sin(stepPhase * 2) * 0.006);
+            }
+            for (const glow of handGlows) glow.material.opacity = 0;
+            if (helloActive) {
+              const standingY = -0.635 + 0.18 - standOffset.y;
+              pivot.position.y = THREE.MathUtils.lerp(pivot.position.y - crouch * 0.045, standingY, stand);
+              scene.updateMatrixWorld(true);
+              for (const { foot, point } of rearSupport) {
+                foot.tip.getWorldPosition(localTip);
+                foot.target.copy(localTip).lerp(point, stand);
+                solvePaw(foot);
+              }
+              for (let i = 0; i < 2; i++) {
+                const foot = walkingFeet[i];
+                foot.chain[0].getWorldPosition(shoulderPoint);
+                const side = i === 0 ? 1 : -1;
+                foot.target.copy(shoulderPoint).addScaledVector(screenForward, 0.16 + glass * 0.055);
+                foot.target.addScaledVector(flipAxis, side * (0.055 + (i === 0 ? wave * waveBeat * 0.055 : 0)));
+                foot.target.y += 0.035 + glass * 0.025 + (i === 0 ? wave * (0.145 + waveBeat * 0.025) : 0);
+                foot.tip.getWorldPosition(localTip);
+                foot.target.lerpVectors(localTip, foot.target, stand);
+                solvePaw(foot);
+                foot.tip.getWorldPosition(handGlows[i].position);
+                handGlows[i].position.addScaledVector(screenForward, 0.015);
+                handGlows[i].material.opacity = glass * 0.42;
+                handGlows[i].scale.setScalar(1 + glass * 0.12);
+              }
             }
             if (planting > 0) {
               scene.updateMatrixWorld(true);
               plantWalkingFeet(walkStep, planting);
             }
-            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' ? 'idle' : reaction.kind));
+            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : helloActive ? (age < 2.1 ? 'standing-up' : age < 4.9 ? 'waving' : age < 9.2 ? 'touching-glass' : 'lowering') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' || reaction.kind === 'hello' ? 'idle' : reaction.kind));
             if (waking && wakeAge >= WAKE_DURATION) {
               restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
               lastActivityRef.current = t;
@@ -750,17 +835,18 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           // Manual viewing remains available when animation is paused.
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
           // Make room above the head while preserving the visible upward leap.
-          const viewRadius = 3.8 + jumpHeight * 1.15 + curlFraming * 0.55;
-          const framingLift = jumpHeight * 0.38;
+          const viewRadius = 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.65 - helloNear * 0.75;
+          const framingLift = jumpHeight * 0.38 + helloFraming * 0.24 + helloNear * 0.04;
           camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
           camera.lookAt(0, 0.04 + framingLift, 0);
+          for (const glow of handGlows) glow.quaternion.copy(camera.quaternion);
           renderer?.render(scene, camera);
           crown.getWorldPosition(projectedCrown).project(camera);
           const headSize = 0.56 / (3.8 - 0.9 * Math.cos(viewYaw - FRONT_YAW)) / (2 * Math.tan(THREE.MathUtils.degToRad(17)));
           headHitRef.current = {
             x: (projectedCrown.x + 1) / 2, y: (1 - projectedCrown.y) / 2,
             rx: headSize * 0.35 / camera.aspect, ry: headSize * 0.26,
-            visible: !!head && !tickleActive && Math.cos(viewYaw - FRONT_YAW) > 0.35 && Math.abs(flipAngle) < 0.01,
+            visible: !!head && !helloActive && !tickleActive && Math.cos(viewYaw - FRONT_YAW) > 0.35 && Math.abs(flipAngle) < 0.01,
           };
         };
         animate();
@@ -858,7 +944,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready'} onClick={reactToPet}>ลูบหัว ♡</button>
       <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready' || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
-      <button type="button" className="axolotl-front-button" onClick={faceViewer}>หันมาหาเรา</button>
+      <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready' || restPhase !== 'awake'} onClick={sayHello} aria-label="ทักทาย โบกมือและแตะกระจก">ทักทาย</button>
+      <button type="button" className="axolotl-front-button" onClick={faceViewer} aria-label="หันมาหาเรา">มองเรา</button>
     </div>
   </div>;
 }

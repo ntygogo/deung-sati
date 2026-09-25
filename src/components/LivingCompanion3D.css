@@ -15,6 +15,6 @@
 @keyframes companion-heart{0%{opacity:0;transform:translateY(13px) scale(.5) rotate(-10deg)}35%{opacity:1;transform:translateY(0) scale(1.15) rotate(5deg)}100%{opacity:0;transform:translateY(-42px) scale(.85) rotate(9deg)}}
 @media(prefers-reduced-motion:reduce){.living-companion-loading,.living-companion-heart{animation:none}.living-companion-heart{opacity:1}}
 
-.axolotl-viewer-controls { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 6px; }
-.axolotl-viewer-controls .axolotl-front-button { position: static; transform: none; }
+.axolotl-viewer-controls { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 4px; width: max-content; max-width: 100%; }
+.axolotl-viewer-controls .axolotl-front-button { position: static; transform: none; padding-inline: 6px; }
 .axolotl-front-button:disabled { opacity: 0.5; cursor: default; }
