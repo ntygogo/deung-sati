@@ -39,7 +39,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       <div className="room-companion">
         <span className="room-pedestal" aria-hidden="true" />
         {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" /> :
-          <div className="dreamy-hatched-garden" data-paused={paused}>
+          <div className={`dreamy-hatched-garden${previewAxolotl ? ' axolotl-stage' : ''}`} data-paused={paused}>
             {previewAxolotl ? <AxolotlWaterPreview paused={paused} /> : <LivingCompanion3D paused={paused} command={companionCommand} />}
           </div>}
       </div>

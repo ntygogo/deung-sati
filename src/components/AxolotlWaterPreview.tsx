@@ -13,6 +13,8 @@ const WALK_END = WALK_START + WALK_STEPS * STEP_SECONDS + WALK_PAUSE;
 const SLEEP_SETTLE_DURATION = WALK_END + 4.7;
 const WAKE_DURATION = 7;
 type RestPhase = 'awake' | 'settling' | 'sleeping' | 'waking';
+const FALLBACK_SPRITES = { idle: [20, 5], hello: [72, 6], rest: [66, 3], tickle: [48, 5], flip: [26, 8], content: [16, 5], squish: [16, 5], blep: [16, 5], orbit: [8, 1] } as const;
+type FallbackClip = keyof typeof FALLBACK_SPRITES;
 type Reaction = 'content' | 'squish' | 'blep' | 'flip' | 'tickle' | 'hello';
 const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish', 'flip', 'hello'];
 // The eye line on this Meshy export is turned about 21 degrees from +Z.
@@ -30,6 +32,9 @@ const GILLS = [
 
 export function AxolotlWaterPreview({ paused = false }: Props) {
   const mountRef = useRef<HTMLSpanElement>(null);
+  const fallbackCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [fallbackReady, setFallbackReady] = useState(false);
+  const [fallbackFailed, setFallbackFailed] = useState(false);
   const pausedRef = useRef(paused);
   const touchedRef = useRef(-100);
   const elapsedRef = useRef(0);
@@ -50,6 +55,80 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
+  const canPlay = status === 'ready' || fallbackReady;
+
+  // Same Meshy model, pre-rendered from the 3D rig for browsers without WebGL.
+  useEffect(() => {
+    if (status !== 'error') return;
+    let cancelled = false, frame = 0;
+    let last = performance.now();
+    const sheets = {} as Record<FallbackClip, HTMLImageElement>;
+    Promise.all((Object.keys(FALLBACK_SPRITES) as FallbackClip[]).map(async clip => {
+      const img = new Image();
+      img.src = `/sprites/axolotl-water/${clip}.webp`;
+      await img.decode();
+      sheets[clip] = img;
+    })).then(() => {
+      if (cancelled) return;
+      setFallbackReady(true);
+      const paint = (now: number) => {
+        frame = requestAnimationFrame(paint);
+        const dt = Math.min((now - last) / 1000, 0.05);
+        last = now;
+        if (!pausedRef.current && !document.hidden) elapsedRef.current += dt;
+        const t = elapsedRef.current;
+        const rest = restRef.current;
+        if (rest.phase === 'awake' && t - lastActivityRef.current > 180 && !dragRef.current) {
+          restRef.current = { phase: 'settling', started: t, wakeAge: 0 };
+          setRestPhase('settling');
+        }
+        let clip: FallbackClip = 'idle', index = Math.floor(t * FALLBACK_SPRITES.idle[1]) % FALLBACK_SPRITES.idle[0];
+        const currentRest = restRef.current;
+        if (currentRest.phase !== 'awake') {
+          const restAge = currentRest.phase === 'waking' ? currentRest.wakeAge : t - currentRest.started;
+          const frames = FALLBACK_SPRITES.rest;
+          clip = 'rest';
+          index = Math.min(frames[0] - 1, Math.floor(restAge * frames[1]));
+          if (currentRest.phase === 'settling' && restAge >= SLEEP_SETTLE_DURATION) {
+            currentRest.phase = 'sleeping';
+            setRestPhase('sleeping');
+          }
+          if (currentRest.phase === 'waking') {
+            const awakeAge = t - currentRest.started;
+            index = Math.max(0, Math.floor((1 - Math.min(1, awakeAge / WAKE_DURATION)) * index));
+            if (awakeAge >= WAKE_DURATION) {
+              restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
+              lastActivityRef.current = t;
+              setRestPhase('awake');
+            }
+          }
+        } else {
+          const action = reactionRef.current;
+          const age = t - action.started;
+          if (age >= 0 && action.kind in FALLBACK_SPRITES && age < (action.kind === 'tickle' ? TICKLE_DURATION : action.kind === 'flip' ? FLIP_DURATION : action.kind === 'hello' ? HELLO_DURATION : 3.2)) {
+            clip = action.kind;
+            const [count, fps] = FALLBACK_SPRITES[clip];
+            index = Math.min(count - 1, Math.floor(age * fps));
+          } else if (Math.cos(orbitRef.current - FRONT_YAW) < 0.92) {
+            clip = 'orbit';
+            index = ((Math.round((orbitRef.current - FRONT_YAW) / (Math.PI / 4)) % 8) + 8) % 8;
+          }
+        }
+        const canvas = fallbackCanvasRef.current;
+        const context = canvas?.getContext('2d');
+        if (context && canvas) {
+          const frameWidth = 300, frameHeight = 315;
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(sheets[clip], (index % 8) * frameWidth, Math.floor(index / 8) * frameHeight,
+            frameWidth, frameHeight, 0, 0, canvas.width, canvas.height);
+        }
+        headHitRef.current = { x: 0.67, y: 0.48, rx: 0.18, ry: 0.19,
+          visible: clip === 'idle' && Math.cos(orbitRef.current - FRONT_YAW) > 0.35 };
+      };
+      frame = requestAnimationFrame(paint);
+    }).catch(error => { console.error('Unable to load axolotl frames', error); if (!cancelled) setFallbackFailed(true); });
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [status]);
 
   const wakeFromRest = () => {
     const t = elapsedRef.current;
@@ -65,7 +144,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   };
 
   const toggleRest = () => {
-    if (pausedRef.current || status !== 'ready') return;
+    if (pausedRef.current || !canPlay) return;
     if (wakeFromRest()) return;
     const t = elapsedRef.current;
     const reaction = reactionRef.current;
@@ -79,7 +158,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   };
 
   const registerRapidPet = () => {
-    if (pausedRef.current || status !== 'ready') return false;
+    if (pausedRef.current || !canPlay) return false;
     if (wakeFromRest()) return true;
     const t = elapsedRef.current;
     const previous = reactionRef.current;
@@ -97,7 +176,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   };
 
   const reactToPet = () => {
-    if (pausedRef.current || status !== 'ready') return;
+    if (pausedRef.current || !canPlay) return;
     if (registerRapidPet()) return;
     const t = elapsedRef.current;
     const previous = reactionRef.current;
@@ -111,7 +190,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   };
 
   const sayHello = () => {
-    if (pausedRef.current || status !== 'ready' || wakeFromRest()) return;
+    if (pausedRef.current || !canPlay || wakeFromRest()) return;
     const t = elapsedRef.current, previous = reactionRef.current;
     if ((previous.kind === 'flip' && t - previous.started < FLIP_DURATION)
       || (previous.kind === 'tickle' && t - previous.started < TICKLE_DURATION)
@@ -939,12 +1018,13 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
       reactToPet();
     }}>
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
-    {status !== 'ready' && <span role="status" className="companion-model-message">{status === 'error' ? 'โหลดตัวอย่าง 3D ไม่ได้' : 'กำลังพาน้องมาหา…'}</span>}
+    {status === 'error' && <canvas ref={fallbackCanvasRef} className="axolotl-fallback-canvas" width={300} height={315} aria-hidden="true" />}
+    {!canPlay && <span role="status" className="companion-model-message">{fallbackFailed ? 'อุปกรณ์นี้ยังแสดงน้องไม่ได้' : 'กำลังพาน้องมาหา…'}</span>}
     </button>
     <div className="axolotl-viewer-controls">
-      <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready'} onClick={reactToPet}>ลูบหัว ♡</button>
-      <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready' || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
-      <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready' || restPhase !== 'awake'} onClick={sayHello} aria-label="ทักทาย โบกมือและแตะกระจก">ทักทาย</button>
+      <button type="button" className="axolotl-front-button" disabled={paused || !canPlay} onClick={reactToPet}>ลูบหัว ♡</button>
+      <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
+      <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase !== 'awake'} onClick={sayHello} aria-label="ทักทาย โบกมือและแตะกระจก">ทักทาย</button>
       <button type="button" className="axolotl-front-button" onClick={faceViewer} aria-label="หันมาหาเรา">มองเรา</button>
     </div>
   </div>;
