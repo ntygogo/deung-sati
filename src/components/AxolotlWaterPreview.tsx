@@ -4,7 +4,7 @@ import './LivingCompanion3D.css';
 type Props = { paused?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
-const HELLO_DURATION = 11.8;
+const HELLO_DURATION = 13.6;
 const WALK_START = 1.8;
 const WALK_STEPS = 32;
 const STEP_SECONDS = 0.45;
@@ -626,10 +626,10 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const ticklePose = tickleActive && !reducedMotion.matches;
             helloActive = reaction.kind === 'hello' && age >= 0 && age < HELLO_DURATION;
             const hello = helloActive ? 1 : 0;
-            const helloGround = hello * smooth(age, 0, 0.8) * (1 - smooth(age, 10.6, HELLO_DURATION));
-            const stand = hello * smooth(age, 0.78, 2.3) * (1 - smooth(age, 9.6, 11.05));
+            const helloGround = hello * smooth(age, 0, 0.8) * (1 - smooth(age, 12.3, HELLO_DURATION));
+            const stand = hello * smooth(age, 0.78, 2.3) * (1 - smooth(age, 11.4, 12.85));
             const wave = hello * smooth(age, 2.45, 2.85) * (1 - smooth(age, 5.65, 6.1));
-            const glass = hello * smooth(age, 6.0, 6.8) * (1 - smooth(age, 8.7, 9.5));
+            const glass = hello * smooth(age, 6.0, 6.8) * (1 - smooth(age, 10.7, 11.4));
             const waveBeat = Math.sin((age - 2.85) * (reducedMotion.matches ? 5.2 : 8.8));
             const crouch = hello * smooth(age, 0.12, 0.38) * (1 - smooth(age, 0.78, 1.2));
             const risePush = hello * smooth(age, 0.75, 1.15) * (1 - smooth(age, 1.55, 2.2));
@@ -833,12 +833,16 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 const foot = walkingFeet[i];
                 foot.chain[0].getWorldPosition(shoulderPoint);
                 const side = i === 0 ? 1 : -1;
-                foot.target.copy(shoulderPoint).addScaledVector(screenForward, 0.17 + glass * 0.055 + (i === 0 ? wave * 0.055 : 0));
-                foot.target.addScaledVector(flipAxis, side * (0.075 + (i === 0 ? wave * (0.095 + waveBeat * 0.07) : 0)));
-                foot.target.y += 0.035 + glass * 0.025 + (i === 0 ? wave * (0.21 + waveBeat * 0.065) : 0);
+                // Alternate two gentle taps per paw, then hold both against the glass.
+                const tapAge = age - (6.75 + i * 0.58);
+                const tap = (start: number) => smooth(tapAge, start, start + 0.25) * (1 - smooth(tapAge, start + 0.48, start + 0.78));
+                const press = glass * Math.max(tap(0), tap(1.45), smooth(age, 9.85, 10.2));
+                foot.target.copy(shoulderPoint).addScaledVector(screenForward, 0.17 + glass * 0.015 + press * 0.105 + (i === 0 ? wave * 0.055 : 0));
+                foot.target.addScaledVector(flipAxis, side * (0.075 + glass * 0.07 + (i === 0 ? wave * (0.095 + waveBeat * 0.07) : 0)));
+                foot.target.y += 0.035 + glass * 0.055 + press * 0.025 + (i === 0 ? wave * (0.21 + waveBeat * 0.065) : 0);
                 foot.tip.getWorldPosition(localTip);
                 foot.target.lerpVectors(localTip, foot.target, stand);
-                solvePaw(foot, i === 0 ? wave * 0.23 : 0);
+                solvePaw(foot, Math.max(glass * 0.18, i === 0 ? wave * 0.23 : 0));
                 if (i === 0 && wave > 0) {
                   // This paw is free in the air: let the shoulder and wrist swing
                   // after IK rather than pinning the wave to a nearly fixed point.
@@ -846,17 +850,21 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                   bendBody('Bone_031', wave * (0.12 + waveBeat * 0.16));
                   foot.chain[0].updateMatrixWorld(true);
                 }
+                if (press > 0) {
+                  bendBody(i === 0 ? 'Bone_030' : 'Bone_025', -press * 0.18);
+                  foot.chain[0].updateMatrixWorld(true);
+                }
                 foot.tip.getWorldPosition(handGlows[i].position);
                 handGlows[i].position.addScaledVector(screenForward, 0.015);
-                handGlows[i].material.opacity = glass * 0.42;
-                handGlows[i].scale.setScalar(1 + glass * 0.12);
+                handGlows[i].material.opacity = press * 0.46;
+                handGlows[i].scale.setScalar(0.9 + press * 0.25);
               }
             }
             if (planting > 0) {
               scene.updateMatrixWorld(true);
               plantWalkingFeet(walkStep, planting);
             }
-            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : helloActive ? (age < 2.45 ? 'standing-up' : age < 6.1 ? 'waving' : age < 9.5 ? 'touching-glass' : 'lowering') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : flipping ? 'flip' : age < 3.2 && age >= 0 && (reaction.kind === 'content' || reaction.kind === 'squish' || reaction.kind === 'blep') ? reaction.kind : 'idle');
+            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : helloActive ? (age < 2.45 ? 'standing-up' : age < 6.1 ? 'waving' : age < 11.4 ? 'touching-glass' : 'lowering') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : flipping ? 'flip' : age < 3.2 && age >= 0 && (reaction.kind === 'content' || reaction.kind === 'squish' || reaction.kind === 'blep') ? reaction.kind : 'idle');
             if (waking && wakeAge >= WAKE_DURATION) {
               restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
               lastActivityRef.current = t;
