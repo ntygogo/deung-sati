@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { LivingCompanion3D } from './LivingCompanion3D';
 
 export interface GrowthDnaProps {
   primary_pink_shade?: string;
@@ -658,27 +659,8 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
         }}
       />
 
-      {/* Form 1 Master Candidate Asset with Floating & Glow */}
-      <img
-        src="/images/companion_form1.png"
-        alt="สหายสติ ร่าง 1"
-        className="form1AxolotlAsset"
-        data-testid="companion-form1-asset"
-        style={{
-          width: size * 0.95,
-          height: size * 0.95,
-          objectFit: 'contain',
-          position: 'relative',
-          zIndex: 5,
-          animation: 'form1FloatSoft 4.5s ease-in-out infinite alternate',
-          filter: isInteracting
-            ? 'drop-shadow(0 0 22px rgba(251, 191, 36, 0.65)) drop-shadow(0 12px 28px rgba(244, 114, 182, 0.55))'
-            : 'drop-shadow(0 0 12px rgba(244, 114, 182, 0.35)) drop-shadow(0 8px 20px rgba(168, 85, 247, 0.2))',
-          transform: isInteracting ? 'scale(1.08) translateY(-6px)' : 'scale(1)',
-          transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease',
-          pointerEvents: 'none',
-        }}
-      />
+      {/* Optimized rigged model; movement is driven in-app while Meshy's motion library is unavailable. */}
+      <LivingCompanion3D className="form1AxolotlAsset" />
 
       {/* Floating Particles upon Petting */}
       {particles.map((p) => (

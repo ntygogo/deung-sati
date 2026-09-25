@@ -5,6 +5,11 @@ import App from './App';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { CompanionProvider } from './context/CompanionContext';
+import { AppearanceLab } from './components/AppearanceLab';
+
+if (new URLSearchParams(window.location.search).get('view') === 'appearance-lab') {
+  createRoot(document.getElementById('root')!).render(<AppearanceLab />);
+} else {
 
 function AccountApp() {
   const { currentUser, isLoading } = useAuth();
@@ -23,3 +28,4 @@ createRoot(document.getElementById('root')!).render(
     </AuthProvider>
   </StrictMode>,
 );
+}
