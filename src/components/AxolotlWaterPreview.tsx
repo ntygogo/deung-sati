@@ -4,6 +4,9 @@ import './LivingCompanion3D.css';
 type Props = { paused?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
+const SLEEP_SETTLE_DURATION = 11;
+const WAKE_DURATION = 7;
+type RestPhase = 'awake' | 'settling' | 'sleeping' | 'waking';
 type Reaction = 'content' | 'squish' | 'blep' | 'flip' | 'tickle';
 const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish', 'flip'];
 // The eye line on this Meshy export is turned about 21 degrees from +Z.
@@ -32,6 +35,9 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   const rapidPetsRef = useRef<number[]>([]);
   const lastTickleRef = useRef(-100);
   const strokeRef = useRef(-100);
+  const restRef = useRef<{ phase: RestPhase; started: number; wakeAge: number }>({ phase: 'awake', started: 0, wakeAge: 0 });
+  const lastActivityRef = useRef(0);
+  const [restPhase, setRestPhase] = useState<RestPhase>('awake');
   const headHitRef = useRef({ x: 0, y: 0, rx: 0, ry: 0, visible: false });
   const dragRef = useRef<{ id: number; x: number; y: number; yaw: number; moved: boolean; pet: boolean; lastX: number; lastY: number; distance: number; direction: number; travel: number } | null>(null);
   const suppressClickRef = useRef(false);
@@ -39,8 +45,35 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
+  const wakeFromRest = () => {
+    const t = elapsedRef.current;
+    lastActivityRef.current = t;
+    const resting = restRef.current;
+    if (resting.phase === 'awake') return false;
+    if (resting.phase !== 'waking') {
+      restRef.current = { phase: 'waking', started: t, wakeAge: t - resting.started };
+      rapidPetsRef.current = [];
+      setRestPhase('waking');
+    }
+    return true;
+  };
+
+  const toggleRest = () => {
+    if (pausedRef.current || status !== 'ready') return;
+    if (wakeFromRest()) return;
+    const t = elapsedRef.current;
+    const reaction = reactionRef.current;
+    if ((reaction.kind === 'tickle' && t - reaction.started < TICKLE_DURATION)
+      || (reaction.kind === 'flip' && t - reaction.started < FLIP_DURATION)) return;
+    restRef.current = { phase: 'settling', started: t, wakeAge: 0 };
+    reactionRef.current = { kind: 'content', started: -100 };
+    rapidPetsRef.current = [];
+    setRestPhase('settling');
+  };
+
   const registerRapidPet = () => {
     if (pausedRef.current || status !== 'ready') return false;
+    if (wakeFromRest()) return true;
     const t = elapsedRef.current;
     const previous = reactionRef.current;
     if ((previous.kind === 'tickle' && t - previous.started < TICKLE_DURATION)
@@ -360,6 +393,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           const bone = bones.get(name), axis = kickAxes.get(name);
           if (bone && axis) bone.quaternion.multiply(delta.setFromAxisAngle(axis, angle));
         };
+        const sideAxes = new Map(names.map(name => {
+          const orientation = bones.get(name)?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
+          return [name, new THREE.Vector3(0, 1, 0).applyQuaternion(orientation.invert())] as const;
+        }));
+        const curlSideways = (name: typeof names[number], angle: number) => {
+          const bone = bones.get(name), axis = sideAxes.get(name);
+          if (bone && axis) bone.quaternion.multiply(delta.setFromAxisAngle(axis, angle));
+        };
         // A small sample of the torso/head surface anchors the roll to the floor.
         // Ignore the flexible gills, antenna and tail when finding back contact.
         const contactPoints = faces.map(mesh => {
@@ -401,7 +442,36 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const t = elapsedRef.current;
             // A quiet current travels from the base toward the tail tip.
             // A second slower current prevents a short, visibly repeated loop.
-            const motion = reducedMotion.matches ? 0.15 : 1;
+            const smooth = THREE.MathUtils.smoothstep;
+            let resting = restRef.current;
+            if (resting.phase === 'awake' && t - lastActivityRef.current > 180 && !dragRef.current) {
+              resting = restRef.current = { phase: 'settling', started: t, wakeAge: 0 };
+              reactionRef.current = { kind: 'content', started: -100 };
+              setRestPhase('settling');
+            }
+            const waking = resting.phase === 'waking';
+            const wakeAge = waking ? t - resting.started : 0;
+            const restAge = resting.phase === 'awake' ? 0 : waking ? resting.wakeAge : t - resting.started;
+            if (resting.phase === 'settling' && restAge >= SLEEP_SETTLE_DURATION) {
+              resting.phase = 'sleeping';
+              setRestPhase('sleeping');
+            }
+            const awakeBlend = waking ? smooth(wakeAge, 5, WAKE_DURATION) : 0;
+            const restGround = smooth(restAge, 0, 1.3) * (1 - awakeBlend);
+            const uncoil = waking ? 1 - smooth(wakeAge, 0.6, 3.2) : 1;
+            const restCurl = smooth(restAge, 5.8, 8.3) * uncoil;
+            const lieDown = smooth(restAge, 7, 10) * uncoil;
+            const sleepy = smooth(restAge, 8.4, 10.8) * (waking ? 1 - smooth(wakeAge, 0.1, 1.3) : 1);
+            const stretch = waking ? smooth(wakeAge, 2.7, 3.6) * (1 - smooth(wakeAge, 4.2, 5.1)) : 0;
+            const circleProgress = reducedMotion.matches ? 0 : smooth(restAge, 1.3, 6.3);
+            const circleAngle = circleProgress * Math.PI * 2;
+            const walk = reducedMotion.matches ? 0 : smooth(restAge, 1.3, 2) * (1 - smooth(restAge, 5.4, 6.3))
+              * (waking ? 1 - smooth(wakeAge, 0, 0.7) : 1);
+            // Unwind through the shortest turn if the user interrupts the circle.
+            const restYaw = circleAngle + (waking ? Math.atan2(-Math.sin(circleAngle), Math.cos(circleAngle)) * smooth(wakeAge, 0.4, 3.2) : 0);
+            const pathBlend = waking ? 1 - smooth(wakeAge, 0.4, 3.2) : 1;
+            const stepPhase = circleProgress * Math.PI * 12;
+            const motion = (reducedMotion.matches ? 0.15 : 1) * (1 - lieDown * 0.78);
             const touchAge = t - touchedRef.current;
             const greeting = touchAge > 0 && touchAge < 2.8 ? Math.sin(Math.PI * touchAge / 2.8) : 0;
             const reaction = reactionRef.current;
@@ -418,11 +488,11 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const laughing = tickleActive ? THREE.MathUtils.smoothstep(age, 0.15, 1.25) * (1 - THREE.MathUtils.smoothstep(age, 3.65, 4.5)) : 0;
             const wriggle = reducedMotion.matches ? 0 : laughing;
             const tired = tickleActive ? THREE.MathUtils.smoothstep(age, 4.1, 4.7) * (1 - THREE.MathUtils.smoothstep(age, 6.5, 8)) : 0;
-            const stroking = !tickleActive && t - strokeRef.current < 0.3;
+            const stroking = resting.phase === 'awake' && !tickleActive && t - strokeRef.current < 0.3;
             affection += ((stroking ? 1 : 0) - affection) * (1 - Math.exp(-dt * (stroking ? 5 : 2.8)));
             const content = Math.max(affection, reaction.kind === 'content' ? envelope : 0, tired * 0.85);
-            const response = Math.max(greeting, affection, laughing * 0.8);
-            const squint = Math.max(reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)));
+            const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22);
+            const squint = Math.max(reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)), sleepy * 0.35);
             squish.value += (squint - squish.value) * (1 - Math.exp(-dt * 12));
             const blep = Math.max(reaction.kind === 'blep' ? envelope : 0, tired * 0.6);
             tongue.visible = blep > 0.01;
@@ -445,7 +515,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             }
             const blinkAge = t - blinkStarted;
             const blink = blinkAge < 0.24 ? Math.sin(Math.PI * Math.max(0, blinkAge) / 0.24) ** 2 : 0;
-            eyelids.value = Math.max(reducedMotion.matches ? 0 : blink, content * 0.98, blep * 0.3);
+            eyelids.value = Math.max(reducedMotion.matches ? 0 : blink, content * 0.98, blep * 0.3, sleepy);
             faces.forEach(mesh => {
               if (!mesh.morphTargetInfluences) return;
               mesh.morphTargetInfluences[0] = response * (1 - squish.value * 0.7);
@@ -463,6 +533,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               const tailCurl = flipping ? THREE.MathUtils.smoothstep(age, 0.83 + index * 0.035, 1.23 + index * 0.035)
                 * (1 - THREE.MathUtils.smoothstep(age, 1.85 + index * 0.04, 2.4 + index * 0.04)) : 0;
               bendBody(bone, -tailCurl * (0.42 + index * 0.02));
+              const tailRest = smooth(restAge, 5.8 + index * 0.13, 8.3 + index * 0.13) * uncoil;
+              curlSideways(bone, tailRest * (0.54 - index * 0.035));
             });
             GILLS.forEach(({ root, tip, phase, side }) => {
               const follow = flipping ? Math.sin((age - phase * 0.06) * 4.2) * Math.sin(Math.PI * flight) * 0.035 : 0;
@@ -491,6 +563,18 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 kickLeg(name, angle);
                 continue;
               }
+              if (resting.phase !== 'awake') {
+                const leg = i % 4, front = leg < 2;
+                // Four staggered footfalls; lift the knee only on the swing half.
+                const phase = stepPhase + [0, Math.PI, Math.PI * 1.5, Math.PI * 0.5][leg];
+                const swing = Math.sin(phase);
+                const fold = front ? 1 : -1;
+                const angle = i < 4
+                  ? walk * swing * 0.24 + -fold * lieDown * 0.4 + (front ? 0.26 : -0.12) * stretch
+                  : -walk * Math.max(0, swing) * 0.34 + -fold * lieDown * 1.0 + (front ? -0.45 : 0.12) * stretch;
+                kickLeg(name, angle);
+                continue;
+              }
               if (i < 4 && !ticklePose) continue;
               const leg = i % 4, rear = leg >= 2;
               const phase = age * (rear ? 12.4 : 9.6) + leg * 2.25 + Math.sin(age * 1.8 + leg) * 0.3;
@@ -504,19 +588,25 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             for (const [name, angle] of [['Bone_006', 0.22], ['Bone_005', 0.26], ['Bone_004', 0.18], ['Bone_003', -0.22], ['Bone_002', -0.25]] as const) {
               pose(name, 0, 0, 0);
               bendBody(name, curl * angle);
+              curlSideways(name, restCurl * (name === 'Bone_003' || name === 'Bone_002' ? -0.13 : 0.09));
+              bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
-            bendBody('Bone_036', curl * 0.3);
-            bendBody('Bone_035', curl * 0.3);
-            bendBody('Bone_034', curl * 0.33 - launch * 0.06);
+            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18);
+            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16);
+            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13);
+            curlSideways('Bone_036', -restCurl * 0.1);
+            curlSideways('Bone_035', -restCurl * 0.12);
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
-            if (antennaBase) antennaBase.quaternion.multiply(delta.setFromAxisAngle(antennaLieAxis, belly * 1.4));
+            if (antennaBase) antennaBase.quaternion.multiply(delta.setFromAxisAngle(antennaLieAxis, belly * 1.4 + lieDown * 0.1));
             pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018 + (flipping ? Math.sin(age * 5 - 0.8) * Math.sin(Math.PI * flight) * 0.035 : 0));
             // Inhale brightens the antenna; exhale releases it gradually.
             const breath = (1 + Math.sin(t * 1.3 - 0.4)) / 2;
+            const sleepBreath = (1 + Math.sin(t * 1.05 - 0.4)) / 2;
+            const glowBreath = THREE.MathUtils.lerp(breath, sleepBreath, sleepy);
             const shimmer = 0.035 * Math.sin(t * 3.2) * Math.sin(t * 2.1);
-            glowMaterial.opacity = 0.31 + motion * (0.33 * breath + shimmer);
-            halo.scale.setScalar(0.34 + motion * 0.12 * breath);
-            light.intensity = 0.24 + motion * 0.24 * breath;
+            glowMaterial.opacity = 0.31 + motion * (0.33 * glowBreath + shimmer);
+            halo.scale.setScalar(0.34 + motion * 0.12 * glowBreath);
+            light.intensity = 0.24 + motion * 0.24 * glowBreath;
             pivot.position.y = motion * (Math.sin(t * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
             pivot.position.y += jumpHeight - anticipation * 0.13 - settle * 0.04;
             const squash = anticipation * 0.055 + settle * 0.025;
@@ -524,13 +614,22 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const pant = motion * tired * Math.sin(age * 7.5) * 0.012;
             pivot.scale.y += pant;
             pivot.scale.z -= pant * 0.35;
+            pivot.scale.y += lieDown * (sleepBreath - 0.5) * 0.018;
+            pivot.position.x = (1 - Math.cos(circleAngle)) * 0.12 * pathBlend;
+            pivot.position.z = Math.sin(circleAngle) * 0.12 * pathBlend;
             pivot.quaternion.setFromAxisAngle(flipAxis, -flipAngle)
               .multiply(delta.setFromEuler(euler.set(0, motion * Math.sin(t * 0.39) * 0.013, 0)));
+            if (resting.phase !== 'awake') {
+              pivot.quaternion.premultiply(delta.setFromAxisAngle(new THREE.Vector3(0, 1, 0), restYaw));
+              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase) * 0.025));
+            }
             if (ticklePose) {
               // Roll onto the back, rest, then unwind onto the paws before rising.
               const roll = belly * (Math.PI * 0.91 + wriggle * Math.sin(age * 7.1) * 0.10);
               pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, roll));
               pivot.quaternion.multiply(delta.setFromAxisAngle(flipAxis, belly * 0.12));
+            }
+            if (ticklePose || restGround > 0) {
               pivot.position.y = 0;
               scene.updateMatrixWorld(true);
               let lowest = Infinity;
@@ -544,9 +643,15 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               }
               const floorY = -0.68;
               const floorOffset = Number.isFinite(lowest) ? floorY - lowest : -0.3;
-              pivot.position.y = THREE.MathUtils.lerp(Math.sin(t * 1.3) * 0.018, floorOffset, grounded);
+              pivot.position.y = THREE.MathUtils.lerp(Math.sin(t * 1.3) * 0.018, floorOffset, Math.max(grounded, restGround));
+              pivot.position.y += walk * Math.abs(Math.sin(stepPhase * 2)) * 0.009;
             }
-            mount.parentElement?.setAttribute('data-reaction', tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' ? 'idle' : reaction.kind));
+            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < 6.3 ? 'circling' : restAge < 10.8 ? 'settling' : 'sleeping') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' ? 'idle' : reaction.kind));
+            if (waking && wakeAge >= WAKE_DURATION) {
+              restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
+              lastActivityRef.current = t;
+              setRestPhase('awake');
+            }
           }
           // Manual viewing remains available when animation is paused.
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
@@ -581,6 +686,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   }, []);
 
   const faceViewer = () => {
+    lastActivityRef.current = elapsedRef.current;
     const delta = FRONT_YAW - orbitRef.current;
     orbitRef.current += Math.atan2(Math.sin(delta), Math.cos(delta));
     gazeRef.current = 0;
@@ -590,6 +696,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     aria-label="ลูบหัวน้องเพื่อเล่นด้วย ลากบริเวณรอบตัวหรือใช้ลูกศรเพื่อหมุนดู กด Enter เพื่อให้น้องเล่น"
     onPointerDown={event => {
       if (event.button !== 0 || !event.isPrimary) return;
+      lastActivityRef.current = elapsedRef.current;
       suppressClickRef.current = false;
       const box = event.currentTarget.getBoundingClientRect();
       const hit = headHitRef.current;
@@ -616,6 +723,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         drag.lastX = event.clientX; drag.lastY = event.clientY;
         drag.distance += step;
         if (step > 0.5 && drag.distance > 6 && !pausedRef.current) {
+          wakeFromRest();
           strokeRef.current = elapsedRef.current;
           drag.moved = true;
           suppressClickRef.current = true;
@@ -641,6 +749,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     onKeyDown={event => {
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
+        lastActivityRef.current = elapsedRef.current;
         orbitRef.current += event.key === 'ArrowLeft' ? -0.25 : 0.25;
       }
       if (event.key === 'Home') { event.preventDefault(); faceViewer(); }
@@ -654,6 +763,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     </button>
     <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready'} onClick={reactToPet}>ลูบหัว ♡</button>
+      <button type="button" className="axolotl-front-button" disabled={paused || status !== 'ready' || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
       <button type="button" className="axolotl-front-button" onClick={faceViewer}>หันมาหาเรา</button>
     </div>
   </div>;
