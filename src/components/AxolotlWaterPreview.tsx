@@ -44,29 +44,80 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.88;
         renderer.setClearColor(0x000000, 0);
         mount.appendChild(renderer.domElement);
-        scene.add(new THREE.HemisphereLight(0xfff9f2, 0x9c88ae, 2.5));
-        const key = new THREE.DirectionalLight(0xffe9dc, 3);
+        scene.add(new THREE.HemisphereLight(0xfff9f2, 0x9c88ae, 1.25));
+        const key = new THREE.DirectionalLight(0xffe9dc, 1.4);
         key.position.set(3, 5, 4);
         scene.add(key);
-        const rim = new THREE.DirectionalLight(0xd7dfff, 1.6);
+        const rim = new THREE.DirectionalLight(0xd7dfff, 0.6);
         rim.position.set(-3, 2, -3);
         scene.add(rim);
 
         const gltf = await new GLTFLoader().loadAsync('/models/deung-sati-axolotl-water.glb');
         const model = gltf.scene;
-        const pearl = new THREE.MeshPhysicalMaterial({ color: 0xffe5ed, roughness: 0.65, metalness: 0, clearcoat: 0.12, side: THREE.DoubleSide });
+        // The supplied GLB is untextured. Tint regions by their skin weights so
+        // the gills read separately without changing the source geometry.
+        const pearl = new THREE.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.78, metalness: 0, clearcoat: 0.05, side: THREE.DoubleSide });
         model.traverse(object => {
           if ((object as import('three').Mesh).isMesh) {
-            const mesh = object as import('three').Mesh;
+            const mesh = object as import('three').SkinnedMesh;
+            const geometry = mesh.geometry;
+            const positions = geometry.getAttribute('position');
+            const indices = geometry.getAttribute('skinIndex');
+            const weights = geometry.getAttribute('skinWeight');
+            const colors = new Float32Array(positions.count * 3);
+            const base = new THREE.Color(0xf2c3d0);
+            const gill = new THREE.Color(0xd888ae);
+            const lamp = new THREE.Color(0xffdfab);
+            const color = new THREE.Color();
+            const gillBones = new Set(['Bone_035', 'Bone_034', 'Bone_037', 'Bone_036', 'Bone_039', 'Bone_038', 'Bone_041', 'Bone_040']);
+            const gillJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => gillBones.has(bone.name) ? [index] : []));
+            const lampJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => ['Bone_042', 'Bone_043'].includes(bone.name) ? [index] : []));
+            for (let i = 0; i < positions.count; i++) {
+              let gillWeight = 0;
+              let lampWeight = 0;
+              if (indices && weights) for (let j = 0; j < 4; j++) {
+                const joint = indices.getComponent(i, j);
+                const weight = weights.getComponent(i, j);
+                if (gillJoints.has(joint)) gillWeight += weight;
+                if (lampJoints.has(joint)) lampWeight += weight;
+              }
+              color.copy(base).lerp(gill, Math.min(0.85, gillWeight * 0.65)).lerp(lamp, Math.min(1, lampWeight));
+              color.toArray(colors, i * 3);
+            }
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             mesh.material = pearl;
             mesh.frustumCulled = false;
           }
         });
+        const antennaTip = model.getObjectByName('Bone_042');
+        const glowCanvas = document.createElement('canvas');
+        glowCanvas.width = glowCanvas.height = 128;
+        const context = glowCanvas.getContext('2d');
+        if (!context) throw new Error('Unable to make antenna glow');
+        const gradient = context.createRadialGradient(64, 64, 4, 64, 64, 64);
+        gradient.addColorStop(0, 'rgba(255,248,214,1)');
+        gradient.addColorStop(0.2, 'rgba(255,213,158,0.75)');
+        gradient.addColorStop(1, 'rgba(255,180,130,0)');
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 128, 128);
+        const glowTexture = new THREE.CanvasTexture(glowCanvas);
+        const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.48 });
+        const halo = new THREE.Sprite(glowMaterial);
+        halo.position.set(0, 0.065, 0);
+        halo.scale.setScalar(0.42);
+        antennaTip?.add(halo);
+        const light = new THREE.PointLight(0xffd7a6, 0.32, 0.7);
+        light.position.copy(halo.position);
+        antennaTip?.add(light);
         disposeModel = () => {
           model.traverse(object => { if ((object as import('three').Mesh).isMesh) (object as import('three').Mesh).geometry.dispose(); });
           pearl.dispose();
+          glowMaterial.dispose();
+          glowTexture.dispose();
         };
         if (disposed) { disposeModel(); return; }
         const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
@@ -131,6 +182,12 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             pose('Bone_031', 0, 0, motion * Math.sin(t * 1.12 - 0.85) * 0.022);
             pose('Bone_049', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
             pose('Bone_048', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018);
+            // Inhale brightens the antenna; exhale releases it gradually.
+            const breath = (1 + Math.sin(t * 1.3 - 0.4)) / 2;
+            const shimmer = 0.035 * Math.sin(t * 3.2) * Math.sin(t * 2.1);
+            glowMaterial.opacity = 0.31 + motion * (0.33 * breath + shimmer);
+            halo.scale.setScalar(0.34 + motion * 0.12 * breath);
+            light.intensity = 0.24 + motion * 0.24 * breath;
             pivot.position.y = motion * (Math.sin(t * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
             pivot.rotation.y = motion * Math.sin(t * 0.39) * 0.013;
           }
