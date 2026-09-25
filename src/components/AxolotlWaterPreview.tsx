@@ -4,7 +4,12 @@ import './LivingCompanion3D.css';
 type Props = { paused?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
-const SLEEP_SETTLE_DURATION = 11;
+const WALK_START = 1.8;
+const WALK_STEPS = 32;
+const STEP_SECONDS = 0.45;
+const WALK_PAUSE = 0.65;
+const WALK_END = WALK_START + WALK_STEPS * STEP_SECONDS + WALK_PAUSE;
+const SLEEP_SETTLE_DURATION = WALK_END + 4.7;
 const WAKE_DURATION = 7;
 type RestPhase = 'awake' | 'settling' | 'sleeping' | 'waking';
 type Reaction = 'content' | 'squish' | 'blep' | 'flip' | 'tickle';
@@ -368,7 +373,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         pivot.add(model);
         scene.add(pivot);
 
-        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_036', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016', 'Bone_031', 'Bone_026', 'Bone_010', 'Bone_015', 'Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002'] as const;
+        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_036', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016', 'Bone_031', 'Bone_026', 'Bone_010', 'Bone_015', 'Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002', 'Bone_030', 'Bone_029', 'Bone_025', 'Bone_024', 'Bone_009', 'Bone_008', 'Bone_014', 'Bone_013'] as const;
         const bones = new Map(names.map(name => [name, model.getObjectByName(name)]));
         const rest = new Map([...bones].flatMap(([name, bone]) => bone ? [[name, bone.quaternion.clone()] as const] : []));
         const delta = new THREE.Quaternion();
@@ -400,6 +405,82 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         const curlSideways = (name: typeof names[number], angle: number) => {
           const bone = bones.get(name), axis = sideAxes.get(name);
           if (bone && axis) bone.quaternion.multiply(delta.setFromAxisAngle(axis, angle));
+        };
+        const upAxis = new THREE.Vector3(0, 1, 0);
+        const walkRotation = new THREE.Quaternion();
+        const walkPoint = (step: number, target: import('three').Vector3) => {
+          const angle = THREE.MathUtils.clamp(step / WALK_STEPS, 0, 1) * Math.PI * 2;
+          // The path tangent follows the model's authored forward direction.
+          return target.set((1 - Math.cos(angle)) * 0.24, 0, Math.sin(angle) * 0.24).applyAxisAngle(upAxis, FRONT_YAW);
+        };
+        const walkingFeet = [
+          { joints: ['Bone_032', 'Bone_031', 'Bone_030', 'Bone_029'], tip: 'Bone_028', offset: 2 },
+          { joints: ['Bone_027', 'Bone_026', 'Bone_025', 'Bone_024'], tip: 'Bone_023', offset: 0 },
+          { joints: ['Bone_011', 'Bone_010', 'Bone_009', 'Bone_008'], tip: 'Bone_007', offset: 1 },
+          { joints: ['Bone_016', 'Bone_015', 'Bone_014', 'Bone_013'], tip: 'Bone_012', offset: 3 },
+        ].map(leg => {
+          const tip = model.getObjectByName(leg.tip)!;
+          const neutral = pivot.worldToLocal(tip.getWorldPosition(new THREE.Vector3()));
+          const shoulder = model.getObjectByName(leg.joints[0])!;
+          const support = pivot.worldToLocal(shoulder.getWorldPosition(new THREE.Vector3()));
+          // Place paws beneath the body, leaving reach for the next curved step.
+          neutral.lerp(support, 0.3);
+          return { ...leg, tip, neutral, chain: leg.joints.map(name => model.getObjectByName(name)!), target: new THREE.Vector3() };
+        });
+        const footFrom = new THREE.Vector3(), footTo = new THREE.Vector3(), pathPoint = new THREE.Vector3();
+        const localTip = new THREE.Vector3(), localTarget = new THREE.Vector3();
+        const correction = new THREE.Quaternion(), beforeIK = new THREE.Quaternion();
+        const footPlant = (foot: typeof walkingFeet[number], step: number, target: import('three').Vector3) => {
+          const clamped = THREE.MathUtils.clamp(step, 0, WALK_STEPS);
+          walkRotation.setFromAxisAngle(upAxis, clamped / WALK_STEPS * Math.PI * 2);
+          target.copy(foot.neutral).applyQuaternion(walkRotation).add(walkPoint(clamped, pathPoint));
+          target.y = -0.635;
+          return target;
+        };
+        // CCD keeps stance paws planted while shoulders and hips travel over them.
+        // Each foot swings for one beat, then bears weight for the other three.
+        const plantWalkingFeet = (step: number, weight: number) => {
+          for (const foot of walkingFeet) {
+            const cycle = Math.floor((step - foot.offset) / 4);
+            const lift = cycle * 4 + foot.offset;
+            const phase = step - lift;
+            const previousPlant = lift < 4 ? 0 : lift - 1.5;
+            const nextPlant = lift < 0 ? 0 : lift + 2.5;
+            footPlant(foot, previousPlant, footFrom);
+            footPlant(foot, nextPlant, footTo);
+            foot.target.copy(footFrom).lerp(footTo, THREE.MathUtils.smoothstep(phase, 0, 1));
+            if (lift >= 0 && phase < 1 && step < WALK_STEPS) foot.target.y += Math.sin(Math.PI * phase) * 0.075;
+            // Blend into/out of planted walking without snapping the existing pose.
+            foot.tip.getWorldPosition(localTip);
+            foot.target.lerpVectors(localTip, foot.target, weight);
+            for (let iteration = 0; iteration < 16; iteration++) {
+              for (let j = foot.chain.length - 1; j >= 0; j--) {
+                const joint = foot.chain[j];
+                foot.tip.getWorldPosition(localTip);
+                joint.worldToLocal(localTip).normalize();
+                localTarget.copy(foot.target);
+                joint.worldToLocal(localTarget).normalize();
+                correction.setFromUnitVectors(localTip, localTarget);
+                beforeIK.identity();
+                const turn = beforeIK.angleTo(correction);
+                if (turn > 0.22) {
+                  beforeIK.copy(correction);
+                  correction.identity().slerp(beforeIK, 0.22 / turn);
+                }
+                joint.quaternion.multiply(correction);
+                const initial = rest.get(foot.joints[j] as typeof names[number]);
+                if (initial) {
+                  const bend = initial.angleTo(joint.quaternion);
+                  const limit = j === 0 ? 1.15 : 1.8;
+                  if (bend > limit) {
+                    beforeIK.copy(joint.quaternion);
+                    joint.quaternion.copy(initial).slerp(beforeIK, limit / bend);
+                  }
+                }
+                joint.updateMatrixWorld(true);
+              }
+            }
+          }
         };
         // A small sample of the torso/head surface anchors the roll to the floor.
         // Ignore the flexible gills, antenna and tail when finding back contact.
@@ -459,18 +540,27 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const awakeBlend = waking ? smooth(wakeAge, 5, WAKE_DURATION) : 0;
             const restGround = smooth(restAge, 0, 1.3) * (1 - awakeBlend);
             const uncoil = waking ? 1 - smooth(wakeAge, 0.6, 3.2) : 1;
-            const restCurl = smooth(restAge, 5.8, 8.3) * uncoil;
-            const lieDown = smooth(restAge, 7, 10) * uncoil;
-            const sleepy = smooth(restAge, 8.4, 10.8) * (waking ? 1 - smooth(wakeAge, 0.1, 1.3) : 1);
+            const restCurl = smooth(restAge, WALK_END - 0.2, WALK_END + 2) * uncoil;
+            const lieDown = smooth(restAge, WALK_END + 0.8, WALK_END + 3.8) * uncoil;
+            const sleepy = smooth(restAge, WALK_END + 2.2, WALK_END + 4.5) * (waking ? 1 - smooth(wakeAge, 0.1, 1.3) : 1);
             const stretch = waking ? smooth(wakeAge, 2.7, 3.6) * (1 - smooth(wakeAge, 4.2, 5.1)) : 0;
-            const circleProgress = reducedMotion.matches ? 0 : smooth(restAge, 1.3, 6.3);
-            const circleAngle = circleProgress * Math.PI * 2;
-            const walk = reducedMotion.matches ? 0 : smooth(restAge, 1.3, 2) * (1 - smooth(restAge, 5.4, 6.3))
+            const walkClock = Math.max(0, restAge - WALK_START);
+            const pauseAt = STEP_SECONDS * 15;
+            const walkingTime = walkClock - THREE.MathUtils.clamp(walkClock - pauseAt, 0, WALK_PAUSE);
+            const rawStep = reducedMotion.matches ? 0 : THREE.MathUtils.clamp(walkingTime / STEP_SECONDS, 0, WALK_STEPS);
+            const beat = rawStep % 1;
+            const easedBeat = beat - Math.sin(beat * Math.PI * 2) / (Math.PI * 2) * 0.55;
+            const walkStep = Math.floor(rawStep) + easedBeat;
+            const circleAngle = walkStep / WALK_STEPS * Math.PI * 2;
+            const walk = reducedMotion.matches ? 0 : smooth(restAge, 1.3, WALK_START)
+              * (1 - smooth(restAge, WALK_END, WALK_END + 0.65))
               * (waking ? 1 - smooth(wakeAge, 0, 0.7) : 1);
-            // Unwind through the shortest turn if the user interrupts the circle.
             const restYaw = circleAngle + (waking ? Math.atan2(-Math.sin(circleAngle), Math.cos(circleAngle)) * smooth(wakeAge, 0.4, 3.2) : 0);
             const pathBlend = waking ? 1 - smooth(wakeAge, 0.4, 3.2) : 1;
-            const stepPhase = circleProgress * Math.PI * 12;
+            const stepPhase = walkStep * Math.PI / 2;
+            const searching = smooth(restAge, 1.3, 2.2) * (1 - smooth(restAge, WALK_END - 0.5, WALK_END + 0.5));
+            const leading = reducedMotion.matches ? 0 : searching * (0.075 + 0.035 * Math.sin(walkStep * 0.5));
+            const planting = walk * (waking ? 1 - smooth(wakeAge, 0, 0.4) : 1);
             const motion = (reducedMotion.matches ? 0.15 : 1) * (1 - lieDown * 0.78);
             const touchAge = t - touchedRef.current;
             const greeting = touchAge > 0 && touchAge < 2.8 ? Math.sin(Math.PI * touchAge / 2.8) : 0;
@@ -508,7 +598,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             flipAngle = turn * Math.PI * 2;
             const tuck = flipping ? Math.sin(Math.PI * turn) : 0;
             const curl = flipping ? THREE.MathUtils.smoothstep(age, 0.78, 1.18) * (1 - THREE.MathUtils.smoothstep(age, 1.85, 2.4)) : 0;
-            curlFraming = curl;
+            curlFraming = Math.max(curl, walk * 0.9);
             if (t >= nextBlink) {
               blinkStarted = t;
               nextBlink = t + 3.1 + Math.random() * 3.4;
@@ -533,8 +623,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               const tailCurl = flipping ? THREE.MathUtils.smoothstep(age, 0.83 + index * 0.035, 1.23 + index * 0.035)
                 * (1 - THREE.MathUtils.smoothstep(age, 1.85 + index * 0.04, 2.4 + index * 0.04)) : 0;
               bendBody(bone, -tailCurl * (0.42 + index * 0.02));
-              const tailRest = smooth(restAge, 5.8 + index * 0.13, 8.3 + index * 0.13) * uncoil;
-              curlSideways(bone, tailRest * (0.54 - index * 0.035));
+              const tailRest = smooth(restAge, WALK_END - 0.2 + index * 0.13, WALK_END + 2 + index * 0.13) * uncoil;
+              curlSideways(bone, tailRest * (0.54 - index * 0.035) - leading * (0.8 - index * 0.08));
             });
             GILLS.forEach(({ root, tip, phase, side }) => {
               const follow = flipping ? Math.sin((age - phase * 0.06) * 4.2) * Math.sin(Math.PI * flight) * 0.035 : 0;
@@ -552,6 +642,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             pose('Bone_027', tuck * 0.28 - launch * 0.14, 0, tuck * 0.12);
             pose('Bone_011', tuck * -0.18 + launch * 0.16, 0, -tuck * 0.1);
             pose('Bone_016', tuck * -0.18 + launch * 0.16, 0, tuck * 0.1);
+            for (const name of ['Bone_030', 'Bone_029', 'Bone_025', 'Bone_024', 'Bone_009', 'Bone_008', 'Bone_014', 'Bone_013']) pose(name, 0, 0, 0);
             // Rear legs kick more strongly; knees flex after the upper leg.
             // Phase offsets keep this from becoming a synchronized bicycle loop.
             for (const [i, name] of legNames.entries()) {
@@ -565,13 +656,10 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               }
               if (resting.phase !== 'awake') {
                 const leg = i % 4, front = leg < 2;
-                // Four staggered footfalls; lift the knee only on the swing half.
-                const phase = stepPhase + [0, Math.PI, Math.PI * 1.5, Math.PI * 0.5][leg];
-                const swing = Math.sin(phase);
                 const fold = front ? 1 : -1;
                 const angle = i < 4
-                  ? walk * swing * 0.24 + -fold * lieDown * 0.4 + (front ? 0.26 : -0.12) * stretch
-                  : -walk * Math.max(0, swing) * 0.34 + -fold * lieDown * 1.0 + (front ? -0.45 : 0.12) * stretch;
+                  ? -fold * lieDown * 0.4 + (front ? 0.26 : -0.12) * stretch
+                  : -fold * lieDown * 1.0 + (front ? -0.45 : 0.12) * stretch;
                 kickLeg(name, angle);
                 continue;
               }
@@ -589,13 +677,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               pose(name, 0, 0, 0);
               bendBody(name, curl * angle);
               curlSideways(name, restCurl * (name === 'Bone_003' || name === 'Bone_002' ? -0.13 : 0.09));
+              curlSideways(name, leading * (name === 'Bone_003' || name === 'Bone_002' ? -0.35 : 0.2));
               bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
             bendBody('Bone_036', curl * 0.3 + lieDown * 0.18);
             bendBody('Bone_035', curl * 0.3 + lieDown * 0.16);
             bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13);
-            curlSideways('Bone_036', -restCurl * 0.1);
-            curlSideways('Bone_035', -restCurl * 0.12);
+            curlSideways('Bone_036', -restCurl * 0.1 + leading);
+            curlSideways('Bone_035', -restCurl * 0.12 + leading * 0.7);
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
             if (antennaBase) antennaBase.quaternion.multiply(delta.setFromAxisAngle(antennaLieAxis, belly * 1.4 + lieDown * 0.1));
             pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018 + (flipping ? Math.sin(age * 5 - 0.8) * Math.sin(Math.PI * flight) * 0.035 : 0));
@@ -615,13 +704,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             pivot.scale.y += pant;
             pivot.scale.z -= pant * 0.35;
             pivot.scale.y += lieDown * (sleepBreath - 0.5) * 0.018;
-            pivot.position.x = (1 - Math.cos(circleAngle)) * 0.12 * pathBlend;
-            pivot.position.z = Math.sin(circleAngle) * 0.12 * pathBlend;
+            walkPoint(walkStep, pathPoint);
+            pivot.position.x = pathPoint.x * pathBlend;
+            pivot.position.z = pathPoint.z * pathBlend;
             pivot.quaternion.setFromAxisAngle(flipAxis, -flipAngle)
               .multiply(delta.setFromEuler(euler.set(0, motion * Math.sin(t * 0.39) * 0.013, 0)));
             if (resting.phase !== 'awake') {
-              pivot.quaternion.premultiply(delta.setFromAxisAngle(new THREE.Vector3(0, 1, 0), restYaw));
-              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase) * 0.025));
+              pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, restYaw));
+              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase + 0.35) * 0.018));
             }
             if (ticklePose) {
               // Roll onto the back, rest, then unwind onto the paws before rising.
@@ -644,9 +734,13 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               const floorY = -0.68;
               const floorOffset = Number.isFinite(lowest) ? floorY - lowest : -0.3;
               pivot.position.y = THREE.MathUtils.lerp(Math.sin(t * 1.3) * 0.018, floorOffset, Math.max(grounded, restGround));
-              pivot.position.y += walk * Math.abs(Math.sin(stepPhase * 2)) * 0.009;
+              pivot.position.y -= walk * (0.025 + Math.sin(stepPhase * 2) * 0.006);
             }
-            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < 6.3 ? 'circling' : restAge < 10.8 ? 'settling' : 'sleeping') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' ? 'idle' : reaction.kind));
+            if (planting > 0) {
+              scene.updateMatrixWorld(true);
+              plantWalkingFeet(walkStep, planting);
+            }
+            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : (reaction.kind === 'tickle' ? 'idle' : reaction.kind));
             if (waking && wakeAge >= WAKE_DURATION) {
               restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
               lastActivityRef.current = t;
