@@ -58,12 +58,21 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
 
         const gltf = await new GLTFLoader().loadAsync('/models/deung-sati-axolotl-water.glb');
         const model = gltf.scene;
-        // The supplied GLB is untextured. Tint regions by their skin weights so
-        // the gills read separately without changing the source geometry.
+        // Keep authored GLB materials intact when the textured model arrives.
+        // The current clay export needs a temporary skin-weight color preview.
         const pearl = new THREE.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.78, metalness: 0, clearcoat: 0.05, side: THREE.DoubleSide });
         model.traverse(object => {
           if ((object as import('three').Mesh).isMesh) {
             const mesh = object as import('three').SkinnedMesh;
+            const authoredMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            if (authoredMaterials.some(material =>
+              ('map' in material && Boolean(material.map)) ||
+              ('vertexColors' in material && Boolean(material.vertexColors)) ||
+              ('color' in material && material.color instanceof THREE.Color && material.color.getHex() !== 0xffffff)
+            )) {
+              mesh.frustumCulled = false;
+              return;
+            }
             const geometry = mesh.geometry;
             const positions = geometry.getAttribute('position');
             const indices = geometry.getAttribute('skinIndex');
