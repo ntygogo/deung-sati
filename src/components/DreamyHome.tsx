@@ -68,7 +68,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
           <Heart size={15} fill="currentColor" aria-hidden="true" />
         </span>
       </button>
-      <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : previewAxolotl ? 'แตะทักทาย · ลากซ้ายขวาเพื่อดูรอบตัว' : 'สหายที่เติบโตไปพร้อมเธอ'}</p>
+      <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : previewAxolotl ? 'ลูบหัวเพื่อเล่น · ลากรอบตัวเพื่อหมุนดู' : 'สหายที่เติบโตไปพร้อมเธอ'}</p>
       {!isEgg && !previewAxolotl && <div className="dreamy-companion-actions" role="group" aria-label="ชวนเล่นกับน้อง">
         {([['sit', 'นั่งพัก'], ['sleep', 'นอนพัก'], ['spin', 'หมุนเล่น']] as const).map(([action, label]) =>
           <button type="button" key={action} disabled={paused}
