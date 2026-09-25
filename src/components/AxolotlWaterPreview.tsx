@@ -5,12 +5,12 @@ type Props = { paused?: boolean };
 
 // Meshy UniRig bone names were checked against this specific model's skin weights.
 // Keep this preview separate from the sprite renderer until its appearance is approved.
-const TAIL = ['Bone_019', 'Bone_018', 'Bone_017', 'Bone_016', 'Bone_015', 'Bone_014'] as const;
+const TAIL = ['Bone_022', 'Bone_021', 'Bone_020', 'Bone_019', 'Bone_018', 'Bone_017'] as const;
 const GILLS = [
-  { root: 'Bone_035', tip: 'Bone_034', phase: 0.1, side: 1 },
-  { root: 'Bone_037', tip: 'Bone_036', phase: 0.65, side: -1 },
-  { root: 'Bone_039', tip: 'Bone_038', phase: 1.3, side: 1 },
-  { root: 'Bone_041', tip: 'Bone_040', phase: 1.85, side: -1 },
+  { root: 'Bone_052', tip: 'Bone_049', phase: 0.1, side: -1 },
+  { root: 'Bone_056', tip: 'Bone_053', phase: 0.65, side: 1 },
+  { root: 'Bone_045', tip: 'Bone_043', phase: 1.3, side: -1 },
+  { root: 'Bone_048', tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
 export function AxolotlWaterPreview({ paused = false }: Props) {
@@ -56,7 +56,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         rim.position.set(-3, 2, -3);
         scene.add(rim);
 
-        const gltf = await new GLTFLoader().loadAsync('/models/deung-sati-axolotl-water.glb');
+        const gltf = await new GLTFLoader().loadAsync('/models/deung-sati-axolotl-water-textured.glb');
         const model = gltf.scene;
         // Keep authored GLB materials intact when the textured model arrives.
         // The current clay export needs a temporary skin-weight color preview.
@@ -82,9 +82,9 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const gill = new THREE.Color(0xd888ae);
             const lamp = new THREE.Color(0xffdfab);
             const color = new THREE.Color();
-            const gillBones = new Set(['Bone_035', 'Bone_034', 'Bone_037', 'Bone_036', 'Bone_039', 'Bone_038', 'Bone_041', 'Bone_040']);
+            const gillBones = new Set<string>(GILLS.flatMap(({ root, tip }) => [root, tip]));
             const gillJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => gillBones.has(bone.name) ? [index] : []));
-            const lampJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => ['Bone_042', 'Bone_043'].includes(bone.name) ? [index] : []));
+            const lampJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => ['Bone_037', 'Bone_038'].includes(bone.name) ? [index] : []));
             for (let i = 0; i < positions.count; i++) {
               let gillWeight = 0;
               let lampWeight = 0;
@@ -102,7 +102,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             mesh.frustumCulled = false;
           }
         });
-        const antennaTip = model.getObjectByName('Bone_042');
+        const antennaTip = model.getObjectByName('Bone_037');
         const glowCanvas = document.createElement('canvas');
         glowCanvas.width = glowCanvas.height = 128;
         const context = glowCanvas.getContext('2d');
@@ -123,7 +123,18 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         light.position.copy(halo.position);
         antennaTip?.add(light);
         disposeModel = () => {
-          model.traverse(object => { if ((object as import('three').Mesh).isMesh) (object as import('three').Mesh).geometry.dispose(); });
+          model.traverse(object => {
+            if (!(object as import('three').Mesh).isMesh) return;
+            const mesh = object as import('three').Mesh;
+            mesh.geometry.dispose();
+            for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+              const surface = material as import('three').MeshStandardMaterial;
+              surface.map?.dispose();
+              surface.normalMap?.dispose();
+              surface.metalnessMap?.dispose();
+              material.dispose();
+            }
+          });
           pearl.dispose();
           glowMaterial.dispose();
           glowTexture.dispose();
@@ -136,7 +147,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         pivot.add(model);
         scene.add(pivot);
 
-        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_030', 'Bone_031', 'Bone_049', 'Bone_048'] as const;
+        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_042', 'Bone_039'] as const;
         const bones = new Map(names.map(name => [name, model.getObjectByName(name)]));
         const rest = new Map([...bones].flatMap(([name, bone]) => bone ? [[name, bone.quaternion.clone()] as const] : []));
         const delta = new THREE.Quaternion();
@@ -187,10 +198,10 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 motion * side * Math.sin(t * 1.33 + phase - 0.65) * 0.052);
             });
             // The small central frond and antenna lag behind the larger gills.
-            pose('Bone_030', 0, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * Math.sin(t * 0.77) * 0.012);
-            pose('Bone_031', 0, 0, motion * Math.sin(t * 1.12 - 0.85) * 0.022);
-            pose('Bone_049', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
-            pose('Bone_048', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018);
+            pose('Bone_035', 0, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * Math.sin(t * 0.77) * 0.012);
+            pose('Bone_034', 0, 0, motion * Math.sin(t * 1.12 - 0.85) * 0.022);
+            pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
+            pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018);
             // Inhale brightens the antenna; exhale releases it gradually.
             const breath = (1 + Math.sin(t * 1.3 - 0.4)) / 2;
             const shimmer = 0.035 * Math.sin(t * 3.2) * Math.sin(t * 2.1);
