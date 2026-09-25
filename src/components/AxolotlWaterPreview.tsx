@@ -22,10 +22,10 @@ const FRONT_YAW = -0.372;
 // Keep this preview separate from the sprite renderer until its appearance is approved.
 const TAIL = ['Bone_022', 'Bone_021', 'Bone_020', 'Bone_019', 'Bone_018', 'Bone_017'] as const;
 const GILLS = [
-  { root: 'Bone_052', tip: 'Bone_049', phase: 0.1, side: -1 },
-  { root: 'Bone_056', tip: 'Bone_053', phase: 0.65, side: 1 },
-  { root: 'Bone_045', tip: 'Bone_043', phase: 1.3, side: -1 },
-  { root: 'Bone_048', tip: 'Bone_046', phase: 1.85, side: 1 },
+  { root: 'Bone_052', mids: ['Bone_051', 'Bone_050'], tip: 'Bone_049', phase: 0.1, side: -1 },
+  { root: 'Bone_056', mids: ['Bone_055', 'Bone_054'], tip: 'Bone_053', phase: 0.65, side: 1 },
+  { root: 'Bone_045', mids: ['Bone_044'], tip: 'Bone_043', phase: 1.3, side: -1 },
+  { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
 export function AxolotlWaterPreview({ paused = false }: Props) {
@@ -306,7 +306,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const gill = new THREE.Color(0xd888ae);
             const lamp = new THREE.Color(0xffdfab);
             const color = new THREE.Color();
-            const gillBones = new Set<string>(GILLS.flatMap(({ root, tip }) => [root, tip]));
+            const gillBones = new Set<string>(GILLS.flatMap(({ root, mids, tip }) => [root, ...mids, tip]));
             const gillJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => gillBones.has(bone.name) ? [index] : []));
             const lampJoints = new Set(mesh.skeleton.bones.flatMap((bone, index) => ['Bone_037', 'Bone_038'].includes(bone.name) ? [index] : []));
             for (let i = 0; i < positions.count; i++) {
@@ -357,6 +357,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         let jumpHeight = 0;
         let curlFraming = 0;
         let helloFraming = 0;
+        let waveFraming = 0;
         let helloNear = 0;
         let helloActive = false;
         const antennaTip = model.getObjectByName('Bone_037');
@@ -404,7 +405,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         pivot.add(model);
         scene.add(pivot);
 
-        const names = [...TAIL, ...GILLS.flatMap(({ root, tip }) => [root, tip]), 'Bone_034', 'Bone_035', 'Bone_036', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016', 'Bone_031', 'Bone_026', 'Bone_010', 'Bone_015', 'Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002', 'Bone_030', 'Bone_029', 'Bone_025', 'Bone_024', 'Bone_009', 'Bone_008', 'Bone_014', 'Bone_013'] as const;
+        const names = [...TAIL, ...GILLS.flatMap(({ root, mids, tip }) => [root, ...mids, tip]), 'Bone_034', 'Bone_035', 'Bone_036', 'Bone_042', 'Bone_039', 'Bone_032', 'Bone_027', 'Bone_011', 'Bone_016', 'Bone_031', 'Bone_026', 'Bone_010', 'Bone_015', 'Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002', 'Bone_030', 'Bone_029', 'Bone_025', 'Bone_024', 'Bone_009', 'Bone_008', 'Bone_014', 'Bone_013'] as const;
         const bones = new Map(names.map(name => [name, model.getObjectByName(name)]));
         const rest = new Map([...bones].flatMap(([name, bone]) => bone ? [[name, bone.quaternion.clone()] as const] : []));
         const delta = new THREE.Quaternion();
@@ -468,7 +469,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           target.y = -0.635;
           return target;
         };
-        const solvePaw = (foot: typeof walkingFeet[number]) => {
+        const solvePaw = (foot: typeof walkingFeet[number], extraReach = 0) => {
             for (let iteration = 0; iteration < 16; iteration++) {
               for (let j = foot.chain.length - 1; j >= 0; j--) {
                 const joint = foot.chain[j];
@@ -487,7 +488,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 const initial = rest.get(foot.joints[j] as typeof names[number]);
                 if (initial) {
                   const bend = initial.angleTo(joint.quaternion);
-                  const limit = j === 0 ? 1.15 : 1.8;
+                  const limit = j === 0 ? 1.15 + extraReach : 1.8;
                   if (bend > limit) {
                     beforeIK.copy(joint.quaternion);
                     joint.quaternion.copy(initial).slerp(beforeIK, limit / bend);
@@ -626,12 +627,14 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             helloActive = reaction.kind === 'hello' && age >= 0 && age < HELLO_DURATION;
             const hello = helloActive ? 1 : 0;
             const helloGround = hello * smooth(age, 0, 0.8) * (1 - smooth(age, 10.6, HELLO_DURATION));
-            const stand = hello * smooth(age, 0.65, 2.1) * (1 - smooth(age, 9.3, 10.8));
-            const wave = hello * smooth(age, 2.05, 2.5) * (1 - smooth(age, 4.35, 4.9));
-            const glass = hello * smooth(age, 4.7, 5.6) * (1 - smooth(age, 8.4, 9.2));
-            const waveBeat = reducedMotion.matches ? 0 : Math.sin((age - 2.5) * 7.4);
-            const crouch = hello * smooth(age, 0.15, 0.5) * (1 - smooth(age, 0.65, 1.2));
+            const stand = hello * smooth(age, 0.78, 2.3) * (1 - smooth(age, 9.6, 11.05));
+            const wave = hello * smooth(age, 2.45, 2.85) * (1 - smooth(age, 5.65, 6.1));
+            const glass = hello * smooth(age, 6.0, 6.8) * (1 - smooth(age, 8.7, 9.5));
+            const waveBeat = Math.sin((age - 2.85) * (reducedMotion.matches ? 5.2 : 8.8));
+            const crouch = hello * smooth(age, 0.12, 0.38) * (1 - smooth(age, 0.78, 1.2));
+            const risePush = hello * smooth(age, 0.75, 1.15) * (1 - smooth(age, 1.55, 2.2));
             helloFraming = stand;
+            waveFraming = wave;
             helloNear = glass;
             const landing = ticklePose ? THREE.MathUtils.smoothstep(age, 0, 1.1) : 0;
             const rising = ticklePose ? THREE.MathUtils.smoothstep(age, 8.2, TICKLE_DURATION) : 0;
@@ -645,7 +648,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             const stroking = resting.phase === 'awake' && !helloActive && !tickleActive && t - strokeRef.current < 0.3;
             affection += ((stroking ? 1 : 0) - affection) * (1 - Math.exp(-dt * (stroking ? 5 : 2.8)));
             const content = Math.max(affection, reaction.kind === 'content' ? envelope : 0, tired * 0.85);
-            const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22, stand * 0.6);
+            const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22, stand * 0.78);
             const squint = Math.max(reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)), sleepy * 0.35);
             squish.value += (squint - squish.value) * (1 - Math.exp(-dt * 12));
             const blep = Math.max(reaction.kind === 'blep' ? envelope : 0, tired * 0.6);
@@ -665,11 +668,11 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             curlFraming = Math.max(curl, walk * 0.9);
             if (t >= nextBlink) {
               blinkStarted = t;
-              nextBlink = t + 3.1 + Math.random() * 3.4;
+              nextBlink = t + 2.5 + Math.random() * 1.9;
             }
             const blinkAge = t - blinkStarted;
-            const blink = blinkAge < 0.24 ? Math.sin(Math.PI * Math.max(0, blinkAge) / 0.24) ** 2 : 0;
-            eyelids.value = Math.max(reducedMotion.matches ? 0 : blink, content * 0.98, blep * 0.3, sleepy);
+            const blink = blinkAge < 0.34 ? Math.sin(Math.PI * Math.max(0, blinkAge) / 0.34) ** 2 : 0;
+            eyelids.value = Math.max(blink, content * 0.98, blep * 0.3, sleepy);
             faces.forEach(mesh => {
               if (!mesh.morphTargetInfluences) return;
               mesh.morphTargetInfluences[0] = response * (1 - squish.value * 0.7);
@@ -690,13 +693,18 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               const tailRest = smooth(restAge, WALK_END - 0.2 + index * 0.13, WALK_END + 2 + index * 0.13) * uncoil;
               curlSideways(bone, tailRest * (0.54 - index * 0.035) - leading * (0.8 - index * 0.08));
             });
-            GILLS.forEach(({ root, tip, phase, side }) => {
+            GILLS.forEach(({ root, mids, tip, phase, side }) => {
               const follow = flipping ? Math.sin((age - phase * 0.06) * 4.2) * Math.sin(Math.PI * flight) * 0.035 : 0;
               const current = follow + wriggle * Math.sin(age * 8 - phase) * 0.024 + Math.sin(t * 1.33 + phase) * 0.038 + Math.sin(t * 0.54 + phase * 0.6) * 0.014;
-              pose(root, motion * current * 0.3, motion * side * current * 0.5, motion * side * (current + response * 0.035));
-              pose(tip, motion * Math.sin(t * 1.33 + phase - 0.55) * 0.027,
-                motion * side * Math.sin(t * 0.92 + phase - 0.4) * 0.022,
-                motion * side * Math.sin(t * 1.33 + phase - 0.65) * 0.052);
+              const finFlow = 1 - lieDown * 0.55;
+              pose(root, finFlow * current * 0.42, finFlow * side * current * 0.66, finFlow * side * (current * 1.35 + response * 0.035));
+              mids.forEach((bone, index) => {
+                const delayed = Math.sin(t * 1.33 + phase - 0.3 - index * 0.28);
+                pose(bone, finFlow * delayed * 0.033, finFlow * side * delayed * 0.04, finFlow * side * delayed * (0.06 + index * 0.012));
+              });
+              pose(tip, finFlow * Math.sin(t * 1.33 + phase - 0.55) * 0.045,
+                finFlow * side * Math.sin(t * 0.92 + phase - 0.4) * 0.037,
+                finFlow * side * Math.sin(t * 1.33 + phase - 0.65) * 0.087);
             });
             // A small attentive tilt accompanies the smile; the antenna follows.
             pose('Bone_036', -tuck * 0.07 + launch * 0.025, wriggle * Math.sin(age * 6) * 0.045, tuck * 0.045 + belly * 0.035);
@@ -744,9 +752,9 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               curlSideways(name, leading * (name === 'Bone_003' || name === 'Bone_002' ? -0.35 : 0.2));
               bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
-            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18 + stand * 0.3);
-            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16 + stand * 0.3);
-            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13 + stand * 0.25);
+            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18 + stand * 0.26 - crouch * 0.06);
+            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16 + stand * 0.31 - crouch * 0.08);
+            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13 + stand * 0.3 + risePush * 0.045);
             curlSideways('Bone_036', -restCurl * 0.1 + leading);
             curlSideways('Bone_035', -restCurl * 0.12 + leading * 0.7);
             const neck = bones.get('Bone_034');
@@ -764,7 +772,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             light.intensity = 0.24 + motion * 0.24 * glowBreath;
             pivot.position.y = motion * (Math.sin(t * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
             pivot.position.y += jumpHeight - anticipation * 0.13 - settle * 0.04;
-            const squash = anticipation * 0.055 + settle * 0.025;
+            const squash = anticipation * 0.055 + settle * 0.025 + crouch * 0.07;
             pivot.scale.set(1 + squash * 0.5, 1 - squash, 1 + squash * 0.5);
             const pant = motion * tired * Math.sin(age * 7.5) * 0.012;
             pivot.scale.y += pant;
@@ -780,11 +788,13 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase + 0.35) * 0.018));
             }
             if (helloActive) {
-              pivot.quaternion.premultiply(delta.setFromAxisAngle(flipAxis, -stand * 1.1));
-              // Rotate around the hips, then solve the two supporting rear paws.
+              const rising = stand * 1.03 + risePush * 0.075;
+              pivot.quaternion.premultiply(delta.setFromAxisAngle(flipAxis, -rising));
+              // Pivot above the planted rear paws; the small side shift loads the supporting leg.
               standOffset.copy(rearLocal).applyQuaternion(pivot.quaternion);
-              pivot.position.x += stand * (rearCenter.x - standOffset.x);
+              pivot.position.x += stand * (rearCenter.x - standOffset.x - wave * 0.035);
               pivot.position.z += stand * (rearCenter.z - standOffset.z + glass * 0.08);
+              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, -wave * (0.055 + 0.014 * waveBeat)));
             }
             if (ticklePose) {
               // Roll onto the back, rest, then unwind onto the paws before rising.
@@ -812,7 +822,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
             for (const glow of handGlows) glow.material.opacity = 0;
             if (helloActive) {
               const standingY = -0.635 + 0.18 - standOffset.y;
-              pivot.position.y = THREE.MathUtils.lerp(pivot.position.y - crouch * 0.045, standingY, stand);
+              pivot.position.y = THREE.MathUtils.lerp(pivot.position.y - crouch * 0.055, standingY + risePush * 0.015, stand);
               scene.updateMatrixWorld(true);
               for (const { foot, point } of rearSupport) {
                 foot.tip.getWorldPosition(localTip);
@@ -823,12 +833,19 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                 const foot = walkingFeet[i];
                 foot.chain[0].getWorldPosition(shoulderPoint);
                 const side = i === 0 ? 1 : -1;
-                foot.target.copy(shoulderPoint).addScaledVector(screenForward, 0.16 + glass * 0.055);
-                foot.target.addScaledVector(flipAxis, side * (0.055 + (i === 0 ? wave * waveBeat * 0.055 : 0)));
-                foot.target.y += 0.035 + glass * 0.025 + (i === 0 ? wave * (0.145 + waveBeat * 0.025) : 0);
+                foot.target.copy(shoulderPoint).addScaledVector(screenForward, 0.17 + glass * 0.055 + (i === 0 ? wave * 0.055 : 0));
+                foot.target.addScaledVector(flipAxis, side * (0.075 + (i === 0 ? wave * (0.095 + waveBeat * 0.07) : 0)));
+                foot.target.y += 0.035 + glass * 0.025 + (i === 0 ? wave * (0.21 + waveBeat * 0.065) : 0);
                 foot.tip.getWorldPosition(localTip);
                 foot.target.lerpVectors(localTip, foot.target, stand);
-                solvePaw(foot);
+                solvePaw(foot, i === 0 ? wave * 0.23 : 0);
+                if (i === 0 && wave > 0) {
+                  // This paw is free in the air: let the shoulder and wrist swing
+                  // after IK rather than pinning the wave to a nearly fixed point.
+                  curlSideways('Bone_032', wave * (0.32 + waveBeat * 0.31));
+                  bendBody('Bone_031', wave * (0.12 + waveBeat * 0.16));
+                  foot.chain[0].updateMatrixWorld(true);
+                }
                 foot.tip.getWorldPosition(handGlows[i].position);
                 handGlows[i].position.addScaledVector(screenForward, 0.015);
                 handGlows[i].material.opacity = glass * 0.42;
@@ -839,7 +856,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               scene.updateMatrixWorld(true);
               plantWalkingFeet(walkStep, planting);
             }
-            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : helloActive ? (age < 2.1 ? 'standing-up' : age < 4.9 ? 'waving' : age < 9.2 ? 'touching-glass' : 'lowering') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : flipping ? 'flip' : age < 3.2 && age >= 0 && (reaction.kind === 'content' || reaction.kind === 'squish' || reaction.kind === 'blep') ? reaction.kind : 'idle');
+            mount.parentElement?.setAttribute('data-reaction', resting.phase !== 'awake' ? (waking ? 'waking' : restAge < 1.3 ? 'landing' : restAge < WALK_END ? 'circling' : restAge < SLEEP_SETTLE_DURATION ? 'settling' : 'sleeping') : helloActive ? (age < 2.45 ? 'standing-up' : age < 6.1 ? 'waving' : age < 9.5 ? 'touching-glass' : 'lowering') : tickleActive ? (age < 1.5 ? 'rolling' : age < 4.5 ? 'ticklish' : age < 6.65 ? 'resting' : 'getting-up') : flipping ? 'flip' : age < 3.2 && age >= 0 && (reaction.kind === 'content' || reaction.kind === 'squish' || reaction.kind === 'blep') ? reaction.kind : 'idle');
             if (waking && wakeAge >= WAKE_DURATION) {
               restRef.current = { phase: 'awake', started: t, wakeAge: 0 };
               lastActivityRef.current = t;
@@ -849,7 +866,8 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           // Manual viewing remains available when animation is paused.
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
           // Make room above the head while preserving the visible upward leap.
-          const viewRadius = 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.65 - helloNear * 0.75;
+          // Bring the face forward for the wave while leaving room for the raised paw.
+          const viewRadius = 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.35 - waveFraming * 0.28 - helloNear * 0.65;
           const framingLift = jumpHeight * 0.38 + helloFraming * 0.24 + helloNear * 0.04;
           camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
           camera.lookAt(0, 0.04 + framingLift, 0);
