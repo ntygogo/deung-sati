@@ -102,7 +102,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
           </button>;
         })}
       </div>
-      <p role="status">{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{dnaPreview?.previewLamp && <> · {{pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
+      <p role="status">{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{dnaPreview?.previewLamp && <> · {dnaPreview.previewCollection && ['earth','water','wind','fire','leaf','flower'].includes(dnaPreview.previewCollection) && dnaPreview.previewLamp === COMPANION_COLLECTIONS[dnaPreview.previewCollection].lampShape ? 'โคมประจำธาตุ' : {pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
       <div className="atelier-actions"><button type="button" onClick={randomizeLook}>✦ สุ่มลุคให้น้อง</button>
         {!isEgg && <CompanionShareCard appearance={displayedAppearance} displayName={companion?.name || 'สหายตัวน้อย'} capture={() => companionView.current ? companionView.current.capture() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ'))} />}
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { addElementParts, type CompanionElement } from '../shared/companionElements';
 import { COMPANION_COLLECTIONS } from '../shared/companionArtDirection';
 import { companionMotion } from '../shared/companionBirthVisuals';
 import type { CompanionAppearance } from '../shared/companionAppearance';
@@ -522,6 +523,9 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
               }
               lampGroup.add(new THREE.Mesh(bulbGeometry,lampSurface));
             }
+            const element = appearance.previewCollection;
+            if(element && ['earth','water','wind','fire','leaf','flower'].includes(element))
+              addElementParts(THREE,model,lampGroup,lampSurface,element as CompanionElement,art!.fin,art!.finTip,appearance.previewLamp===art!.lampShape);
             const collar=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),new THREE.MeshStandardMaterial({color:finColor,roughness:.4,metalness:.12}));
             collar.scale.set(.045,.017,.045);collar.position.y=.005;lampGroup.add(collar);
           }

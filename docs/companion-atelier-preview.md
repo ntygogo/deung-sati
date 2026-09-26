@@ -29,3 +29,11 @@ included on the card.
 
 Preview does not guarantee exclusive global appearances. Saved birth recipes,
 reward logic, and production main are unchanged by this feature.
+
+## Element studies
+Six additional selectable previews use more saturated pastel palettes: earth,
+water, wind, fire, leaf, and flower. Each adds real mesh forms to the lamp and
+four verified gill-tip bones. These inherit the existing rig animation. This is
+a first part-design study, not a replacement of the entire gill/tail meshes or
+an implementation of cross-element breeding/reveal choreography. Lamp-only
+randomization retains the element's gill adornments and swaps its lamp form.
