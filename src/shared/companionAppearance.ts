@@ -33,6 +33,7 @@ export type Trait = { id: string; label: string; origin: 'birth' | 'legacy' | 's
 export type SkillKey = 'emotionalAwareness' | 'somaticAwareness' | 'cognitiveClarity' | 'consciousAction';
 export interface CompanionAppearanceSource { id?: string; seed?: number | string; dna?: unknown; snapshot?: unknown }
 export interface CompanionAppearance {
+  previewDesign?: 'lotus' | 'stream' | 'starlight';
   version: typeof APPEARANCE_VERSION;
   identity: string;
   palette: { id: string; label: string; body: string; secondary: string; lamp: string; hue: number; saturation: number };

@@ -196,7 +196,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
         const eyelids = { value: 0 };
         const bodyColor = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
         const finColor = new THREE.Color(appearance?.palette.secondary ?? '#8BD3DD');
-        const faceColor = new THREE.Color('#FFF0DF').lerp(bodyColor, 0.16);
+        const faceColor = new THREE.Color('#FFE2D7').lerp(bodyColor, 0.72);
         const markingColor = finColor.clone().multiplyScalar(0.48);
         const patternKind = ['pearl_freckles', 'starlight_speckles', 'water_ripples', 'petal_marks'].indexOf(appearance?.traits.pattern.id ?? '');
 
@@ -207,6 +207,28 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           if (!(object as import('three').SkinnedMesh).isSkinnedMesh) return;
           const mesh = object as import('three').SkinnedMesh;
           const positions = mesh.geometry.getAttribute('position');
+          // Preview silhouettes deform the existing skinned vertices, preserving rig weights.
+          // These are shape studies, not replacement gill/lantern topology.
+          const design = appearance?.previewDesign;
+          if (design) {
+            const indices = mesh.geometry.getAttribute('skinIndex');
+            const weights = mesh.geometry.getAttribute('skinWeight');
+            const gillSet = new Set<string>(GILLS.flatMap(g => [g.root,...g.mids,g.tip]));
+            const tailSet = new Set<string>(TAIL);
+            const sizes = design === 'lotus' ? {gill:1.22,tail:.82,width:1.22} : design === 'stream' ? {gill:.83,tail:1.16,width:.78} : {gill:1.07,tail:.94,width:1.06};
+            for(let i=0;i<positions.count;i++) {
+              let gill=0,tail=0;
+              for(let j=0;j<4;j++) {
+                const name=mesh.skeleton.bones[indices.getComponent(i,j)]?.name;
+                if(gillSet.has(name)) gill+=weights.getComponent(i,j);
+                if(tailSet.has(name)) tail+=weights.getComponent(i,j);
+              }
+              const x=positions.getX(i), y=positions.getY(i), z=positions.getZ(i);
+              positions.setXYZ(i,x*(1+gill*(sizes.gill-1)+tail*(sizes.width-1)),y+gill*(y-.6)*(sizes.gill-1)*.6,z+tail*(z-.4)*(sizes.tail-1));
+            }
+            positions.needsUpdate=true;
+            mesh.geometry.computeVertexNormals();
+          }
           const skinIndices = mesh.geometry.getAttribute('skinIndex');
           const skinWeights = mesh.geometry.getAttribute('skinWeight');
           const finBones = new Set<string>([...TAIL, ...GILLS.flatMap(g => [g.root, ...g.mids, g.tip])]);
@@ -328,7 +350,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                   vec3 p = axolotlFacePosition;
                   float faceMask = smoothstep(1.1, 1.65, p.z) * (1.0-axolotlFin);
                   float bellyMask = (1.0-smoothstep(0.1,0.6,p.y)) * (1.0-axolotlFin);
-                  float pale = max(faceMask, bellyMask);
+                  float pale = max(faceMask, bellyMask * 0.6);
                   vec3 regionColor = mix(axolotlBodyColor, axolotlFinColor, smoothstep(0.12,0.85,axolotlFin));
                   regionColor = mix(regionColor, axolotlFaceColor, pale);
                   float luminance = dot(diffuseColor.rgb, vec3(0.2126,0.7152,0.0722));
@@ -340,17 +362,23 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                   float noise = fract(sin(dot(cell, vec2(12.9898,78.233))) * 43758.5453);
                   vec2 mark = fract(uvMark) - 0.5;
                   float spots = step(0.32,noise) * (1.0-smoothstep(0.13,0.22,length(mark)));
-                  float star = step(0.56,noise) * (1.0-smoothstep(0.19,0.27,abs(mark.x)+abs(mark.y)));
+                  float star = step(0.56,noise) * (1.0-smoothstep(0.16,0.22,sqrt(abs(mark.x*mark.y)) + .25*length(mark)));
                   float ripple = 1.0-smoothstep(0.22,0.40,abs(sin(p.z*8.0+p.x*3.0+sin(p.x*5.0)*0.45)));
-                  float petal = step(0.4,noise) * (1.0-smoothstep(0.75,1.0,length(mark/vec2(0.17,0.34))));
+                  vec2 lotus = vec2(p.z-.25, p.x) * 2.8;
+                  float petalAngle = atan(lotus.y,lotus.x);
+                  float petals = .42 + .17*cos(petalAngle*5.0);
+                  float petal = (1.0-smoothstep(petals-.04,petals+.035,length(lotus))) * smoothstep(.12,.2,length(lotus));
                   float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern < 0.5 ? spots : axolotlPattern < 1.5 ? star : axolotlPattern < 2.5 ? ripple : petal;
                   diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * pattern * skinMask * 0.78);
+                  float cheekR = exp(-dot((p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16),(p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16)));
+                  float cheekL = exp(-dot((p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16),(p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16)));
+                  diffuseColor.rgb = mix(diffuseColor.rgb,vec3(.88,.25,.34),max(cheekR,cheekL)*.36*skinMask);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-region-lids-v6';
+            material.customProgramCacheKey = () => 'axolotl-design-lids-v7';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -1008,7 +1036,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, motionId]);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, appearance?.previewDesign, motionId]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;

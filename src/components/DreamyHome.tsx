@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
 import { AxolotlWaterPreview } from './AxolotlWaterPreview';
-import { PALETTES, TRAIT_CATALOG, previewAppearance, resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
+import { previewAppearance, resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
 
@@ -22,15 +22,15 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   const [dnaPreview, setDnaPreview] = useState<CompanionAppearance | null>(null);
   const displayedAppearance = dnaPreview ?? appearance;
   const randomizeDna = () => {
-    const current = dnaPreview ?? appearance;
-    const palettes = PALETTES.filter(palette => ['soft_sakura','jade_mint','powder_blue','golden_pink'].includes(palette.id) && palette.id !== current.palette.id);
-    const pick = <T,>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)];
-    const next = previewAppearance(appearance, {
-      palette: pick(palettes).id,
-      pattern: pick(TRAIT_CATALOG.pattern.options.filter(option => option[0] !== current.traits.pattern.id))[0],
-      motion: pick(TRAIT_CATALOG.motion.options.filter(option => option[0] !== current.traits.motion.id))[0],
-    });
-    setDnaPreview({...next, patternSeed: Math.floor(Math.random() * 0xffffffff)});
+    const designs = [
+      {id:'lotus',name:'บัวชมพู',palette:'soft_sakura',pattern:'petal_marks',motion:'dreamy_drift',gills:'fluffy_cloud',tail:'sparkle_fan',lantern:'crystal_lotus'},
+      {id:'stream',name:'สายน้ำมิ้นต์',palette:'jade_mint',pattern:'water_ripples',motion:'serene_swaying',gills:'starlight_streamers',tail:'ribbon_flow',lantern:'pearl_glow'},
+      {id:'starlight',name:'ละอองดาวฟ้า',palette:'powder_blue',pattern:'starlight_speckles',motion:'curious_peek',gills:'crystalline_leaf',tail:'swaying_fin',lantern:'star_beacon'},
+    ] as const;
+    const choices = designs.filter(d => d.id !== dnaPreview?.previewDesign);
+    const design = choices[Math.floor(Math.random() * choices.length)];
+    const next = previewAppearance(appearance, design);
+    setDnaPreview({...next, previewDesign:design.id, palette:{...next.palette,label:design.name}, patternSeed:design.id === 'lotus' ? 121 : design.id === 'stream' ? 242 : 363});
   };
   const progress = eggProgress(traceCount);
   const previewAxolotl = new URLSearchParams(window.location.search).get('previewAxolotl') === '1';
@@ -93,7 +93,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       <div><button type="button" onClick={randomizeDna}>🎲 สุ่ม DNA ดูตัวอย่าง</button>
       {dnaPreview && <button type="button" onClick={() => setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
       <p role="status">{displayedAppearance.palette.label} · {displayedAppearance.traits.pattern.label} · {displayedAppearance.traits.motion.label}</p>
-      <small>{dnaPreview ? 'กำลังดูตัวอย่าง ไม่เปลี่ยน DNA หรือฟักไข่จริง' : 'ลองสี ลาย และจังหวะบนตัวน้อง 3D ได้เลย'}</small>
+      <small>{dnaPreview ? 'ตัวอย่างสีและทรง 3 แบบ · ไม่เปลี่ยน DNA จริง' : 'ลองสี ลาย และจังหวะบนตัวน้อง 3D ได้เลย'}</small>
     </section>
     <section className="dreamy-chat-card" aria-labelledby="dreamy-chat-heading">
       <div className="dreamy-chat-heading"><MessageCircle className="dreamy-chat-doodle" size={32} aria-hidden="true" />
