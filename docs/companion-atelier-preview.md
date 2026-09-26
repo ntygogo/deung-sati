@@ -37,3 +37,16 @@ four verified gill-tip bones. These inherit the existing rig animation. This is
 a first part-design study, not a replacement of the entire gill/tail meshes or
 an implementation of cross-element breeding/reveal choreography. Lamp-only
 randomization retains the element's gill adornments and swaps its lamp form.
+
+## Element silhouette pass
+Each element now has a distinct tail extension, three small dorsal accents on
+separate spine joints, and jewelry-sized details on the antenna stalk. Curved
+petal surfaces have root-to-tip vertex gradients, a subtle pearl finish, and
+independent delayed flexion layered onto inherited tail movement. Earth uses a
+faceted crystal fan; the others use wave, ribbon, flame, leaf, or peony forms.
+These extend the original tail rather than replace the authored skinned mesh.
+All additions are traversed by the existing GPU-resource cleanup.
+
+Portrait capture now fits the current posed model bounds with a temporary camera
+so side views retain the whole face and tail. The live view adds side-on viewing
+space while preserving front-facing greeting framing and the accepted sleep rig.

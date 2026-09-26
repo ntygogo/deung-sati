@@ -480,6 +480,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
         let helloNear = 0;
         let helloActive = false;
         const antennaTip = model.getObjectByName('Bone_037');
+        let animateElementParts: ((time:number)=>void) | undefined;
         let lampSurface: import('three').MeshPhysicalMaterial | undefined;
         let lampGroup: import('three').Group | undefined;
         if (appearance?.previewLamp) {
@@ -525,7 +526,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
             }
             const element = appearance.previewCollection;
             if(element && ['earth','water','wind','fire','leaf','flower'].includes(element))
-              addElementParts(THREE,model,lampGroup,lampSurface,element as CompanionElement,art!.fin,art!.finTip,appearance.previewLamp===art!.lampShape);
+              animateElementParts = addElementParts(THREE,model,lampGroup,lampSurface,element as CompanionElement,art!.fin,art!.finTip,appearance.previewLamp===art!.lampShape);
             const collar=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),new THREE.MeshStandardMaterial({color:finColor,roughness:.4,metalness:.12}));
             collar.scale.set(.045,.017,.045);collar.position.y=.005;lampGroup.add(collar);
           }
@@ -750,6 +751,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
             elapsedRef.current += elapsed;
             const t = elapsedRef.current;
             const flowTime = t * motionProfile.flow;
+            animateElementParts?.(flowTime);
             if (embryo) {
               const growth = Math.max(0, Math.min(20, progressRef.current)) / 20;
               const cycle = (t + (appearance?.patternSeed ?? 0) % 7) % 14;
@@ -1082,7 +1084,8 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
           // Make room above the head while preserving the visible upward leap.
           // Bring the face forward for the wave while leaving room for the raised paw.
-          const viewRadius = embryo ? 4.1 : 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.35 - waveFraming * 0.28 - helloNear * 0.65;
+          const orbitRoom = Math.pow(Math.sin(viewYaw - FRONT_YAW), 2) * 1.2 * Math.min(1, 1 / camera.aspect);
+          const viewRadius = embryo ? 4.1 : 3.8 + orbitRoom + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.35 - waveFraming * 0.28 - helloNear * 0.65;
           const framingLift = jumpHeight * 0.38 + helloFraming * 0.24 + helloNear * 0.04;
           camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
           camera.lookAt(0, 0.04 + framingLift, 0);
@@ -1107,7 +1110,20 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
           try {
             renderer.setPixelRatio(1);
             renderer.setSize(1200, Math.round(1200 * size.y / size.x), false);
-            renderer.render(scene, camera);
+            // Fit the complete posed model, including newly added fins, from the
+            // chosen viewing direction. A cloned camera leaves the live view untouched.
+            scene.updateMatrixWorld(true);
+            const captureCamera = camera.clone();
+            const bounds = new THREE.Box3().setFromObject(model, true);
+            const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+            const halfFov = THREE.MathUtils.degToRad(captureCamera.fov / 2);
+            const limitingFov = Math.min(halfFov, Math.atan(Math.tan(halfFov) * captureCamera.aspect));
+            const distance = sphere.radius / Math.sin(limitingFov) * 1.08;
+            const direction = camera.getWorldDirection(new THREE.Vector3()).negate();
+            captureCamera.position.copy(sphere.center).addScaledVector(direction, distance);
+            captureCamera.lookAt(sphere.center);
+            captureCamera.updateMatrixWorld(true);
+            renderer.render(scene, captureCamera);
             return renderer.domElement.toDataURL('image/png');
           } finally {
             renderer.setPixelRatio(ratio);

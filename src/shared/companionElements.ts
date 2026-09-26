@@ -1,4 +1,5 @@
 import type * as Three from 'three';
+import { addElementSilhouette } from './companionElementSilhouette';
 export type CompanionElement = 'earth' | 'water' | 'wind' | 'fire' | 'leaf' | 'flower';
 
 /** Small rig-attached forms: motion is inherited from the existing living skeleton. */
@@ -53,4 +54,5 @@ export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Th
     else if(element==='wind') {const curl=mesh(new T.TorusGeometry(.05,.012,7,24,Math.PI*1.65),soft,group);curl.rotation.z=i*.7;}
     else {const p=leaf(group,i%2?soft:detail,.13,.035,(i%2?1:-1)*.3);p.rotation.x=.35;}
   }
+  return addElementSilhouette(T,model,element,accent,tip);
 }
