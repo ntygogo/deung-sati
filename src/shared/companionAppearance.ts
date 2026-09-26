@@ -4,11 +4,11 @@
 export const APPEARANCE_VERSION = 1 as const;
 export const PALETTES = [
   { id: 'soft_sakura', label: 'ชมพูไข่มุก', body: '#F4BACD', secondary: '#8BD3DD', lamp: '#FFD992', hue: 0, saturation: 1 },
-  { id: 'jade_mint', label: 'หยกมิ้นต์', body: '#B8DFCF', secondary: '#BDEDDD', lamp: '#FFE6AB', hue: 165, saturation: .78 },
+  { id: 'jade_mint', label: 'หยกมิ้นต์', body: '#B8DFCF', secondary: '#C5B1DF', lamp: '#FFE6AB', hue: 165, saturation: .78 },
   { id: 'aurora_blue', label: 'น้ำเงินออโรรา', body: '#999BEB', secondary: '#85E0D2', lamp: '#E4DDFF', hue: 260, saturation: 1.15 },
-  { id: 'golden_pink', label: 'พีชแชมเปญ', body: '#F1C49E', secondary: '#FFD5B8', lamp: '#FFE2AD', hue: 38, saturation: .82 },
+  { id: 'golden_pink', label: 'พีชแชมเปญ', body: '#F1C49E', secondary: '#C7B4DB', lamp: '#FFE2AD', hue: 38, saturation: .82 },
   { id: 'lavender_pink', label: 'ม่วงลาเวนเดอร์', body: '#C5B1EF', secondary: '#ECA9D0', lamp: '#E6DFFF', hue: 300, saturation: .88 },
-  { id: 'powder_blue', label: 'ฟ้าไข่มุก', body: '#AFCFED', secondary: '#D6EEFF', lamp: '#FFF1CE', hue: 215, saturation: .68 },
+  { id: 'powder_blue', label: 'ฟ้าไข่มุก', body: '#AFCFED', secondary: '#E9B7CF', lamp: '#FFF1CE', hue: 215, saturation: .68 },
   { id: 'coral_pastel', label: 'พีชปะการัง', body: '#FFA07A', secondary: '#FBCFAF', lamp: '#FFE3B0', hue: 25, saturation: 1.12 },
   { id: 'electric_rose', label: 'ชมพูกุหลาบ', body: '#FF6584', secondary: '#DBB8F3', lamp: '#FFE2BF', hue: 350, saturation: 1.35 },
 ] as const;

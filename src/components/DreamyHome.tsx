@@ -23,7 +23,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   const displayedAppearance = dnaPreview ?? appearance;
   const randomizeDna = () => {
     const current = dnaPreview ?? appearance;
-    const palettes = PALETTES.filter(palette => palette.id !== current.palette.id);
+    const palettes = PALETTES.filter(palette => ['soft_sakura','jade_mint','powder_blue','golden_pink'].includes(palette.id) && palette.id !== current.palette.id);
     const pick = <T,>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)];
     const next = previewAppearance(appearance, {
       palette: pick(palettes).id,

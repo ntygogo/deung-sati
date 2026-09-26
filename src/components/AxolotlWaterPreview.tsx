@@ -194,9 +194,10 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
         const model = gltf.scene;
         const faces: import('three').SkinnedMesh[] = [];
         const eyelids = { value: 0 };
-        const tint = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
-        const referenceTint = new THREE.Color('#F4BACD');
-        tint.setRGB(tint.r / referenceTint.r, tint.g / referenceTint.g, tint.b / referenceTint.b);
+        const bodyColor = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
+        const finColor = new THREE.Color(appearance?.palette.secondary ?? '#8BD3DD');
+        const faceColor = new THREE.Color('#FFF0DF').lerp(bodyColor, 0.16);
+        const markingColor = finColor.clone().multiplyScalar(0.48);
         const patternKind = ['pearl_freckles', 'starlight_speckles', 'water_ripples', 'petal_marks'].indexOf(appearance?.traits.pattern.id ?? '');
 
         const squish = { value: 0 };
@@ -206,6 +207,17 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           if (!(object as import('three').SkinnedMesh).isSkinnedMesh) return;
           const mesh = object as import('three').SkinnedMesh;
           const positions = mesh.geometry.getAttribute('position');
+          const skinIndices = mesh.geometry.getAttribute('skinIndex');
+          const skinWeights = mesh.geometry.getAttribute('skinWeight');
+          const finBones = new Set<string>([...TAIL, ...GILLS.flatMap(g => [g.root, ...g.mids, g.tip])]);
+          const finRegions = new Float32Array(positions.count);
+          for (let i = 0; i < positions.count; i++) {
+            for (let j = 0; j < 4; j++) {
+              const bone = mesh.skeleton.bones[skinIndices.getComponent(i, j)];
+              if (bone && finBones.has(bone.name)) finRegions[i] += skinWeights.getComponent(i, j);
+            }
+          }
+          mesh.geometry.setAttribute('axolotlFinRegion', new THREE.BufferAttribute(finRegions, 1));
           const smile = new Float32Array(positions.count * 3);
           const happySqueeze = new Float32Array(positions.count * 3);
           const eyes = [[0.1503, 0.9447, 1.9278], [-0.3378, 0.8956, 1.7373]];
@@ -263,20 +275,27 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           // surface rather than collapsing the sparse eye topology into a crease.
           for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
             material.onBeforeCompile = shader => {
-              shader.uniforms.axolotlTint = { value: tint };
+              shader.uniforms.axolotlBodyColor = { value: bodyColor };
+              shader.uniforms.axolotlFinColor = { value: finColor };
+              shader.uniforms.axolotlFaceColor = { value: faceColor };
+              shader.uniforms.axolotlMarkingColor = { value: markingColor };
               shader.uniforms.axolotlPattern = { value: patternKind };
               shader.uniforms.axolotlPatternSeed = { value: (appearance?.patternSeed ?? 0) % 1000 };
               shader.uniforms.axolotlBlink = eyelids;
               shader.uniforms.axolotlSquish = squish;
-              shader.uniforms.axolotlSkinRight = { value: new THREE.Color('#f5cfe1').multiply(tint) };
-              shader.uniforms.axolotlSkinLeft = { value: new THREE.Color('#f8cbde').multiply(tint) };
+              shader.uniforms.axolotlSkinRight = { value: faceColor.clone() };
+              shader.uniforms.axolotlSkinLeft = { value: faceColor.clone() };
               shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nvarying vec3 axolotlFacePosition;')
-                .replace('#include <begin_vertex>', '#include <begin_vertex>\naxolotlFacePosition = position;');
+                .replace('#include <common>', '#include <common>\nvarying vec3 axolotlFacePosition;\nattribute float axolotlFinRegion;\nvarying float axolotlFin;')
+                .replace('#include <begin_vertex>', '#include <begin_vertex>\naxolotlFacePosition = position;\naxolotlFin = axolotlFinRegion;');
               shader.fragmentShader = shader.fragmentShader
                 .replace('#include <common>', `#include <common>
                   varying vec3 axolotlFacePosition;
-                  uniform vec3 axolotlTint;
+                  uniform vec3 axolotlBodyColor;
+                  uniform vec3 axolotlFinColor;
+                  uniform vec3 axolotlFaceColor;
+                  uniform vec3 axolotlMarkingColor;
+                  varying float axolotlFin;
                   uniform float axolotlPattern;
                   uniform float axolotlPatternSeed;
                   uniform float axolotlBlink;
@@ -306,24 +325,32 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                     coverage = max(coverage, lid);
                   }`)
                 .replace('#include <map_fragment>', `#include <map_fragment>
-                  diffuseColor.rgb *= axolotlTint;
                   vec3 p = axolotlFacePosition;
-                  float bodyMask = (1.0 - smoothstep(1.1, 1.5, p.z)) * smoothstep(0.0, 0.25, p.y);
-                  vec3 cell = floor(p * 22.0 + axolotlPatternSeed);
-                  float noise = fract(sin(dot(cell, vec3(12.9898,78.233,39.425))) * 43758.5453);
-                  float spots = step(0.955, noise) * (1.0 - smoothstep(0.19,0.4,length(fract(p * 22.0 + axolotlPatternSeed)-0.5)));
-                  float ripple = pow(0.5 + 0.5 * sin(p.x * 24.0 + p.z * 15.0), 12.0);
-                  vec3 mark = fract(p * 22.0 + axolotlPatternSeed) - 0.5;
-                  float star = step(0.965, noise) * max((1.0-smoothstep(0.025,0.07,abs(mark.x))) * (1.0-smoothstep(0.18,0.42,abs(mark.y))), (1.0-smoothstep(0.025,0.07,abs(mark.y))) * (1.0-smoothstep(0.18,0.42,abs(mark.x))));
-                  float petal = step(0.94, noise) * (1.0-smoothstep(0.6,1.0,length(mark.xy / vec2(0.17,0.38))));
+                  float faceMask = smoothstep(1.1, 1.65, p.z) * (1.0-axolotlFin);
+                  float bellyMask = (1.0-smoothstep(0.1,0.6,p.y)) * (1.0-axolotlFin);
+                  float pale = max(faceMask, bellyMask);
+                  vec3 regionColor = mix(axolotlBodyColor, axolotlFinColor, smoothstep(0.12,0.85,axolotlFin));
+                  regionColor = mix(regionColor, axolotlFaceColor, pale);
+                  float luminance = dot(diffuseColor.rgb, vec3(0.2126,0.7152,0.0722));
+                  float skinMask = smoothstep(0.04,0.22,luminance);
+                  diffuseColor.rgb = mix(diffuseColor.rgb, regionColor * clamp(luminance / 0.62, 0.65, 1.16), skinMask * 0.9);
+                  float bodyMask = (1.0 - smoothstep(1.05, 1.55, p.z)) * smoothstep(0.15, 0.5, p.y);
+                  vec2 uvMark = vec2(p.z, p.x) * 4.2 + axolotlPatternSeed * 0.137;
+                  vec2 cell = floor(uvMark);
+                  float noise = fract(sin(dot(cell, vec2(12.9898,78.233))) * 43758.5453);
+                  vec2 mark = fract(uvMark) - 0.5;
+                  float spots = step(0.32,noise) * (1.0-smoothstep(0.13,0.22,length(mark)));
+                  float star = step(0.56,noise) * (1.0-smoothstep(0.19,0.27,abs(mark.x)+abs(mark.y)));
+                  float ripple = 1.0-smoothstep(0.22,0.40,abs(sin(p.z*8.0+p.x*3.0+sin(p.x*5.0)*0.45)));
+                  float petal = step(0.4,noise) * (1.0-smoothstep(0.75,1.0,length(mark/vec2(0.17,0.34))));
                   float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern < 0.5 ? spots : axolotlPattern < 1.5 ? star : axolotlPattern < 2.5 ? ripple : petal;
-                  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.7 + vec3(0.2), bodyMask * pattern * 0.26);
+                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * pattern * skinMask * 0.78);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-dna-lids-v5';
+            material.customProgramCacheKey = () => 'axolotl-region-lids-v6';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -981,7 +1008,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, motionId]);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, motionId]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;
