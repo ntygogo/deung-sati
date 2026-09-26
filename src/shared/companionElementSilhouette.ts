@@ -74,16 +74,6 @@ export function addElementSilhouette(T: typeof Three, model: Three.Object3D, ele
       const jewel=add(new T.SphereGeometry(.055,18,12),pearl,fan);jewel.scale.set(1,1.3,.7);jewel.position.set(0,.075,.028);
     }
   }
-  // Three modest dorsal accents follow separate spine joints instead of a rigid back plate.
-  for(const [i,name] of ['Bone_006','Bone_005','Bone_004'].entries()){
-    const back=frame(name,new T.Vector3(0,.255,0));if(!back)continue;
-    back.rotation.y=Math.PI/2;
-    if(element==='earth'){
-      const crystal=add(new T.OctahedronGeometry(1,0),pearl,back);crystal.scale.set(.06,.11-i*.015,.05);crystal.position.y=.05;
-    }else{
-      const fin=petal(back,.20-i*.025,.065,-.25,i+2);fin.rotation.y=.18;
-    }
-  }
   // Jewelry-sized stalk details keep the face and expressive eye line unobstructed.
   const stalk=frame('Bone_040',new T.Vector3());
   if(stalk){

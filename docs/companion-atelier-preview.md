@@ -50,3 +50,17 @@ All additions are traversed by the existing GPU-resource cleanup.
 Portrait capture now fits the current posed model bounds with a temporary camera
 so side views retain the whole face and tail. The live view adds side-on viewing
 space while preserving front-facing greeting framing and the accepted sleep rig.
+
+## Gill and dorsal redesign
+The previous small dorsal protrusions and gill-tip ornaments are removed for the
+six elements. The dorsal is now a continuous skinned membrane with element-specific
+wave, scallop, flame, leaf, or faceted edging. Broad flower petals, fern branches,
+thin wind ribbons, water lobes, flame lobes, and angular earth plates create actual
+new gill silhouettes. Both surfaces follow the existing skeleton with interpolated
+weights, including sleep and rollover motions.
+
+The source GLB shares gill and head topology. Old branching fronds are compressed
+onto their nearest rig centerline outside a protected head envelope, retaining
+closed roots rather than cutting holes. New membranes grow around these stems.
+No rear-head cover or floating root caps are used. The approved tail fan geometry
+and motion remain unchanged. The new fin skeleton is disposed on renderer cleanup.

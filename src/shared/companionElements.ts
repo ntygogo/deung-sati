@@ -1,8 +1,9 @@
 import type * as Three from 'three';
+import { addElementFins } from './companionElementFins';
 import { addElementSilhouette } from './companionElementSilhouette';
 export type CompanionElement = 'earth' | 'water' | 'wind' | 'fire' | 'leaf' | 'flower';
 
-/** Small rig-attached forms: motion is inherited from the existing living skeleton. */
+/** Element lamps, skinned gill replacements, and coordinated tail silhouettes. */
 export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Three.Group, surface: Three.MeshPhysicalMaterial, element: CompanionElement, accent: string, tip: string, decorateLamp = true) {
   const detail = new T.MeshPhysicalMaterial({color:accent, roughness:.38, clearcoat:.65, metalness:.06});
   const soft = new T.MeshPhysicalMaterial({color:tip, roughness:.3, clearcoat:.8, metalness:.03});
@@ -44,15 +45,6 @@ export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Th
   } else if(decorateLamp) {
     for(let i=0;i<3;i++)oval(lamp,soft,Math.cos(i*2.1)*.105,.12+i*.035,Math.sin(i*2.1)*.105,.016,.021,.016);
   }
-  for(const [i,name] of ['Bone_049','Bone_053','Bone_043','Bone_046'].entries()) {
-    const bone=model.getObjectByName(name);if(!bone)continue;
-    const group=new T.Group();bone.add(group);
-    if(element==='earth') {const gem=mesh(new T.OctahedronGeometry(.068,0),i%2?soft:detail,group);gem.scale.y=1.5;}
-    else if(element==='leaf') {leaf(group,detail,.16,.045,(i%2?1:-1)*.35);leaf(group,soft,.105,.035,(i%2?-1:1)*.65);}
-    else if(element==='flower') {for(let j=0;j<5;j++){const a=j*Math.PI*2/5;const p=oval(group,soft,Math.cos(a)*.045,Math.sin(a)*.045,0,.038,.023,.018);p.rotation.z=a;}oval(group,surface,0,0,.015,.025,.025,.021);}
-    else if(element==='water') {oval(group,soft,0,.025,0,.034,.085,.024);}
-    else if(element==='wind') {const curl=mesh(new T.TorusGeometry(.05,.012,7,24,Math.PI*1.65),soft,group);curl.rotation.z=i*.7;}
-    else {const p=leaf(group,i%2?soft:detail,.13,.035,(i%2?1:-1)*.3);p.rotation.x=.35;}
-  }
+  addElementFins(T,model,element,accent,tip);
   return addElementSilhouette(T,model,element,accent,tip);
 }
