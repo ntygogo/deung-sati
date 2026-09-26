@@ -837,11 +837,11 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
               curlSideways(name, leading * (name === 'Bone_003' || name === 'Bone_002' ? -0.35 : 0.2));
               bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
-            bendBody('Bone_036', curl * 0.3 + lieDown * -0.04 + stand * 0.26 - crouch * 0.06);
-            bendBody('Bone_035', curl * 0.3 + lieDown * -0.06 + stand * 0.31 - crouch * 0.08);
-            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * -0.09 - stretch * 0.13 + stand * 0.3 + risePush * 0.045);
-            curlSideways('Bone_036', -restCurl * 0.025 + leading);
-            curlSideways('Bone_035', -restCurl * 0.035 + leading * 0.7);
+            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18 + stand * 0.26 - crouch * 0.06);
+            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16 + stand * 0.31 - crouch * 0.08);
+            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13 + stand * 0.3 + risePush * 0.045);
+            curlSideways('Bone_036', -restCurl * 0.1 + leading);
+            curlSideways('Bone_035', -restCurl * 0.12 + leading * 0.7);
             const neck = bones.get('Bone_034');
             if (neck) neck.quaternion.multiply(delta.setFromEuler(euler.set(0, 0, glass * Math.sin(age * 1.6) * 0.09 * motion)));
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
@@ -870,7 +870,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
               .multiply(delta.setFromEuler(euler.set(0, motion * Math.sin(t * 0.39) * 0.013, 0)));
             if (resting.phase !== 'awake') {
               pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, restYaw));
-              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.22 + walk * Math.sin(stepPhase + 0.35) * 0.018));
+              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase + 0.35) * 0.018));
             }
             if (helloActive) {
               const rising = stand * 1.03 + risePush * 0.075;
@@ -994,7 +994,6 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
     {status !== 'ready' && <span className="companion-model-message" role="status">{status === 'error' ? 'เปิดตัวอ่อน 3D ไม่ได้' : 'กำลังพาน้องมา…'}</span>}
   </span>;
   return <div className="axolotl-viewer" data-rest={restPhase} data-paused={paused} data-motion={motionId} data-pattern={appearance?.traits.pattern.id}>
-    <span className="axolotl-sleep-letters" aria-hidden="true"><i>Z</i><i>z</i><i>z</i></span>
     <button type="button" className="living-companion-3d axolotl-orbit" data-renderer="axolotl-water-preview" data-status={status}
     aria-label="ลูบหัวน้องเพื่อเล่นด้วย ลากบริเวณรอบตัวหรือใช้ลูกศรเพื่อหมุนดู กด Enter เพื่อให้น้องเล่น"
     onPointerDown={event => {

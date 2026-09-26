@@ -65,3 +65,5 @@ Validation: five tests cover skill mapping, deterministic ties, safe motion rang
 legacy stability, and immutable repository snapshots; production build passes.
 Browser checks cover mobile sleep/wake and Zzz behavior. No physical iOS or
 Android test has been performed in this workspace.
+
+User revision: restored the previously accepted curled sleep pose and removed Zzz. DNA features remain enabled.
