@@ -461,7 +461,7 @@ apiApp.post('/companion/hatch', requireAuth, async (req: AuthenticatedRequest, r
 
     res.json({ success: true, companion: updatedCompanion, snapshot, reward });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.code==='COMPANION_DESIGN_POOL_EXHAUSTED'?409:500).json({ error: err.message, code: err.code });
   }
 });
 

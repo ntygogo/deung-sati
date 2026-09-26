@@ -1,3 +1,4 @@
+import { CompanionDesignPoolExhausted } from './companionDesignRegistry.js';
 import crypto from 'crypto';
 import { ConversationRepository } from './conversationRepository.js';
 import { db } from '../db/database.js';
@@ -377,6 +378,7 @@ export class LoopRepository {
     progressCount: number;
     reward: { xp: number; shells: number; wallet?: any; dailyRewardCapped?: boolean };
     newlyHatched?: boolean;
+    hatchUnavailable?: string;
     hatchMilestoneReward?: { xp: number; shells: number };
     companion?: any;
     snapshot?: any;
@@ -634,52 +636,57 @@ export class LoopRepository {
 
       // 8. Check 20-trace hatching & milestone reward
       let newlyHatched = false;
+      let hatchUnavailable: string | undefined;
       let hatchMilestoneReward = undefined;
       let companion = await tx.queryOne<any>('SELECT * FROM companions WHERE user_id = $1', [userId]);
       let snapshot = companion ? await tx.queryOne<any>('SELECT * FROM companion_dna_snapshots WHERE companion_id = $1', [companion.id]) : null;
 
       if (progressCount >= 20 && companion && companion.stage === 0 && !companion.hatch_milestone_awarded) {
-        newlyHatched = true;
-        const milestoneXp = 50;
-        const milestoneShells = 25;
-        hatchMilestoneReward = { xp: milestoneXp, shells: milestoneShells };
-
-        // Mark hatch milestone awarded
-        await tx.execute(
-          'UPDATE companions SET stage = 1, unlocked_max_stage = 1, hatch_milestone_awarded = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-          [companion.id]
-        );
-
-        // Wallet update for milestone
-        const currentWallet = await tx.queryOne<any>('SELECT * FROM wallets WHERE user_id = $1', [userId]);
-        const mXp = (currentWallet?.xp || 0) + milestoneXp;
-        const mShells = (currentWallet?.shells || 0) + milestoneShells;
-        await tx.execute(
-          'UPDATE wallets SET xp = $1, shells = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-          [mXp, mShells, userId]
-        );
-
-        // Record milestone ledger
-        await tx.execute(
-          `INSERT INTO currency_transactions (id, user_id, idempotency_key, currency, amount, balance_after, event_type, event_id, created_at)
-           VALUES ($1, $2, $3, 'xp', $4, $5, 'hatch_milestone', $6, CURRENT_TIMESTAMP)`,
-          [`ctx_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, userId, `COMPANION_HATCH:${companion.id}:xp`, milestoneXp, mXp, companion.id]
-        );
-        await tx.execute(
-          `INSERT INTO currency_transactions (id, user_id, idempotency_key, currency, amount, balance_after, event_type, event_id, created_at)
-           VALUES ($1, $2, $3, 'shells', $4, $5, 'hatch_milestone', $6, CURRENT_TIMESTAMP)`,
-          [`ctx_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, userId, `COMPANION_HATCH:${companion.id}:shells`, milestoneShells, mShells, companion.id]
-        );
-
-        // Create DNA snapshot inside tx
         const allCompletedLoops = await tx.query<any>(
-          'SELECT * FROM completed_loops WHERE user_id = $1 AND progress_counted = TRUE ORDER BY created_at ASC',
-          [userId]
-        );
-        snapshot = await companionRepository.createDnaSnapshot(companion.id, userId, allCompletedLoops, tx);
+          'SELECT * FROM completed_loops WHERE user_id = $1 AND progress_counted = TRUE ORDER BY created_at ASC', [userId]);
+        try {
+          snapshot = await companionRepository.createDnaSnapshot(companion.id, userId, allCompletedLoops, tx);
+        } catch(error) {
+          if(!(error instanceof CompanionDesignPoolExhausted))throw error;
+          hatchUnavailable=error.code;
+        }
+        // A full collection must not discard a user's completed practice or its reward.
+        if(snapshot){
+          newlyHatched = true;
+          const milestoneXp = 50;
+          const milestoneShells = 25;
+          hatchMilestoneReward = { xp: milestoneXp, shells: milestoneShells };
 
-        walletRecord = { xp: mXp, level: currentWallet?.level || 1, shells: mShells, memory_crystals: currentWallet?.memory_crystals || 0 };
-        companion = await tx.queryOne<any>('SELECT * FROM companions WHERE user_id = $1', [userId]);
+          // Mark hatch milestone awarded
+          await tx.execute(
+            'UPDATE companions SET stage = 1, unlocked_max_stage = 1, hatch_milestone_awarded = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [companion.id]
+          );
+
+          // Wallet update for milestone
+          const currentWallet = await tx.queryOne<any>('SELECT * FROM wallets WHERE user_id = $1', [userId]);
+          const mXp = (currentWallet?.xp || 0) + milestoneXp;
+          const mShells = (currentWallet?.shells || 0) + milestoneShells;
+          await tx.execute(
+            'UPDATE wallets SET xp = $1, shells = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
+            [mXp, mShells, userId]
+          );
+
+          // Record milestone ledger
+          await tx.execute(
+            `INSERT INTO currency_transactions (id, user_id, idempotency_key, currency, amount, balance_after, event_type, event_id, created_at)
+             VALUES ($1, $2, $3, 'xp', $4, $5, 'hatch_milestone', $6, CURRENT_TIMESTAMP)`,
+            [`ctx_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, userId, `COMPANION_HATCH:${companion.id}:xp`, milestoneXp, mXp, companion.id]
+          );
+          await tx.execute(
+            `INSERT INTO currency_transactions (id, user_id, idempotency_key, currency, amount, balance_after, event_type, event_id, created_at)
+             VALUES ($1, $2, $3, 'shells', $4, $5, 'hatch_milestone', $6, CURRENT_TIMESTAMP)`,
+            [`ctx_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, userId, `COMPANION_HATCH:${companion.id}:shells`, milestoneShells, mShells, companion.id]
+          );
+
+          walletRecord = { xp: mXp, level: currentWallet?.level || 1, shells: mShells, memory_crystals: currentWallet?.memory_crystals || 0 };
+          companion = await tx.queryOne<any>('SELECT * FROM companions WHERE user_id = $1', [userId]);
+        }
       }
 
       const growthEvent = (await tx.queryOne<CompletedLoopRecord>(
@@ -698,6 +705,7 @@ export class LoopRepository {
           wallet: walletRecord,
         },
         newlyHatched,
+        hatchUnavailable,
         hatchMilestoneReward,
         companion,
         snapshot,

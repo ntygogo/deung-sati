@@ -1,5 +1,3 @@
-import { birthVisuals } from '../shared/companionBirthVisuals';
-import { appearanceHash } from '../shared/companionAppearance';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { validateLoopForConfirmation } from '../shared/chat-protocol';
@@ -180,6 +178,7 @@ interface CompanionContextType {
     progressCount?: number;
     reward?: any;
     newlyHatched?: boolean;
+    hatchUnavailable?: string;
     hatchMilestoneReward?: any;
     companion?: any;
     error?: string;
@@ -953,27 +952,8 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setWallet(newWallet);
       localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(newWallet));
 
-      // Check 20-trace hatch for guest
-      let newlyHatched = false;
-      if (newCount >= 20 && companion?.stage === 0) {
-        newlyHatched = true;
-        const hatchedWallet = {
-          ...newWallet,
-          xp: newWallet.xp + 50,
-          shells: newWallet.shells + 25,
-        };
-        setWallet(hatchedWallet);
-        localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(hatchedWallet));
-
-        const hatchedComp: CompanionData = {
-          ...companion,
-          snapshot: companion.snapshot ?? guestBirthSnapshot(companion, savedCompleted),
-          stage: 1,
-          unlocked_max_stage: 1,
-        };
-        setCompanion(hatchedComp);
-        localStorage.setItem(LOCAL_STORAGE_COMPANION_KEY, JSON.stringify(hatchedComp));
-      }
+      // A unique collectible may only be issued by the authenticated server.
+      const newlyHatched = false;
 
       return {
         success: true,
@@ -1027,23 +1007,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (data.reward?.wallet) setWallet(data.reward.wallet);
       return { success: true, companion: data.companion, snapshot: data.snapshot };
     } else {
-      if (!companion) return { success: false, error: 'No companion found' };
-      const hatchedComp: CompanionData = {
-        ...companion,
-        snapshot: companion.snapshot ?? guestBirthSnapshot(companion, JSON.parse(localStorage.getItem(LOCAL_STORAGE_COMPLETED_LOOPS_KEY) || '[]')),
-        stage: 1, // Hatchling
-        unlocked_max_stage: 1,
-        mood_state: 'excited',
-      };
-      setCompanion(hatchedComp);
-      localStorage.setItem(LOCAL_STORAGE_COMPANION_KEY, JSON.stringify(hatchedComp));
-      setWallet((prev) => ({
-        ...prev,
-        xp: prev.xp + 50,
-        shells: prev.shells + 30,
-        memory_crystals: prev.memory_crystals + 1,
-      }));
-      return { success: true, companion: hatchedComp };
+      return { success: false, error: 'กรุณาเข้าสู่ระบบและเชื่อมต่ออินเทอร์เน็ตเพื่อฟักน้องประจำตัว' };
     }
   };
 
@@ -1084,10 +1048,3 @@ export const useCompanion = () => {
   if (!ctx) throw new Error('useCompanion must be used within CompanionProvider');
   return ctx;
 };
-
-function guestBirthSnapshot(companion: CompanionData, loops: Array<Record<string, unknown>>) {
-  const counted = loops.filter(loop => loop.progress_counted !== false);
-  const score = (key: string) => counted.reduce((sum, loop) => sum + (loop[key] ? 1 : 0), 0);
-  const skillsSummary = { emotionalAwareness: score('emotional_awareness'), somaticAwareness: score('somatic_awareness'), cognitiveClarity: score('cognitive_clarity'), consciousAction: score('conscious_action') };
-  return { seed: companion.seed, dna_json: { ...birthVisuals(skillsSummary, appearanceHash(String(companion.seed))), skillsSummary, primaryColor: companion.dna?.primary_pink_shade ?? 'soft_sakura', secondaryColor: companion.dna?.secondary_color, totalCompletedLoops: counted.length } };
-}

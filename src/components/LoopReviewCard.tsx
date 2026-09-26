@@ -501,6 +501,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
             ? '🎉 สหายสติฟักออกจากไข่แล้ว!'
             : feedback.message || 'บันทึก Growth Event เรียบร้อยแล้ว!'}
         </h3>
+        {successResult.hatchUnavailable === 'COMPANION_DESIGN_POOL_EXHAUSTED' && <p role="status">บันทึกการฝึกแล้วค่ะ น้องคอลเลกชันแรกครบทุกชุดแล้ว ไข่ของคุณจะรอคอลเลกชันถัดไป</p>}
         <p style={{ fontSize: '13px', color: '#B91C1C', fontStyle: 'italic', margin: '0 0 16px 0' }}>
           “{feedback.quote || 'ทุกครั้งที่เราตระหนักรู้ คือการโอบกอดและเติบโตขึ้นหนึ่งก้าว'}”
         </p>

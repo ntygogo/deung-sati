@@ -36,12 +36,12 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       const current=displayedAppearance.previewRemix;
       const options=(Object.keys(ELEMENT_LABELS) as Array<keyof typeof ELEMENT_LABELS>).filter(key=>key!==current.parts.lamp);
       const lamp=options[Math.floor(Math.random()*options.length)];
-      setDnaPreview({...displayedAppearance,previewRemix:{...current,parts:{...current.parts,lamp}},previewLamp:COMPANION_COLLECTIONS[lamp].lampShape});
+      setDnaPreview({...displayedAppearance,collectibleSerial:undefined,previewRemix:{...current,parts:{...current.parts,lamp}},previewLamp:COMPANION_COLLECTIONS[lamp].lampShape});
       return;
     }
     const lamps = ['pearl', 'drop', 'bud'] as const;
     const choices = lamps.filter(lamp => lamp !== dnaPreview?.previewLamp);
-    setDnaPreview({...displayedAppearance, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
+    setDnaPreview({...displayedAppearance, collectibleSerial:undefined, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
   };
   const progress = eggProgress(traceCount);
   const previewAxolotl = new URLSearchParams(window.location.search).get('previewAxolotl') === '1';
@@ -100,6 +100,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </button>
     </section>
 
+    {!dnaPreview && appearance.collectibleSerial && <p className="companion-edition">FIRST WONDERS · #{String(appearance.collectibleSerial).padStart(5,'0')} / 62,208 · ชุดประจำตัวของน้อง</p>}
     <section className="dreamy-dna-preview dreamy-atelier" aria-label="ออกแบบน้องของฉัน">
       <span className="atelier-eyebrow">LITTLE WONDERS · ลองลุคของน้อง</span>
       <h2>{dnaPreview?.previewRemix ? dnaPreview.palette.label : dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].name : 'น้องในแบบที่เธอชอบ'}</h2>

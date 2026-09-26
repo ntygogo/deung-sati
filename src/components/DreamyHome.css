@@ -62,3 +62,5 @@
 .dreamy-atelier .atelier-secondary{margin:10px 0 8px}.atelier-secondary button{background:transparent;border:0;text-decoration:underline;text-underline-offset:3px;font-size:11px;padding:5px 8px;min-height:30px;color:#947a8e}
 
 .atelier-palette-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:14px 0}.atelier-palette-grid button{display:flex;flex-direction:column;align-items:center;gap:5px;border:1px solid #dccddd;border-radius:12px;background:#fff9fc;padding:9px 3px;color:#68485e;font:inherit;font-size:10px;min-height:57px}.atelier-palette-grid button[aria-pressed=true]{border-color:#a85486;background:#fbe5f0;box-shadow:0 0 0 1px #a85486}.atelier-palette-grid button:focus-visible{outline:2px solid #8a487d;outline-offset:2px}.dreamy-atelier .atelier-secondary{display:flex;flex-wrap:wrap;justify-content:center;gap:4px}.dreamy-atelier .atelier-secondary button{min-height:44px}
+
+.companion-edition{text-align:center;color:#855579;font-size:11px;letter-spacing:.035em;margin:12px 0}

@@ -5,6 +5,7 @@ import type { IDatabaseAdapter, ExecuteResult } from './types.js';
 
 export class SqliteDatabaseAdapter implements IDatabaseAdapter {
   private db: DatabaseSync;
+  private transactionTail: Promise<void> = Promise.resolve();
 
   constructor(dbPath: string = ':memory:') {
     if (dbPath !== ':memory:') {
@@ -90,7 +91,13 @@ export class SqliteDatabaseAdapter implements IDatabaseAdapter {
   }
 
   async transaction<T>(callback: (tx: IDatabaseAdapter) => Promise<T>): Promise<T> {
-    this.db.exec('BEGIN TRANSACTION;');
+    const previous=this.transactionTail;
+    let release!:()=>void;
+    this.transactionTail=new Promise<void>(resolve=>{release=resolve;});
+    await previous;
+    try {
+      this.db.exec('BEGIN IMMEDIATE;');
+    } catch(error){release();throw error;}
     try {
       const txAdapter: IDatabaseAdapter = {
         getDriver: () => 'sqlite',
@@ -113,6 +120,8 @@ export class SqliteDatabaseAdapter implements IDatabaseAdapter {
         // Rollback might fail if already aborted
       }
       throw err;
+    } finally {
+      release();
     }
   }
 

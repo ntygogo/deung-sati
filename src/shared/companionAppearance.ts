@@ -1,3 +1,4 @@
+import { readCollectibleDesign, ELEMENT_LAMPS } from './companionCollectible';
 /** Read-only appearance projection. Never awards points or rewrites birth DNA.
  * Freeze this catalog: add new families in a new version, not by reordering V1.
  */
@@ -33,6 +34,7 @@ export type Trait = { id: string; label: string; origin: 'birth' | 'legacy' | 's
 export type SkillKey = 'emotionalAwareness' | 'somaticAwareness' | 'cognitiveClarity' | 'consciousAction';
 export interface CompanionAppearanceSource { id?: string; seed?: number | string; dna?: unknown; snapshot?: unknown }
 export interface CompanionAppearance {
+  collectibleSerial?: number;
   previewRemix?: import("./companionRemix").RemixDesign;
   previewLamp?: 'pearl' | 'drop' | 'bud';
   previewCollection?: 'lotus' | 'moonpool' | 'starlight' | 'earth' | 'water' | 'wind' | 'fire' | 'leaf' | 'flower';
@@ -113,8 +115,16 @@ export function resolveCompanionAppearance(source: CompanionAppearanceSource = {
     const value = summary[key];
     skills[key] = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   }
-  return { version: APPEARANCE_VERSION, identity, palette, traits, skills,
+  const resolved:CompanionAppearance = { version: APPEARANCE_VERSION, identity, palette, traits, skills,
     hasBirthSnapshot: Object.keys(birth).length > 0, patternSeed: appearanceHash(`${seed}:pattern-position:v1`) };
+  const collectible=readCollectibleDesign(birth.collectibleDesign);
+  if(!collectible)return resolved;
+  const art=collectible.colors!;
+  const pattern=TRAIT_CATALOG.pattern.options.find(([id])=>id===collectible.pattern)!;
+  return {...resolved,collectibleSerial:collectible.serial,
+    previewRemix:collectible,previewCollection:collectible.parts.gills,previewLamp:ELEMENT_LAMPS[collectible.parts.lamp],
+    palette:{...palette,label:art.name,body:art.body,secondary:art.fin,lamp:art.lamp},
+    traits:{...traits,pattern:{id:pattern[0],label:pattern[1],origin:'birth'}}};
 }
 
 /** Sandbox only; consumers never save this projection back as a Growth Event. */
@@ -126,7 +136,7 @@ export function previewAppearance(base: CompanionAppearance, overrides: Partial<
     if (chosen) traits[key] = { id: chosen[0], label: chosen[1], origin: 'seed' };
   }
   const palette = PALETTES.find(p => p.id === overrides.palette);
-  return { ...base, traits, palette: palette ? { ...palette } : base.palette };
+  return { ...base, collectibleSerial: undefined, traits, palette: palette ? { ...palette } : base.palette };
 }
 
 export const VISIBLE_TRAITS: readonly TraitKey[] = ['surface', 'pattern', 'aura', 'motion'];

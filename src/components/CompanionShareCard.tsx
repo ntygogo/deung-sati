@@ -149,7 +149,7 @@ async function makePortrait(capture: string, appearance: CompanionAppearance, na
   ctx.fillStyle = '#84677f';
   fittedText(ctx, `${appearance.palette.label}  ·  ${appearance.traits.pattern.label}`, 1185, 26, 860);
   ctx.fillStyle = '#987c91';
-  fittedText(ctx, 'เติบโตไปด้วยกัน ทีละวัน', 1257, 24, 850);
+  fittedText(ctx, appearance.collectibleSerial ? `FIRST WONDERS · #${String(appearance.collectibleSerial).padStart(5,'0')} / 62,208` : 'เติบโตไปด้วยกัน ทีละวัน', 1257, 24, 850);
 
   return new Promise((resolve, reject) => card.toBlob(blob => blob ? resolve(blob) : reject(new Error('Unable to save portrait')), 'image/png'));
 }
