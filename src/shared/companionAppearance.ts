@@ -34,6 +34,7 @@ export type SkillKey = 'emotionalAwareness' | 'somaticAwareness' | 'cognitiveCla
 export interface CompanionAppearanceSource { id?: string; seed?: number | string; dna?: unknown; snapshot?: unknown }
 export interface CompanionAppearance {
   previewLamp?: 'pearl' | 'drop' | 'bud';
+  previewCollection?: 'lotus' | 'moonpool' | 'starlight';
   version: typeof APPEARANCE_VERSION;
   identity: string;
   palette: { id: string; label: string; body: string; secondary: string; lamp: string; hue: number; saturation: number };

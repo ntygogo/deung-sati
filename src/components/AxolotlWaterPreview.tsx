@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { COMPANION_COLLECTIONS } from '../shared/companionArtDirection';
 import { companionMotion } from '../shared/companionBirthVisuals';
 import type { CompanionAppearance } from '../shared/companionAppearance';
 import './LivingCompanion3D.css';
 
-type Props = { paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean };
+export type CompanionCaptureHandle = { capture: () => Promise<string> };
+type Props = { ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
 const HELLO_DURATION = 11.8;
@@ -30,7 +32,9 @@ const GILLS = [
   { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
-export function AxolotlWaterPreview({ paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false }: Props) {
+export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false }: Props) {
+  const captureRef = useRef<(() => Promise<string>) | null>(null);
+  useImperativeHandle(ref, () => ({ capture: () => captureRef.current ? captureRef.current() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ')) }), []);
   const embryo = mode === 'embryo';
   const motionId = appearance?.traits.motion.id;
   const motionProfile = companionMotion(motionId);
@@ -194,10 +198,15 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
         const model = gltf.scene;
         const faces: import('three').SkinnedMesh[] = [];
         const eyelids = { value: 0 };
+        const art = appearance?.previewCollection ? COMPANION_COLLECTIONS[appearance.previewCollection] : null;
         const bodyColor = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
         const finColor = new THREE.Color(appearance?.palette.secondary ?? '#8BD3DD');
-        const faceColor = new THREE.Color('#FFE2D7').lerp(bodyColor, 0.72);
-        const markingColor = finColor.clone().multiplyScalar(0.48);
+        const faceColor = art ? new THREE.Color(art.face) : new THREE.Color('#FFE2D7').lerp(bodyColor, 0.72);
+        const bellyColor = new THREE.Color(art?.belly ?? '#FFE0CC');
+        const finTipColor = new THREE.Color(art?.finTip ?? '#F4D4E7');
+        const cheekColor = new THREE.Color(art?.cheek ?? '#F28D9F');
+        const lampColor = new THREE.Color(appearance?.palette.lamp ?? '#FFDEA2');
+        const markingColor = art ? new THREE.Color(art.marking) : finColor.clone().multiplyScalar(0.6);
         const patternKind = ['pearl_freckles', 'starlight_speckles', 'water_ripples', 'petal_marks'].indexOf(appearance?.traits.pattern.id ?? '');
 
         const squish = { value: 0 };
@@ -207,31 +216,17 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           if (!(object as import('three').SkinnedMesh).isSkinnedMesh) return;
           const mesh = object as import('three').SkinnedMesh;
           const positions = mesh.geometry.getAttribute('position');
-          // Alter only the bulb vertices weighted to its two verified joints.
-          // The head, stalk, gills, torso and tail retain their original positions.
-          const lampStyle = appearance?.previewLamp;
+          // Mark the verified bulb joints; replacement lamps keep the authored stalk intact.
           const bulbIndices = mesh.geometry.getAttribute('skinIndex');
           const bulbWeights = mesh.geometry.getAttribute('skinWeight');
           const lampRegions = new Float32Array(positions.count);
           for (let i=0; i<positions.count; i++) {
-            let weight=0;
             for (let j=0;j<4;j++) {
               const name=mesh.skeleton.bones[bulbIndices.getComponent(i,j)]?.name;
-              if(name==='Bone_037'||name==='Bone_038') weight+=bulbWeights.getComponent(i,j);
+              if(name==='Bone_037'||name==='Bone_038') lampRegions[i]+=bulbWeights.getComponent(i,j);
             }
-            lampRegions[i]=weight;
-            if(!lampStyle || weight<.45) continue;
-            const x=positions.getX(i), y=positions.getY(i), z=positions.getZ(i);
-            const nx=(x-.033)/.082, ny=(y-1.483)/.107, nz=(z-1.895)/.087;
-            const length=Math.hypot(nx,ny,nz)||1;
-            const ux=nx/length,uy=ny/length,uz=nz/length;
-            const blend=THREE.MathUtils.smoothstep(weight,.45,.9)*THREE.MathUtils.smoothstep(y,1.37,1.42);
-            const radius=lampStyle==='pearl' ? .104 : lampStyle==='drop' ? .098*(.84-.3*uy) : .102*(.86+.12*Math.cos(Math.atan2(uz,ux)*5))*(1-.22*Math.max(0,uy));
-            const height=lampStyle==='pearl' ? .104 : lampStyle==='drop' ? .153 : .139;
-            positions.setXYZ(i,THREE.MathUtils.lerp(x,.033+ux*radius,blend),THREE.MathUtils.lerp(y,1.483+uy*height,blend),THREE.MathUtils.lerp(z,1.895+uz*radius,blend));
           }
           mesh.geometry.setAttribute('axolotlLampRegion',new THREE.BufferAttribute(lampRegions,1));
-          if(lampStyle) {positions.needsUpdate=true;mesh.geometry.computeVertexNormals();}
           const skinIndices = mesh.geometry.getAttribute('skinIndex');
           const skinWeights = mesh.geometry.getAttribute('skinWeight');
           const finBones = new Set<string>([...TAIL, ...GILLS.flatMap(g => [g.root, ...g.mids, g.tip])]);
@@ -301,6 +296,11 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
             material.onBeforeCompile = shader => {
               shader.uniforms.axolotlBodyColor = { value: bodyColor };
+              shader.uniforms.axolotlBellyColor = { value: bellyColor };
+              shader.uniforms.axolotlFinTipColor = { value: finTipColor };
+              shader.uniforms.axolotlCheekColor = { value: cheekColor };
+              shader.uniforms.axolotlLampColor = { value: lampColor };
+              shader.uniforms.axolotlCustomLamp = { value: appearance?.previewLamp ? 1 : 0 };
               shader.uniforms.axolotlFinColor = { value: finColor };
               shader.uniforms.axolotlFaceColor = { value: faceColor };
               shader.uniforms.axolotlMarkingColor = { value: markingColor };
@@ -317,6 +317,11 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                 .replace('#include <common>', `#include <common>
                   varying vec3 axolotlFacePosition;
                   uniform vec3 axolotlBodyColor;
+                  uniform vec3 axolotlBellyColor;
+                  uniform vec3 axolotlFinTipColor;
+                  uniform vec3 axolotlCheekColor;
+                  uniform vec3 axolotlLampColor;
+                  uniform float axolotlCustomLamp;
                   uniform vec3 axolotlFinColor;
                   uniform vec3 axolotlFaceColor;
                   uniform vec3 axolotlMarkingColor;
@@ -352,11 +357,18 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                   }`)
                 .replace('#include <map_fragment>', `#include <map_fragment>
                   vec3 p = axolotlFacePosition;
+                  vec3 lampOffset = p-vec3(.06520609,1.60176788,1.81932820);
+                  vec3 lampAxis = vec3(-.19611631,-.78446473,.58834941);
+                  float lampT = dot(lampOffset,lampAxis);
+                  float lampR = length(lampOffset-lampAxis*lampT);
+                  if(axolotlCustomLamp>.5 && axolotlLamp>.45 && lampT>.035 && lampR<.13) discard;
                   float faceMask = smoothstep(1.1, 1.65, p.z) * (1.0-axolotlFin);
                   float bellyMask = (1.0-smoothstep(0.1,0.6,p.y)) * (1.0-axolotlFin);
-                  float pale = max(faceMask, bellyMask * 0.6);
-                  vec3 regionColor = mix(axolotlBodyColor, axolotlFinColor, smoothstep(0.12,0.85,axolotlFin));
-                  regionColor = mix(regionColor, axolotlFaceColor, pale);
+                  float finTip = smoothstep(.55,1.3,abs(p.x)) * .85 + smoothstep(1.15,1.6,p.y)*.35;
+                  vec3 finGradient = mix(axolotlFinColor, axolotlFinTipColor, clamp(finTip,0.0,1.0));
+                  vec3 regionColor = mix(axolotlBodyColor, finGradient, smoothstep(0.12,0.85,axolotlFin));
+                  regionColor = mix(regionColor, axolotlBellyColor, bellyMask * .55);
+                  regionColor = mix(regionColor, axolotlFaceColor, faceMask);
                   float luminance = dot(diffuseColor.rgb, vec3(0.2126,0.7152,0.0722));
                   float skinMask = smoothstep(0.04,0.22,luminance);
                   diffuseColor.rgb = mix(diffuseColor.rgb, regionColor * clamp(luminance / 0.62, 0.65, 1.16), skinMask * 0.9);
@@ -367,23 +379,25 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                   vec2 mark = fract(uvMark) - 0.5;
                   float spots = step(0.32,noise) * (1.0-smoothstep(0.13,0.22,length(mark)));
                   float star = step(0.56,noise) * (1.0-smoothstep(0.16,0.22,sqrt(abs(mark.x*mark.y)) + .25*length(mark)));
-                  float ripple = 1.0-smoothstep(0.22,0.40,abs(sin(p.z*8.0+p.x*3.0+sin(p.x*5.0)*0.45)));
-                  vec2 lotus = vec2(p.z-.25, p.x) * 2.8;
+                  float waterLine = abs(abs(p.x) - (.19 + .12*sin(p.z*3.2)));
+                  float waterLine2 = abs(abs(p.x) - (.38 + .08*sin(p.z*3.2+.7)));
+                  float ripple = (1.0-smoothstep(.022,.042,waterLine))*.85 + (1.0-smoothstep(.012,.028,waterLine2))*.55;
+                  vec2 lotus = vec2(p.z-.35, abs(p.x)-.23) * 2.2;
                   float petalAngle = atan(lotus.y,lotus.x);
                   float petals = .42 + .17*cos(petalAngle*5.0);
                   float petal = (1.0-smoothstep(petals-.04,petals+.035,length(lotus))) * smoothstep(.12,.2,length(lotus));
                   float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern < 0.5 ? spots : axolotlPattern < 1.5 ? star : axolotlPattern < 2.5 ? ripple : petal;
-                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * pattern * skinMask * 0.78);
+                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * clamp(pattern,0.0,1.0) * skinMask * 0.67);
                   float cheekR = exp(-dot((p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16),(p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16)));
                   float cheekL = exp(-dot((p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16),(p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16)));
-                  diffuseColor.rgb = mix(diffuseColor.rgb,vec3(.88,.25,.34),max(cheekR,cheekL)*.36*skinMask);
-                  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0,.67,.30),smoothstep(.4,.9,axolotlLamp)*.8);
+                  diffuseColor.rgb = mix(diffuseColor.rgb,axolotlCheekColor,max(cheekR,cheekL)*.52*skinMask);
+                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlLampColor,smoothstep(.4,.9,axolotlLamp)*.8);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-lamp-only-v8';
+            material.customProgramCacheKey = () => 'axolotl-atelier-v10';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -465,6 +479,53 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
         let helloNear = 0;
         let helloActive = false;
         const antennaTip = model.getObjectByName('Bone_037');
+        let lampSurface: import('three').MeshPhysicalMaterial | undefined;
+        let lampGroup: import('three').Group | undefined;
+        if (appearance?.previewLamp) {
+          const socket = model.getObjectByName('Bone_038');
+          if(socket) {
+            model.updateMatrixWorld(true);
+            const axis = new THREE.Vector3(-.19611631,-.78446473,.58834941).normalize();
+            const attachment = new THREE.Vector3(.04683994,1.57163330,1.83146100);
+            lampGroup = new THREE.Group();
+            lampGroup.position.copy(socket.worldToLocal(attachment));
+            lampGroup.quaternion.copy(socket.getWorldQuaternion(new THREE.Quaternion()).invert())
+              .multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),axis));
+            socket.add(lampGroup);
+            lampSurface = new THREE.MeshPhysicalMaterial({ color:lampColor,emissive:lampColor,emissiveIntensity:.18,
+              roughness:.34,metalness:.02,clearcoat:.65,clearcoatRoughness:.3 });
+            const shape=appearance.previewLamp;
+            if(shape==='pearl') {
+              const pearlBulb=new THREE.Mesh(new THREE.SphereGeometry(.106,40,28),lampSurface);
+              pearlBulb.position.y=.122;lampGroup.add(pearlBulb);
+            } else {
+              const profile=shape==='drop' ? [[.026,0],[.016,.04],[.021,.085],[.043,.14],[.074,.195],[.091,.237],[.079,.27],[.049,.291],[0,.305]] : [[.022,0],[.040,.035],[.073,.085],[.090,.14],[.072,.185],[.039,.223],[0,.248]];
+              const curve=new THREE.CatmullRomCurve3(profile.map(([radius,y])=>new THREE.Vector3(radius,y,0)));
+              const points=curve.getPoints(48).map(point=>new THREE.Vector2(Math.max(0,point.x),point.y));
+              const bulbGeometry=new THREE.LatheGeometry(points,56);
+              if(shape==='bud') {
+                const positions=bulbGeometry.getAttribute('position');
+                const colors=new Float32Array(positions.count*3);
+                const petalColor=new THREE.Color(art?.face ?? '#F4BACD');
+                for(let i=0;i<positions.count;i++) {
+                  const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i);
+                  const angle=Math.atan2(z,x);const ridge=.91+.09*Math.cos(angle*5);
+                  positions.setXYZ(i,x*ridge,y,z*ridge);
+                  const tip=THREE.MathUtils.smoothstep(y,.09,.21);
+                  const color=lampColor.clone().lerp(petalColor,tip*.78).multiplyScalar(.94+.06*Math.cos(angle*5));
+                  color.toArray(colors,i*3);
+                }
+                bulbGeometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+                bulbGeometry.computeVertexNormals();
+                lampSurface.vertexColors=true;
+                lampSurface.color.set('#ffffff');
+              }
+              lampGroup.add(new THREE.Mesh(bulbGeometry,lampSurface));
+            }
+            const collar=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),new THREE.MeshStandardMaterial({color:finColor,roughness:.4,metalness:.12}));
+            collar.scale.set(.045,.017,.045);collar.position.y=.005;lampGroup.add(collar);
+          }
+        }
         const glowCanvas = document.createElement('canvas');
         glowCanvas.width = glowCanvas.height = 128;
         const context = glowCanvas.getContext('2d');
@@ -478,10 +539,14 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
         const glowTexture = new THREE.CanvasTexture(glowCanvas);
         const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.48 });
         const halo = new THREE.Sprite(glowMaterial);
-        halo.position.set(0, 0.065, 0);
+        halo.position.set(0, 0, 0);
+        if(lampGroup && antennaTip) {
+          model.updateMatrixWorld(true);
+          halo.position.copy(antennaTip.worldToLocal(lampGroup.localToWorld(new THREE.Vector3(0,appearance?.previewLamp === 'drop' ? .20 : .13,0))));
+        }
         halo.scale.setScalar(0.42);
         antennaTip?.add(halo);
-        const light = new THREE.PointLight(appearance?.palette.lamp ?? 0xffd7a6, 0.32, 0.7);
+        const light = new THREE.PointLight(appearance?.palette.lamp ?? 0xffd7a6, 0.32, 0.7, appearance?.previewLamp ? 0 : 2);
         light.position.copy(halo.position);
         antennaTip?.add(light);
         disposeModel = () => {
@@ -1018,6 +1083,10 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
           camera.lookAt(0, 0.04 + framingLift, 0);
           for (const glow of handGlows) glow.quaternion.copy(camera.quaternion);
+          if(lampSurface) {
+            lampSurface.emissiveIntensity = .16 + light.intensity * .48;
+            glowMaterial.opacity = .15 + light.intensity * .25;
+          }
           renderer?.render(scene, camera);
           crown.getWorldPosition(projectedCrown).project(camera);
           const headSize = 0.56 / (3.8 - 0.9 * Math.cos(viewYaw - FRONT_YAW)) / (2 * Math.tan(THREE.MathUtils.degToRad(17)));
@@ -1026,6 +1095,21 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
             rx: headSize * 0.35 / camera.aspect, ry: headSize * 0.26,
             visible: !!head && !helloActive && !tickleActive && Math.cos(viewYaw - FRONT_YAW) > 0.35 && Math.abs(flipAngle) < 0.01,
           };
+        };
+        captureRef.current = async () => {
+          if (!renderer || disposed) throw new Error('รอให้น้องโหลดเสร็จก่อนนะ');
+          const size = renderer.getSize(new THREE.Vector2());
+          const ratio = renderer.getPixelRatio();
+          try {
+            renderer.setPixelRatio(1);
+            renderer.setSize(1200, Math.round(1200 * size.y / size.x), false);
+            renderer.render(scene, camera);
+            return renderer.domElement.toDataURL('image/png');
+          } finally {
+            renderer.setPixelRatio(ratio);
+            renderer.setSize(size.x, size.y, false);
+            renderer.render(scene, camera);
+          }
         };
         animate();
       } catch (error) {
@@ -1036,12 +1120,13 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
     void start();
     return () => {
       disposed = true;
+      captureRef.current = null;
       cancelAnimationFrame(frame);
       observer?.disconnect();
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, appearance?.previewLamp, motionId]);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, appearance?.previewLamp, appearance?.previewCollection, motionId]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;

@@ -52,3 +52,11 @@
 @media(max-width:459px){.dreamy-hatched-garden.axolotl-stage{width:min(330px,calc(100vw - 20px));height:335px;transform:translateY(9px)}}
 
 .dreamy-dna-preview{position:relative;margin:0 18px 14px;padding:14px;border:1px solid #eed7df;border-radius:20px;background:#fffaf6;color:#69475e;text-align:center}.dreamy-dna-preview>div{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.dreamy-dna-preview button{min-height:42px;border:1px solid #d9a8bd;border-radius:18px;padding:8px 14px;background:#ffe5ef;color:#69475e;font:inherit;font-size:13px;cursor:pointer}.dreamy-dna-preview button:focus-visible{outline:3px solid #947ab5;outline-offset:2px}.dreamy-dna-preview p{font-size:13px;margin:10px 0 4px}.dreamy-dna-preview small{font-size:11px}
+
+.dreamy-atelier{padding:20px 14px;background:linear-gradient(145deg,#fffaf3,#f9edf7);border-color:#fff9;box-shadow:0 8px 30px #8c617411}
+.atelier-eyebrow{font-size:9px;letter-spacing:1.6px;color:#9e7c92}.dreamy-atelier h2{font-size:21px;font-weight:600;margin:6px 0 16px;color:#654960}
+.dreamy-atelier .atelier-collections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.atelier-collections button{display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff9;border-color:#e8d7e4;font-size:11px;min-width:0;padding:10px 2px;border-radius:14px}
+.atelier-collections button[aria-pressed=true]{background:#fff;border-color:#b584a9;box-shadow:0 3px 12px #9d688722}
+.atelier-swatches{display:flex;isolation:isolate}.atelier-swatches i{display:block;width:19px;height:19px;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px #74556622}.atelier-swatches i+i{margin-left:-5px}
+.dreamy-atelier .atelier-actions{margin-top:15px;align-items:center}.atelier-actions>button:first-child{background:#795c7b;color:#fff;border-color:#795c7b}
+.dreamy-atelier .atelier-secondary{margin:10px 0 8px}.atelier-secondary button{background:transparent;border:0;text-decoration:underline;text-underline-offset:3px;font-size:11px;padding:5px 8px;min-height:30px;color:#947a8e}

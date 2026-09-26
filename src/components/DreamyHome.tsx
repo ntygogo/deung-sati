@@ -1,7 +1,9 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
-import { AxolotlWaterPreview } from './AxolotlWaterPreview';
+import CompanionShareCard from './CompanionShareCard';
+import { COMPANION_COLLECTIONS, collectionPreview, type CompanionCollection } from '../shared/companionArtDirection';
+import { AxolotlWaterPreview, type CompanionCaptureHandle } from './AxolotlWaterPreview';
 import { resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
@@ -16,15 +18,21 @@ export interface DreamyHomeProps {
 
 export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenMenu, onEmergency,
   onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat, onPet }: DreamyHomeProps) {
+  const companionView = useRef<CompanionCaptureHandle>(null);
   const [message, setMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const appearance = useMemo(() => resolveCompanionAppearance(companion ?? {}), [companion]);
   const [dnaPreview, setDnaPreview] = useState<CompanionAppearance | null>(null);
   const displayedAppearance = dnaPreview ?? appearance;
+  const chooseCollection = (collection: CompanionCollection) => setDnaPreview(collectionPreview(appearance,collection));
+  const randomizeLook = () => {
+    const choices = (Object.keys(COMPANION_COLLECTIONS) as CompanionCollection[]).filter(key=>key!==dnaPreview?.previewCollection);
+    chooseCollection(choices[Math.floor(Math.random()*choices.length)]);
+  };
   const randomizeDna = () => {
     const lamps = ['pearl', 'drop', 'bud'] as const;
     const choices = lamps.filter(lamp => lamp !== dnaPreview?.previewLamp);
-    setDnaPreview({...appearance, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
+    setDnaPreview({...displayedAppearance, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
   };
   const progress = eggProgress(traceCount);
   const previewAxolotl = new URLSearchParams(window.location.search).get('previewAxolotl') === '1';
@@ -48,7 +56,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <span className="room-pedestal" aria-hidden="true" />
         {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} /> :
           <div className="dreamy-hatched-garden axolotl-stage" data-paused={paused}>
-            <AxolotlWaterPreview paused={paused} appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} activityVersion={traceCount} autoGreet={!previewCompanion && !dnaPreview} key={dnaPreview ? `lamp-${dnaPreview.previewLamp}` : 'saved-companion'} />
+            <AxolotlWaterPreview ref={companionView} paused={paused} appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} activityVersion={traceCount} autoGreet={!previewCompanion && !dnaPreview} key={dnaPreview ? `look-${dnaPreview.previewCollection}-${dnaPreview.previewLamp}` : 'saved-companion'} />
           </div>}
       </div>
       <header className="dreamy-header">
@@ -83,11 +91,24 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </button>
     </section>
 
-    <section className="dreamy-dna-preview" aria-label="ลองสุ่มโคมไฟ">
-      <div><button type="button" onClick={randomizeDna}>🎲 สุ่มโคมไฟบนหัว</button>
-      {dnaPreview && <button type="button" onClick={() => setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
-      <p role="status">{dnaPreview?.previewLamp ? {pearl:'โคมไข่มุก',drop:'โคมหยดน้ำ',bud:'โคมดอกตูม'}[dnaPreview.previewLamp] : 'โคมเดิมของน้อง'}</p>
-      <small>{dnaPreview ? 'เปลี่ยนเฉพาะโคม · สีตัว ลาย เหงือก หาง และ DNA เดิม' : 'ลองโคมไข่มุก หยดน้ำ และดอกตูมบนตัวน้องเดิม'}</small>
+    <section className="dreamy-dna-preview dreamy-atelier" aria-label="ออกแบบน้องของฉัน">
+      <span className="atelier-eyebrow">LITTLE WONDERS · ลองลุคของน้อง</span>
+      <h2>{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].name : 'น้องในแบบที่เธอชอบ'}</h2>
+      <div className="atelier-collections" role="group" aria-label="เลือกชุดดีไซน์">
+        {(Object.keys(COMPANION_COLLECTIONS) as CompanionCollection[]).map(key=>{
+          const design=COMPANION_COLLECTIONS[key];
+          return <button type="button" key={key} aria-pressed={dnaPreview?.previewCollection===key} onClick={()=>chooseCollection(key)}>
+            <span className="atelier-swatches" aria-hidden="true"><i style={{background:design.body}}/><i style={{background:design.fin}}/><i style={{background:design.lamp}}/></span>{design.name}
+          </button>;
+        })}
+      </div>
+      <p role="status">{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{dnaPreview?.previewLamp && <> · {{pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
+      <div className="atelier-actions"><button type="button" onClick={randomizeLook}>✦ สุ่มลุคให้น้อง</button>
+        {!isEgg && <CompanionShareCard appearance={displayedAppearance} displayName={companion?.name || 'สหายตัวน้อย'} capture={() => companionView.current ? companionView.current.capture() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ'))} />}
+      </div>
+      <div className="atelier-secondary"><button type="button" onClick={randomizeDna}>สุ่มเฉพาะโคมไฟ</button>
+        {dnaPreview && <button type="button" onClick={()=>setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
+      <small>ลองได้เต็มที่ · ไม่เปลี่ยน DNA ที่บันทึกไว้</small>
     </section>
     <section className="dreamy-chat-card" aria-labelledby="dreamy-chat-heading">
       <div className="dreamy-chat-heading"><MessageCircle className="dreamy-chat-doodle" size={32} aria-hidden="true" />
