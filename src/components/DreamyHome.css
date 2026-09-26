@@ -50,3 +50,5 @@
 @media(max-width:350px){.room-companion{width:286px}.room-companion>.living-egg{width:282px}.dreamy-progress{width:82px;height:108px;top:234px}.room-journal{top:401px}.dreamy-note{width:70px}.dreamy-chat-card{margin-left:12px;margin-right:12px;padding-left:17px;padding-right:17px}}
 
 @media(max-width:459px){.dreamy-hatched-garden.axolotl-stage{width:min(330px,calc(100vw - 20px));height:335px;transform:translateY(9px)}}
+
+.dreamy-dna-preview{position:relative;margin:0 18px 14px;padding:14px;border:1px solid #eed7df;border-radius:20px;background:#fffaf6;color:#69475e;text-align:center}.dreamy-dna-preview>div{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.dreamy-dna-preview button{min-height:42px;border:1px solid #d9a8bd;border-radius:18px;padding:8px 14px;background:#ffe5ef;color:#69475e;font:inherit;font-size:13px;cursor:pointer}.dreamy-dna-preview button:focus-visible{outline:3px solid #947ab5;outline-offset:2px}.dreamy-dna-preview p{font-size:13px;margin:10px 0 4px}.dreamy-dna-preview small{font-size:11px}

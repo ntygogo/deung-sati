@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
 import { AxolotlWaterPreview } from './AxolotlWaterPreview';
-import { resolveCompanionAppearance } from '../shared/companionAppearance';
+import { PALETTES, TRAIT_CATALOG, previewAppearance, resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
 
@@ -19,11 +19,24 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   const [message, setMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const appearance = useMemo(() => resolveCompanionAppearance(companion ?? {}), [companion]);
+  const [dnaPreview, setDnaPreview] = useState<CompanionAppearance | null>(null);
+  const displayedAppearance = dnaPreview ?? appearance;
+  const randomizeDna = () => {
+    const current = dnaPreview ?? appearance;
+    const palettes = PALETTES.filter(palette => palette.id !== current.palette.id);
+    const pick = <T,>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)];
+    const next = previewAppearance(appearance, {
+      palette: pick(palettes).id,
+      pattern: pick(TRAIT_CATALOG.pattern.options.filter(option => option[0] !== current.traits.pattern.id))[0],
+      motion: pick(TRAIT_CATALOG.motion.options.filter(option => option[0] !== current.traits.motion.id))[0],
+    });
+    setDnaPreview({...next, patternSeed: Math.floor(Math.random() * 0xffffffff)});
+  };
   const progress = eggProgress(traceCount);
   const previewAxolotl = new URLSearchParams(window.location.search).get('previewAxolotl') === '1';
   const previewCompanion = previewAxolotl || new URLSearchParams(window.location.search).get('previewCompanion') === '1';
   const previewEgg = new URLSearchParams(window.location.search).get('previewEgg') === '1';
-  const isEgg = previewEgg || (!previewCompanion && (!companion || companion.stage === 0));
+  const isEgg = !dnaPreview && (previewEgg || (!previewCompanion && (!companion || companion.stage === 0)));
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (message.trim()) { onStartChat(message.trim()); setMessage(''); }
@@ -39,9 +52,9 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </div>
       <div className="room-companion">
         <span className="room-pedestal" aria-hidden="true" />
-        {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" appearance={appearance} onPet={onPet} /> :
+        {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} /> :
           <div className="dreamy-hatched-garden axolotl-stage" data-paused={paused}>
-            <AxolotlWaterPreview paused={paused} appearance={appearance} onPet={onPet} activityVersion={traceCount} autoGreet={!previewCompanion} />
+            <AxolotlWaterPreview paused={paused} appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} activityVersion={traceCount} autoGreet={!previewCompanion && !dnaPreview} key={dnaPreview ? `dna-${dnaPreview.patternSeed}` : 'saved-companion'} />
           </div>}
       </div>
       <header className="dreamy-header">
@@ -76,6 +89,12 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </button>
     </section>
 
+    <section className="dreamy-dna-preview" aria-label="ลองสุ่ม DNA">
+      <div><button type="button" onClick={randomizeDna}>🎲 สุ่ม DNA ดูตัวอย่าง</button>
+      {dnaPreview && <button type="button" onClick={() => setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
+      <p role="status">{displayedAppearance.palette.label} · {displayedAppearance.traits.pattern.label} · {displayedAppearance.traits.motion.label}</p>
+      <small>{dnaPreview ? 'กำลังดูตัวอย่าง ไม่เปลี่ยน DNA หรือฟักไข่จริง' : 'ลองสี ลาย และจังหวะบนตัวน้อง 3D ได้เลย'}</small>
+    </section>
     <section className="dreamy-chat-card" aria-labelledby="dreamy-chat-heading">
       <div className="dreamy-chat-heading"><MessageCircle className="dreamy-chat-doodle" size={32} aria-hidden="true" />
         <div><h1 id="dreamy-chat-heading">ตอนนี้ข้างในเป็นยังไงบ้าง?</h1><p>เล่าได้ทุกเรื่องเลยนะ ♡</p></div>
