@@ -1,6 +1,7 @@
 import express from 'express';
 import { conversationsRouter } from './routes/conversations.js';
 import { futureSelfRouter } from './routes/futureSelf.js';
+import { notebookRouter } from './routes/notebook.js';
 import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import { classifySafety } from './safetyClassifier.js';
@@ -19,6 +20,7 @@ apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
 apiApp.use('/loops/conversations', conversationsRouter);
 apiApp.use('/user/future-self', futureSelfRouter);
+apiApp.use('/user/notebook', notebookRouter);
 
 // 1. Health endpoint
 apiApp.get('/health', (_req: Request, res: Response) => {
@@ -353,7 +355,8 @@ apiApp.post('/user/consent', requireAuth, async (req: AuthenticatedRequest, res:
 apiApp.get('/companion/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const companion = await companionRepository.findByUserId(req.userId!);
-    res.json({ companion });
+    const snapshot = companion ? await companionRepository.getDnaSnapshot(companion.id) : null;
+    res.json({ companion, snapshot });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -422,6 +425,13 @@ apiApp.post('/companion/interact', requireAuth, async (req: AuthenticatedRequest
   }
 });
 
+apiApp.post('/companion/welcome', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const companion=await companionRepository.welcomeCompanion(req.userId!,req.body.name);
+    res.json({success:true,companion,snapshot:companion.snapshot});
+  }catch(err:any){res.status(400).json({error:err.message});}
+});
+
 apiApp.post('/companion/hatch', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const completedLoopCount = await loopRepository.getCompletedLoopCount(req.userId!);
@@ -458,7 +468,7 @@ apiApp.post('/companion/hatch', requireAuth, async (req: AuthenticatedRequest, r
 
     res.json({ success: true, companion: updatedCompanion, snapshot, reward });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.code==='COMPANION_DESIGN_POOL_EXHAUSTED'?409:500).json({ error: err.message, code: err.code });
   }
 });
 
@@ -1022,3 +1032,4 @@ apiApp.post('/user/migrate-legacy-local', requireAuth, async (req: Authenticated
     res.status(500).json({ error: err.message || 'Legacy data migration failed' });
   }
 });
+

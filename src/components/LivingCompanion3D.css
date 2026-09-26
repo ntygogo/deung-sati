@@ -2,6 +2,11 @@
 .living-companion-3d:focus-visible{outline:3px solid #fff2c9;outline-offset:2px;border-radius:45%}
 .living-companion-canvas{position:absolute;inset:0;display:block}
 .living-companion-canvas canvas{display:block;width:100%;height:100%}
+.axolotl-viewer{position:relative;width:100%;height:100%}
+.axolotl-orbit{touch-action:pan-y;cursor:grab;user-select:none}
+.axolotl-orbit:active{cursor:grabbing}
+.axolotl-front-button{position:absolute;left:50%;bottom:0;transform:translateX(-50%);border:1px solid #fff8;border-radius:20px;padding:7px 14px;background:#fff8efd9;color:#69475e;font:inherit;font-size:11px;min-height:36px;cursor:pointer;white-space:nowrap}
+.axolotl-front-button:focus-visible{outline:3px solid #a881b8;outline-offset:2px}
 .living-companion-fallback{position:absolute;inset:4%;width:92%;height:92%;object-fit:contain;transition:opacity .25s ease}
 .living-companion-3d[data-status=ready] .living-companion-fallback{opacity:0;pointer-events:none}
 .living-companion-loading{position:absolute;left:50%;bottom:7%;width:46px;height:4px;transform:translateX(-50%);border-radius:9px;background:linear-gradient(90deg,#ffffff33,#fff5cf,#ffffff33);background-size:180% 100%;animation:companion-load 1.1s linear infinite}
@@ -9,3 +14,12 @@
 @keyframes companion-load{to{background-position:-180% 0}}
 @keyframes companion-heart{0%{opacity:0;transform:translateY(13px) scale(.5) rotate(-10deg)}35%{opacity:1;transform:translateY(0) scale(1.15) rotate(5deg)}100%{opacity:0;transform:translateY(-42px) scale(.85) rotate(9deg)}}
 @media(prefers-reduced-motion:reduce){.living-companion-loading,.living-companion-heart{animation:none}.living-companion-heart{opacity:1}}
+
+.axolotl-viewer-controls { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 4px; width: max-content; max-width: 100%; }
+.axolotl-viewer-controls .axolotl-front-button { position: static; transform: none; padding-inline: 6px; }
+.axolotl-front-button:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width:459px) {
+  .axolotl-viewer-controls { width:100%;flex-wrap:wrap;justify-content:center;gap:3px; }
+  .axolotl-viewer-controls .axolotl-front-button { min-height:31px;padding:4px 6px; }
+}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCompanion } from '../context/CompanionContext';
+import { CompanionDnaSummary } from './CompanionDnaSummary';
 import { CompanionRenderer } from './CompanionRenderer';
 import { TraceConversationActions } from './TraceConversationActions';
 import type { Conversation } from '../shared/conversation';
@@ -98,8 +99,10 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
   const handleHatch = async () => {
     const result = await hatchCompanion();
     if (result.success) {
-      setShowHatchCelebration(true);
+      setShowHatchCelebration(!(result.snapshot as any)?.dna_json?.collectibleDesign);
       setDialogue('ยินดีด้วยนะ! ไข่ได้ฟักออกมาเป็นแอกโซลอทตัวน้อยแล้ว จากความเพียรในการสังเกตตนเองครบ 20 ครั้ง! 🎉✨');
+    } else {
+      setDialogue(result.error || 'ยังฟักไม่ได้ ลองอีกครั้งนะ');
     }
   };
 
@@ -209,6 +212,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
           <CompanionRenderer
             stage={stage}
             traceCount={traceCount}
+            source={companion}
             dna={companion.dna}
             moodState={companion.mood_state}
             isInteracting={isInteracting}
@@ -216,6 +220,8 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
             size={270}
           />
         </div>
+
+        <CompanionDnaSummary source={companion} />
 
         {/* Mascot Mindful Speech Bubble */}
         <div
@@ -713,6 +719,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               <CompanionRenderer
                 stage={1}
                 traceCount={20}
+                source={companion}
                 dna={companion.dna}
                 moodState="excited"
                 size={200}
@@ -730,7 +737,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
                 marginBottom: '20px',
               }}
             >
-              🎁 รางวัลการฟัก: +50 XP, +30 Shells, +1 Memory Crystal 💎
+              🎁 รางวัลการฟัก: +50 XP, +25 Shells
             </div>
 
             <button

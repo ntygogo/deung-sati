@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface AuthModalProps {
   isOpen: boolean;
+  required?: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
   onSuccess?: () => void;
@@ -22,6 +23,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
+  required = false,
   onClose,
   initialMode = 'login',
   onSuccess,
@@ -43,7 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   if (!isOpen) return null;
 
   if (currentUser) return (
-    <div className="jar-modal-overlay" onClick={onClose}>
+    <div className="jar-modal-overlay" onClick={required ? undefined : onClose}>
       <div className="jar-modal-card auth-modal-card" role="dialog" aria-modal="true" aria-label="บัญชีของฉัน" onClick={(e) => e.stopPropagation()}>
         <h3>บัญชีของฉัน</h3>
         <p>{currentUser.name}</p>
@@ -119,9 +121,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
             </div>
           </div>
-          <button type="button" className="btn-close-modal" onClick={onClose} aria-label="ปิด">
+          {!required && <button type="button" className="btn-close-modal" onClick={onClose} aria-label="ปิด">
             <X size={18} />
-          </button>
+          </button>}
         </div>
 
         {/* Tab Switcher */}
@@ -272,3 +274,4 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     </div>
   );
 };
+

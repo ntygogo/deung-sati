@@ -1,14 +1,15 @@
+import { readCollectibleDesign, ELEMENT_LAMPS } from './companionCollectible';
 /** Read-only appearance projection. Never awards points or rewrites birth DNA.
  * Freeze this catalog: add new families in a new version, not by reordering V1.
  */
 export const APPEARANCE_VERSION = 1 as const;
 export const PALETTES = [
   { id: 'soft_sakura', label: 'ชมพูไข่มุก', body: '#F4BACD', secondary: '#8BD3DD', lamp: '#FFD992', hue: 0, saturation: 1 },
-  { id: 'jade_mint', label: 'หยกมิ้นต์', body: '#B8DFCF', secondary: '#BDEDDD', lamp: '#FFE6AB', hue: 165, saturation: .78 },
+  { id: 'jade_mint', label: 'หยกมิ้นต์', body: '#B8DFCF', secondary: '#C5B1DF', lamp: '#FFE6AB', hue: 165, saturation: .78 },
   { id: 'aurora_blue', label: 'น้ำเงินออโรรา', body: '#999BEB', secondary: '#85E0D2', lamp: '#E4DDFF', hue: 260, saturation: 1.15 },
-  { id: 'golden_pink', label: 'พีชแชมเปญ', body: '#F1C49E', secondary: '#FFD5B8', lamp: '#FFE2AD', hue: 38, saturation: .82 },
+  { id: 'golden_pink', label: 'พีชแชมเปญ', body: '#F1C49E', secondary: '#C7B4DB', lamp: '#FFE2AD', hue: 38, saturation: .82 },
   { id: 'lavender_pink', label: 'ม่วงลาเวนเดอร์', body: '#C5B1EF', secondary: '#ECA9D0', lamp: '#E6DFFF', hue: 300, saturation: .88 },
-  { id: 'powder_blue', label: 'ฟ้าไข่มุก', body: '#AFCFED', secondary: '#D6EEFF', lamp: '#FFF1CE', hue: 215, saturation: .68 },
+  { id: 'powder_blue', label: 'ฟ้าไข่มุก', body: '#AFCFED', secondary: '#E9B7CF', lamp: '#FFF1CE', hue: 215, saturation: .68 },
   { id: 'coral_pastel', label: 'พีชปะการัง', body: '#FFA07A', secondary: '#FBCFAF', lamp: '#FFE3B0', hue: 25, saturation: 1.12 },
   { id: 'electric_rose', label: 'ชมพูกุหลาบ', body: '#FF6584', secondary: '#DBB8F3', lamp: '#FFE2BF', hue: 350, saturation: 1.35 },
 ] as const;
@@ -33,6 +34,10 @@ export type Trait = { id: string; label: string; origin: 'birth' | 'legacy' | 's
 export type SkillKey = 'emotionalAwareness' | 'somaticAwareness' | 'cognitiveClarity' | 'consciousAction';
 export interface CompanionAppearanceSource { id?: string; seed?: number | string; dna?: unknown; snapshot?: unknown }
 export interface CompanionAppearance {
+  collectibleSerial?: number;
+  previewRemix?: import("./companionRemix").RemixDesign;
+  previewLamp?: 'pearl' | 'drop' | 'bud';
+  previewCollection?: 'lotus' | 'moonpool' | 'starlight' | 'earth' | 'water' | 'wind' | 'fire' | 'leaf' | 'flower';
   version: typeof APPEARANCE_VERSION;
   identity: string;
   palette: { id: string; label: string; body: string; secondary: string; lamp: string; hue: number; saturation: number };
@@ -70,7 +75,7 @@ const legacyFields: Partial<Record<TraitKey, string>> = {
   pattern: 'body_pattern', motion: 'movement_personality', habitat: 'safe_space_theme',
 };
 const birthFields: Partial<Record<TraitKey, string>> = {
-  eyes: 'eyeShape', cheeks: 'cheekStyle', gills: 'gillStyle', lantern: 'lanternShape', tail: 'tailStyle', aura: 'auraStyle',
+  pattern: 'bodyPattern', motion: 'movementPersonality', eyes: 'eyeShape', cheeks: 'cheekStyle', gills: 'gillStyle', lantern: 'lanternShape', tail: 'tailStyle', aura: 'auraStyle',
 };
 const aliases: Record<string, string> = {
   feathered_majestic: 'triple_feather', feathered: 'triple_feather', soft_feather: 'triple_feather',
@@ -110,8 +115,16 @@ export function resolveCompanionAppearance(source: CompanionAppearanceSource = {
     const value = summary[key];
     skills[key] = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   }
-  return { version: APPEARANCE_VERSION, identity, palette, traits, skills,
+  const resolved:CompanionAppearance = { version: APPEARANCE_VERSION, identity, palette, traits, skills,
     hasBirthSnapshot: Object.keys(birth).length > 0, patternSeed: appearanceHash(`${seed}:pattern-position:v1`) };
+  const collectible=readCollectibleDesign(birth.collectibleDesign);
+  if(!collectible)return resolved;
+  const art=collectible.colors!;
+  const pattern=TRAIT_CATALOG.pattern.options.find(([id])=>id===collectible.pattern)!;
+  return {...resolved,collectibleSerial:collectible.serial,
+    previewRemix:collectible,previewCollection:collectible.parts.gills,previewLamp:ELEMENT_LAMPS[collectible.parts.lamp],
+    palette:{...palette,label:art.name,body:art.body,secondary:art.fin,lamp:art.lamp},
+    traits:{...traits,pattern:{id:pattern[0],label:pattern[1],origin:'birth'}}};
 }
 
 /** Sandbox only; consumers never save this projection back as a Growth Event. */
@@ -123,7 +136,7 @@ export function previewAppearance(base: CompanionAppearance, overrides: Partial<
     if (chosen) traits[key] = { id: chosen[0], label: chosen[1], origin: 'seed' };
   }
   const palette = PALETTES.find(p => p.id === overrides.palette);
-  return { ...base, traits, palette: palette ? { ...palette } : base.palette };
+  return { ...base, collectibleSerial: undefined, traits, palette: palette ? { ...palette } : base.palette };
 }
 
 export const VISIBLE_TRAITS: readonly TraitKey[] = ['surface', 'pattern', 'aura', 'motion'];

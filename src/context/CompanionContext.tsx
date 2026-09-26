@@ -178,6 +178,7 @@ interface CompanionContextType {
     progressCount?: number;
     reward?: any;
     newlyHatched?: boolean;
+    hatchUnavailable?: string;
     hatchMilestoneReward?: any;
     companion?: any;
     error?: string;
@@ -185,6 +186,7 @@ interface CompanionContextType {
   petCompanion: () => Promise<void>;
   hatchCompanion: () => Promise<{ success: boolean; companion?: CompanionData; snapshot?: any; error?: string }>;
   refreshCompanion: () => Promise<void>;
+  welcomeCompanion: (name:string) => Promise<{success:boolean;error?:string}>;
 }
 
 const LOCAL_STORAGE_COMPANION_KEY = 'deung_sati_companion_v2';
@@ -226,7 +228,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         if (compRes.ok) {
           const data = await compRes.json();
-          setCompanion(data.companion || null);
+          setCompanion(data.companion ? { ...data.companion, snapshot: data.snapshot ?? data.companion.snapshot } : null);
         }
 
         // Fetch traces
@@ -780,7 +782,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setWallet(result.reward.wallet);
       }
       if (result.companion) {
-        setCompanion(result.companion);
+        setCompanion(previous => ({ ...result.companion, snapshot: result.snapshot ?? (previous?.id === result.companion.id ? previous?.snapshot : undefined) }));
       }
       setTraces((prev) =>
         prev.map((t) =>
@@ -865,6 +867,10 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const completedLoopId = `guest_cloop_${Date.now()}`;
       const completedLoopRecord = {
+        emotional_awareness: data.skills?.emotional_awareness ? 1 : 0,
+        somatic_awareness: data.skills?.somatic_awareness ? 1 : 0,
+        cognitive_clarity: data.skills?.cognitive_clarity ? 1 : 0,
+        conscious_action: data.skills?.conscious_action ? 1 : 0,
         id: completedLoopId,
         user_id: 'guest',
         conversation_id: data.conversationId,
@@ -947,26 +953,8 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setWallet(newWallet);
       localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(newWallet));
 
-      // Check 20-trace hatch for guest
-      let newlyHatched = false;
-      if (newCount >= 20 && companion?.stage === 0) {
-        newlyHatched = true;
-        const hatchedWallet = {
-          ...newWallet,
-          xp: newWallet.xp + 50,
-          shells: newWallet.shells + 25,
-        };
-        setWallet(hatchedWallet);
-        localStorage.setItem(LOCAL_STORAGE_WALLET_KEY, JSON.stringify(hatchedWallet));
-
-        const hatchedComp: CompanionData = {
-          ...companion,
-          stage: 1,
-          unlocked_max_stage: 1,
-        };
-        setCompanion(hatchedComp);
-        localStorage.setItem(LOCAL_STORAGE_COMPANION_KEY, JSON.stringify(hatchedComp));
-      }
+      // A unique collectible may only be issued by the authenticated server.
+      const newlyHatched = false;
 
       return {
         success: true,
@@ -990,7 +978,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         if (res.ok) {
           const data = await res.json();
-          if (data.companion) setCompanion(data.companion);
+          if (data.companion) setCompanion(previous => ({ ...data.companion, snapshot: data.snapshot ?? (previous?.id === data.companion.id ? previous?.snapshot : undefined) }));
         }
       } catch (e) {
         console.warn('Pet interaction sync:', e);
@@ -1000,6 +988,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // 5. Hatch Egg (when traceCount >= 20)
   const hatchCompanion = async (): Promise<{ success: boolean; companion?: CompanionData; snapshot?: any; error?: string }> => {
+    if (companion && companion.stage > 0) return { success: true, companion, snapshot: companion.snapshot };
     if (traceCount < 20) {
       return { success: false, error: `สะสมบันทึกการรู้ตัวได้ ${traceCount}/20 ครั้ง ต้องครบ 20 ครั้งก่อนฟักนะ` };
     }
@@ -1019,23 +1008,19 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (data.reward?.wallet) setWallet(data.reward.wallet);
       return { success: true, companion: data.companion, snapshot: data.snapshot };
     } else {
-      if (!companion) return { success: false, error: 'No companion found' };
-      const hatchedComp: CompanionData = {
-        ...companion,
-        stage: 1, // Hatchling
-        unlocked_max_stage: 1,
-        mood_state: 'excited',
-      };
-      setCompanion(hatchedComp);
-      localStorage.setItem(LOCAL_STORAGE_COMPANION_KEY, JSON.stringify(hatchedComp));
-      setWallet((prev) => ({
-        ...prev,
-        xp: prev.xp + 50,
-        shells: prev.shells + 30,
-        memory_crystals: prev.memory_crystals + 1,
-      }));
-      return { success: true, companion: hatchedComp };
+      return { success: false, error: 'กรุณาเข้าสู่ระบบและเชื่อมต่ออินเทอร์เน็ตเพื่อฟักน้องประจำตัว' };
     }
+  };
+
+  const welcomeCompanion=async(name:string)=>{
+    try {
+      if(!isLoggedIn)return {success:false,error:'กรุณาเข้าสู่ระบบก่อน'};
+      const response=await fetch('/api/companion/welcome',{method:'POST',headers:getAuthHeaders(),credentials:'include',body:JSON.stringify({name})});
+      const result=await response.json();
+      if(!response.ok)return {success:false,error:result.error||'ยังบันทึกชื่อไม่ได้ กรุณาลองอีกครั้ง'};
+      setCompanion({...result.companion,snapshot:result.snapshot});
+      return {success:true};
+    }catch{return {success:false,error:'เชื่อมต่อไม่ได้ น้องยังอยู่ครบ ลองบันทึกอีกครั้งนะ'};}
   };
 
   const companionLoading = !isHydrated || isLoading;
@@ -1062,6 +1047,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         saveDraft,
         petCompanion,
         hatchCompanion,
+        welcomeCompanion,
         refreshCompanion,
       }}
     >

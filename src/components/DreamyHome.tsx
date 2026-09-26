@@ -1,12 +1,17 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { remixPreview, remixDescription, REMIX_PALETTES, selectRemixPalette, ELEMENT_LABELS } from '../shared/companionRemix';
+import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
-import { LivingCompanion3D } from './LivingCompanion3D';
-import type { CompanionCommand } from './companionSpriteMotion';
+import CompanionShareCard from './CompanionShareCard';
+import { COMPANION_COLLECTIONS, collectionPreview, type CompanionCollection } from '../shared/companionArtDirection';
+import { AxolotlWaterPreview, type CompanionCaptureHandle } from './AxolotlWaterPreview';
+import { resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
+import { MyNotebook } from './MyNotebook';
 
 export interface DreamyHomeProps {
+  onPet?: () => void;
   companion: CompanionData | null; traceCount: number; userName?: string; level?: number;
   onOpenMenu: () => void; onEmergency: () => void; onOpenCompanion: () => void;
   onOpenJourney: () => void; onOpenFuture: () => void; onOpenChat: () => void;
@@ -14,13 +19,35 @@ export interface DreamyHomeProps {
 }
 
 export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenMenu, onEmergency,
-  onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat }: DreamyHomeProps) {
+  onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat, onPet }: DreamyHomeProps) {
+  const companionView = useRef<CompanionCaptureHandle>(null);
   const [message, setMessage] = useState('');
+  const [notebookOpen, setNotebookOpen] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [companionCommand, setCompanionCommand] = useState<{ id: number; action: CompanionCommand }>();
+  const appearance = useMemo(() => resolveCompanionAppearance(companion ?? {}), [companion]);
+  const [dnaPreview, setDnaPreview] = useState<CompanionAppearance | null>(null);
+  const displayedAppearance = dnaPreview ?? appearance;
+  const chooseCollection = (collection: CompanionCollection) => setDnaPreview(collectionPreview(appearance,collection));
+  const randomizeLook = () => {
+    setDnaPreview(remixPreview(displayedAppearance));
+  };
+  const randomizeDna = () => {
+    if(displayedAppearance.previewRemix){
+      const current=displayedAppearance.previewRemix;
+      const options=(Object.keys(ELEMENT_LABELS) as Array<keyof typeof ELEMENT_LABELS>).filter(key=>key!==current.parts.lamp);
+      const lamp=options[Math.floor(Math.random()*options.length)];
+      setDnaPreview({...displayedAppearance,collectibleSerial:undefined,previewRemix:{...current,parts:{...current.parts,lamp}},previewLamp:COMPANION_COLLECTIONS[lamp].lampShape});
+      return;
+    }
+    const lamps = ['pearl', 'drop', 'bud'] as const;
+    const choices = lamps.filter(lamp => lamp !== dnaPreview?.previewLamp);
+    setDnaPreview({...displayedAppearance, collectibleSerial:undefined, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
+  };
   const progress = eggProgress(traceCount);
-  const previewCompanion = new URLSearchParams(window.location.search).get('previewCompanion') === '1';
-  const isEgg = !previewCompanion && (!companion || companion.stage === 0);
+  const previewAxolotl = new URLSearchParams(window.location.search).get('previewAxolotl') === '1';
+  const previewCompanion = previewAxolotl || new URLSearchParams(window.location.search).get('previewCompanion') === '1';
+  const previewEgg = new URLSearchParams(window.location.search).get('previewEgg') === '1';
+  const isEgg = !dnaPreview && (previewEgg || (!previewCompanion && (!companion || companion.stage === 0)));
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (message.trim()) { onStartChat(message.trim()); setMessage(''); }
@@ -36,9 +63,9 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </div>
       <div className="room-companion">
         <span className="room-pedestal" aria-hidden="true" />
-        {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" /> :
-          <div className="dreamy-hatched-garden" data-paused={paused}>
-            <LivingCompanion3D paused={paused} command={companionCommand} />
+        {isEgg ? <CompanionEgg traceCount={traceCount} size={320} paused={paused} variant="room" appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} /> :
+          <div className="dreamy-hatched-garden axolotl-stage" data-paused={paused}>
+            <AxolotlWaterPreview ref={companionView} paused={paused} appearance={displayedAppearance} onPet={dnaPreview ? undefined : onPet} activityVersion={traceCount} autoGreet={!previewCompanion && !dnaPreview} key={dnaPreview ? `look-${dnaPreview.previewCollection}-${dnaPreview.previewLamp}` : 'saved-companion'} />
           </div>}
       </div>
       <header className="dreamy-header">
@@ -53,7 +80,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <div><strong>สวัสดี {userName || 'เธอ'} <span aria-hidden="true">♡</span></strong><span className="dreamy-level">Lv.{Math.max(1, level)}</span></div>
       </div>
       <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
-      <button type="button" className="room-journal" onClick={onOpenJourney} aria-label="เปิดสมุดบันทึก เส้นทางของฉัน">
+      <button type="button" className="room-journal" onClick={() => setNotebookOpen(true)} aria-label="เปิดสมุดของฉัน">
         <span className="room-book" aria-hidden="true"><BookOpen size={25} /><i /></span>
         <span className="room-object-label">สมุดของฉัน</span>
       </button>
@@ -66,18 +93,42 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
           <Heart size={15} fill="currentColor" aria-hidden="true" />
         </span>
       </button>
-      <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : 'สหายที่เติบโตไปพร้อมเธอ'}</p>
-      {!isEgg && <div className="dreamy-companion-actions" role="group" aria-label="ชวนเล่นกับน้อง">
-        {([['sit', 'นั่งพัก'], ['sleep', 'นอนพัก'], ['spin', 'หมุนเล่น']] as const).map(([action, label]) =>
-          <button type="button" key={action} disabled={paused}
-            onClick={() => setCompanionCommand(previous => ({ id: (previous?.id ?? 0) + 1, action }))}>{label}</button>)}
-      </div>}
+      <p className="room-companion-caption">{isEgg ? 'แตะไข่เพื่อทักทายน้อง' : 'ลูบหัวเพื่อเล่น · ลากรอบตัวเพื่อหมุนดู'}</p>
       <button type="button" className="dreamy-motion" onClick={() => setPaused(value => !value)}
         aria-pressed={paused} aria-label={paused ? 'เล่นการเคลื่อนไหว' : 'พักการเคลื่อนไหว'}>
         {paused ? <Play size={13} /> : <Pause size={13} />}<span>{paused ? 'ให้ขยับ' : 'พักภาพ'}</span>
       </button>
     </section>
 
+    {!dnaPreview && appearance.collectibleSerial && <p className="companion-edition">FIRST WONDERS · #{String(appearance.collectibleSerial).padStart(5,'0')} / 62,208 · ชุดประจำตัวของน้อง</p>}
+    <section className="dreamy-dna-preview dreamy-atelier" aria-label="ออกแบบน้องของฉัน">
+      <span className="atelier-eyebrow">LITTLE WONDERS · ลองลุคของน้อง</span>
+      <h2>{dnaPreview?.previewRemix ? dnaPreview.palette.label : dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].name : 'น้องในแบบที่เธอชอบ'}</h2>
+      <div className="atelier-collections" role="group" aria-label="เลือกชุดดีไซน์">
+        {(Object.keys(COMPANION_COLLECTIONS) as CompanionCollection[]).map(key=>{
+          const design=COMPANION_COLLECTIONS[key];
+          return <button type="button" key={key} aria-pressed={!dnaPreview?.previewRemix && dnaPreview?.previewCollection===key} onClick={()=>chooseCollection(key)}>
+            <span className="atelier-swatches" aria-hidden="true"><i style={{background:design.body}}/><i style={{background:design.fin}}/><i style={{background:design.lamp}}/></span>{design.name}
+          </button>;
+        })}
+      </div>
+      <div className="atelier-palette-grid" role="group" aria-label="เลือกชุดสีสดใส">
+        {REMIX_PALETTES.map((palette,index)=><button type="button" key={palette.name}
+          aria-pressed={dnaPreview?.previewRemix?.palette===index && !dnaPreview.previewRemix.colors}
+          onClick={()=>setDnaPreview(selectRemixPalette(displayedAppearance,index))}>
+          <span className="atelier-swatches" aria-hidden="true"><i style={{background:palette.body}}/><i style={{background:palette.fin}}/><i style={{background:palette.finTip}}/></span>{palette.name}
+        </button>)}
+      </div>
+      <p role="status">{dnaPreview?.previewRemix ? remixDescription(dnaPreview) : dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{!dnaPreview?.previewRemix && dnaPreview?.previewLamp && <> · {dnaPreview.previewCollection && ['earth','water','wind','fire','leaf','flower'].includes(dnaPreview.previewCollection) && dnaPreview.previewLamp === COMPANION_COLLECTIONS[dnaPreview.previewCollection].lampShape ? 'โคมประจำธาตุ' : {pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
+      <div className="atelier-actions"><button type="button" onClick={randomizeLook}>✦ สุ่มลุคให้น้อง</button>
+        {!isEgg && <CompanionShareCard appearance={displayedAppearance} displayName={companion?.name || 'สหายตัวน้อย'} capture={() => companionView.current ? companionView.current.capture() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ'))} />}
+      </div>
+      <div className="atelier-secondary"><button type="button" onClick={()=>setDnaPreview(remixPreview(displayedAppearance,'colors'))}>สุ่มเฉพาะสี</button>
+        <button type="button" onClick={()=>setDnaPreview(remixPreview(displayedAppearance,'parts'))}>สุ่มเฉพาะชิ้นส่วน</button>
+        <button type="button" onClick={randomizeDna}>สุ่มเฉพาะโคมไฟ</button>
+        {dnaPreview && <button type="button" onClick={()=>setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
+      <small>ลองได้เต็มที่ · ไม่เปลี่ยน DNA ที่บันทึกไว้</small>
+    </section>
     <section className="dreamy-chat-card" aria-labelledby="dreamy-chat-heading">
       <div className="dreamy-chat-heading"><MessageCircle className="dreamy-chat-doodle" size={32} aria-hidden="true" />
         <div><h1 id="dreamy-chat-heading">ตอนนี้ข้างในเป็นยังไงบ้าง?</h1><p>เล่าได้ทุกเรื่องเลยนะ ♡</p></div>
@@ -103,5 +154,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </div>
     </section>
     <button className="dreamy-future-link" onClick={onOpenFuture}><Sparkles size={17} aria-hidden="true" /> แวะหาฉันในวันข้างหน้า <ChevronRight size={17} /></button>
+    {notebookOpen && <MyNotebook onClose={() => setNotebookOpen(false)} onOpenJourney={onOpenJourney} />}
   </main>;
 }
+

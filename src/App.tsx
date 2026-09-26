@@ -1,3 +1,5 @@
+import { CompanionWelcome } from './components/CompanionWelcome';
+import { needsCompanionWelcome } from './shared/companionWelcome';
 import React, { useEffect, useRef, useState } from "react";
 import {
   type Screen,
@@ -364,7 +366,7 @@ const DevDebugPanel = ({
 };
 
 export default function App() {
-  const previewCompanion = new URLSearchParams(window.location.search).get("previewCompanion") === "1";
+  const previewCompanion = ['previewCompanion', 'previewAxolotl'].some(key => new URLSearchParams(window.location.search).get(key) === '1');
   const [screen, setScreen] = useState<Screen>("home");
   const [showEvidence, setShowEvidence] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -507,6 +509,10 @@ export default function App() {
       void triggerAiStream(history, reqId, globalRequestId, undefined, update, setDebugInfo, undefined, { id: doc.id });
     } catch { setScreen('chat'); }
   };
+
+  if(isHydrated && companion && needsCompanionWelcome(companion)) {
+    return <><style>{styles}</style><CompanionWelcome key={companion.id} companion={companion}/></>;
+  }
 
   return (
     <div className="appShell">
@@ -930,11 +936,12 @@ function Home({
   onStartChat: (text: string) => void;
   onOpenSaved: () => void;
 }) {
-  const { companion, traceCount } = useCompanion();
+  const { companion, traceCount, petCompanion } = useCompanion();
 
   return (
     <div className="screen scrollArea homeScreenRoot">
       <DreamyHome
+        onPet={() => { void petCompanion(); }}
         companion={companion}
         traceCount={traceCount}
         onOpenMenu={onOpenMenu}

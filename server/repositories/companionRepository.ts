@@ -1,4 +1,8 @@
+import { welcomeName } from '../../src/shared/companionWelcome.js';
+import { reserveCompanionDesign } from './companionDesignRegistry.js';
+import { COLLECTIBLE_PATTERNS, COLLECTIBLE_PATTERN_CAPACITY } from '../../src/shared/companionCollectible.js';
 import crypto from 'crypto';
+import { birthVisuals } from '../../src/shared/companionBirthVisuals.js';
 import { db } from '../db/database.js';
 import type { IDatabaseAdapter } from '../db/types.js';
 
@@ -253,7 +257,10 @@ export class CompanionRepository {
     }>,
     txAdapter?: IDatabaseAdapter
   ): Promise<CompanionDnaSnapshotRecord> {
-    const adapter = txAdapter || this.adapter;
+    if(!txAdapter)return this.adapter.transaction(tx=>this.createDnaSnapshot(companionId,userId,completedLoops,tx));
+    const adapter = txAdapter;
+    const owner=await adapter.queryOne<{id:string}>('SELECT id FROM companions WHERE id = $1 AND user_id = $2 FOR UPDATE',[companionId,userId]);
+    if(!owner)throw new Error('Companion not found for this account');
     const existing = await adapter.queryOne<CompanionDnaSnapshotRecord>(
       'SELECT * FROM companion_dna_snapshots WHERE companion_id = $1',
       [companionId]
@@ -314,8 +321,14 @@ export class CompanionRepository {
     const auraStyles = ['dreamy_glow', 'stardust_ring', 'gentle_mist', 'warm_radiance'];
     const auraIndex = Math.abs(totalCA + (seedInt >>> 10)) % auraStyles.length;
 
+    const practicedVisuals=birthVisuals({ emotionalAwareness: totalEA, somaticAwareness: totalSA, cognitiveClarity: totalCC, consciousAction: totalCA }, seedInt);
+    const preferredPattern=COLLECTIBLE_PATTERNS.indexOf(practicedVisuals.bodyPattern as typeof COLLECTIBLE_PATTERNS[number]);
+    const collectible=await reserveCompanionDesign(adapter,companionId,Math.max(0,preferredPattern)*COLLECTIBLE_PATTERN_CAPACITY+seedInt%COLLECTIBLE_PATTERN_CAPACITY);
     const snapshotId = `snap_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
     const dnaJson = {
+      ...practicedVisuals,
+      bodyPattern: collectible.pattern,
+      collectibleDesign: collectible,
       primaryColor,
       secondaryColor,
       eyeShape: eyeShapes[eyeIndex],
@@ -351,6 +364,23 @@ export class CompanionRepository {
       'SELECT * FROM companion_dna_snapshots WHERE id = $1',
       [snapshotId]
     ))!;
+  }
+
+  async welcomeCompanion(userId:string,inputName:unknown):Promise<CompanionRecord> {
+    const name=welcomeName(inputName);
+    await this.adapter.transaction(async tx=>{
+      const companion=await tx.queryOne<CompanionRecord>('SELECT * FROM companions WHERE user_id = $1 FOR UPDATE',[userId]);
+      if(!companion||companion.stage<1)throw new Error('น้องยังไม่พร้อมเปิดตัว');
+      const snapshot=await tx.queryOne<CompanionDnaSnapshotRecord>('SELECT * FROM companion_dna_snapshots WHERE companion_id = $1',[companion.id]);
+      if(!snapshot?.dna_json?.collectibleDesign)throw new Error('ไม่พบข้อมูลน้องประจำตัว');
+      const summary=snapshot.stats_summary_json??{};
+      // A replay from another device must not rename a previously welcomed companion.
+      if(summary.welcomedAt)return;
+      await tx.execute('UPDATE companions SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',[name,companion.id]);
+      await tx.execute('UPDATE companion_dna_snapshots SET stats_summary_json = $1 WHERE id = $2',
+        [{...summary,welcomedAt:new Date().toISOString()},snapshot.id]);
+    });
+    return (await this.findByUserId(userId))!;
   }
 
   async getDnaSnapshot(companionId: string, txAdapter?: IDatabaseAdapter): Promise<CompanionDnaSnapshotRecord | null> {
