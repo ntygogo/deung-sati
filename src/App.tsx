@@ -1,3 +1,5 @@
+import { CompanionWelcome } from './components/CompanionWelcome';
+import { needsCompanionWelcome } from './shared/companionWelcome';
 import React, { useEffect, useRef, useState } from "react";
 import {
   type Screen,
@@ -507,6 +509,10 @@ export default function App() {
       void triggerAiStream(history, reqId, globalRequestId, undefined, update, setDebugInfo, undefined, { id: doc.id });
     } catch { setScreen('chat'); }
   };
+
+  if(isHydrated && companion && needsCompanionWelcome(companion)) {
+    return <><style>{styles}</style><CompanionWelcome key={companion.id} companion={companion}/></>;
+  }
 
   return (
     <div className="appShell">

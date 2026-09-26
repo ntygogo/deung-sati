@@ -425,6 +425,13 @@ apiApp.post('/companion/interact', requireAuth, async (req: AuthenticatedRequest
   }
 });
 
+apiApp.post('/companion/welcome', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const companion=await companionRepository.welcomeCompanion(req.userId!,req.body.name);
+    res.json({success:true,companion,snapshot:companion.snapshot});
+  }catch(err:any){res.status(400).json({error:err.message});}
+});
+
 apiApp.post('/companion/hatch', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const completedLoopCount = await loopRepository.getCompletedLoopCount(req.userId!);

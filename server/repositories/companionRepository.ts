@@ -1,3 +1,4 @@
+import { welcomeName } from '../../src/shared/companionWelcome.js';
 import { reserveCompanionDesign } from './companionDesignRegistry.js';
 import { COLLECTIBLE_PATTERNS, COLLECTIBLE_PATTERN_CAPACITY } from '../../src/shared/companionCollectible.js';
 import crypto from 'crypto';
@@ -363,6 +364,23 @@ export class CompanionRepository {
       'SELECT * FROM companion_dna_snapshots WHERE id = $1',
       [snapshotId]
     ))!;
+  }
+
+  async welcomeCompanion(userId:string,inputName:unknown):Promise<CompanionRecord> {
+    const name=welcomeName(inputName);
+    await this.adapter.transaction(async tx=>{
+      const companion=await tx.queryOne<CompanionRecord>('SELECT * FROM companions WHERE user_id = $1 FOR UPDATE',[userId]);
+      if(!companion||companion.stage<1)throw new Error('น้องยังไม่พร้อมเปิดตัว');
+      const snapshot=await tx.queryOne<CompanionDnaSnapshotRecord>('SELECT * FROM companion_dna_snapshots WHERE companion_id = $1',[companion.id]);
+      if(!snapshot?.dna_json?.collectibleDesign)throw new Error('ไม่พบข้อมูลน้องประจำตัว');
+      const summary=snapshot.stats_summary_json??{};
+      // A replay from another device must not rename a previously welcomed companion.
+      if(summary.welcomedAt)return;
+      await tx.execute('UPDATE companions SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',[name,companion.id]);
+      await tx.execute('UPDATE companion_dna_snapshots SET stats_summary_json = $1 WHERE id = $2',
+        [{...summary,welcomedAt:new Date().toISOString()},snapshot.id]);
+    });
+    return (await this.findByUserId(userId))!;
   }
 
   async getDnaSnapshot(companionId: string, txAdapter?: IDatabaseAdapter): Promise<CompanionDnaSnapshotRecord | null> {

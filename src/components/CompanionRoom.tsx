@@ -99,8 +99,10 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
   const handleHatch = async () => {
     const result = await hatchCompanion();
     if (result.success) {
-      setShowHatchCelebration(true);
+      setShowHatchCelebration(!(result.snapshot as any)?.dna_json?.collectibleDesign);
       setDialogue('ยินดีด้วยนะ! ไข่ได้ฟักออกมาเป็นแอกโซลอทตัวน้อยแล้ว จากความเพียรในการสังเกตตนเองครบ 20 ครั้ง! 🎉✨');
+    } else {
+      setDialogue(result.error || 'ยังฟักไม่ได้ ลองอีกครั้งนะ');
     }
   };
 
@@ -735,7 +737,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
                 marginBottom: '20px',
               }}
             >
-              🎁 รางวัลการฟัก: +50 XP, +30 Shells, +1 Memory Crystal 💎
+              🎁 รางวัลการฟัก: +50 XP, +25 Shells
             </div>
 
             <button

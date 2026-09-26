@@ -186,6 +186,7 @@ interface CompanionContextType {
   petCompanion: () => Promise<void>;
   hatchCompanion: () => Promise<{ success: boolean; companion?: CompanionData; snapshot?: any; error?: string }>;
   refreshCompanion: () => Promise<void>;
+  welcomeCompanion: (name:string) => Promise<{success:boolean;error?:string}>;
 }
 
 const LOCAL_STORAGE_COMPANION_KEY = 'deung_sati_companion_v2';
@@ -1011,6 +1012,17 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const welcomeCompanion=async(name:string)=>{
+    try {
+      if(!isLoggedIn)return {success:false,error:'กรุณาเข้าสู่ระบบก่อน'};
+      const response=await fetch('/api/companion/welcome',{method:'POST',headers:getAuthHeaders(),credentials:'include',body:JSON.stringify({name})});
+      const result=await response.json();
+      if(!response.ok)return {success:false,error:result.error||'ยังบันทึกชื่อไม่ได้ กรุณาลองอีกครั้ง'};
+      setCompanion({...result.companion,snapshot:result.snapshot});
+      return {success:true};
+    }catch{return {success:false,error:'เชื่อมต่อไม่ได้ น้องยังอยู่ครบ ลองบันทึกอีกครั้งนะ'};}
+  };
+
   const companionLoading = !isHydrated || isLoading;
   const needsOnboarding = isHydrated && !companion;
 
@@ -1035,6 +1047,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         saveDraft,
         petCompanion,
         hatchCompanion,
+        welcomeCompanion,
         refreshCompanion,
       }}
     >

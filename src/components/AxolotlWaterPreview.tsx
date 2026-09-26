@@ -8,7 +8,7 @@ import type { CompanionAppearance } from '../shared/companionAppearance';
 import './LivingCompanion3D.css';
 
 export type CompanionCaptureHandle = { capture: () => Promise<string> };
-type Props = { ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean };
+type Props = { ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean; onReady?: () => void };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
 const HELLO_DURATION = 11.8;
@@ -35,10 +35,12 @@ const GILLS = [
   { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
-export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false }: Props) {
+export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false, onReady }: Props) {
   const captureRef = useRef<(() => Promise<string>) | null>(null);
   useImperativeHandle(ref, () => ({ capture: () => captureRef.current ? captureRef.current() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ')) }), []);
   const embryo = mode === 'embryo';
+  const readyCallback = useRef(onReady);
+  readyCallback.current = onReady;
   const motionId = appearance?.traits.motion.id;
   const motionProfile = companionMotion(motionId);
   const progressRef = useRef(progress);
@@ -753,6 +755,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
         observer.observe(mount);
         resize();
         setStatus('ready');
+        readyCallback.current?.();
 
         const animate = () => {
           frame = requestAnimationFrame(animate);
@@ -766,7 +769,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
             animateElementParts?.(flowTime);
             if (embryo) {
               const growth = Math.max(0, Math.min(20, progressRef.current)) / 20;
-              const cycle = (t + (appearance?.patternSeed ?? 0) % 7) % 14;
+              const cycle = (t + (appearance?.patternSeed ?? 0) % 7) % 17.5;
               const spontaneous = THREE.MathUtils.smoothstep(cycle, 7, 7.5) * (1 - THREE.MathUtils.smoothstep(cycle, 9.2, 10.2));
               const touchAge = t - touchedRef.current;
               const response = touchAge >= 0 && touchAge < 2.6 ? Math.sin(Math.PI * touchAge / 2.6) : 0;
@@ -777,7 +780,10 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                 bendBody(bone, 0.08 + Math.sin(t * 0.8 - i * 0.35) * 0.025);
               });
               for (const name of ['Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002'] as const) curlSideways(name, 0.08 + wriggle * Math.sin(t * 3.4) * 0.028);
-              legNames.forEach((name, i) => kickLeg(name, (i % 4 < 2 ? 1 : -1) * (0.45 + wriggle * Math.sin(t * 5.3 + i * 1.7) * 0.24)));
+              legNames.forEach((name, i) => {
+                const kick=Math.max(0,Math.sin(t*3.6+i*1.7));
+                kickLeg(name,(i%4<2?1:-1)*(.45+wriggle*kick*kick*.18));
+              });
               GILLS.forEach(({root,mids,tip,side,phase}) => {
                 [root,...mids,tip].forEach((bone,i) => pose(bone,0,side * Math.sin(t * 1.1 + phase - i * 0.4) * 0.035,side * Math.sin(t * 1.1 + phase - i * 0.4) * 0.07));
               });
