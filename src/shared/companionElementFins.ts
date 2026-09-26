@@ -42,11 +42,21 @@ export function addElementFins(T:typeof Three,model:Three.Object3D,element:Compa
     {name:'right-middle',chain:chains[1],secondaryChain:chains[3],tier:'middle'},
     {name:'right-lower',chain:chains[3],tier:'lower'},
   ];
-  for(const {chain,secondaryChain,tier} of branches){
+  for(const {name,chain,secondaryChain,tier} of branches){
     const originalCurve=new T.CatmullRomCurve3(chain.map(locate));
+    // The right upper rig points sideways. Mirror the accepted left silhouette
+    // around the head's sagittal plane, anchored to the actual right root;
+    // keep right-side skinning so its animation remains independent.
+    const upperReference=name==='right-upper'?new T.CatmullRomCurve3(chains[0].map(locate)):null;
+    const lateral=new T.Vector3(.932,0,.363).normalize();
     const neighbor=secondaryChain?new T.CatmullRomCurve3(secondaryChain.map(locate)):null;
     const points=Array.from({length:5},(_,i)=>{
       const u=i/4,point=originalCurve.getPoint(u);
+      if(upperReference){
+        const offset=upperReference.getPoint(u).sub(upperReference.getPoint(0));
+        offset.addScaledVector(lateral,-2*offset.dot(lateral));
+        point.copy(originalCurve.getPoint(0)).add(offset);
+      }
       if(neighbor)point.lerp(neighbor.getPoint(u),.5);
       point.y+=(tier==='upper'?.07:tier==='lower'?-.05:0)*u*u;
       return point;
