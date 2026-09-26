@@ -1,0 +1,34 @@
+.my-notebook { border: 0; padding: 0; width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); border-radius: 20px; color: #514139; background: #fffaf0; box-shadow: 0 24px 80px #34283c55; overflow-y: auto; overscroll-behavior: contain; }
+.my-notebook::backdrop { background: #30273880; backdrop-filter: blur(6px); }
+.notebook-paper { padding: 24px 30px 32px; background: linear-gradient(90deg, #e9dfce55, transparent 24px), #fffaf0; min-height: 440px; }
+.my-notebook button, .my-notebook input, .my-notebook textarea { font: inherit; }
+.my-notebook button { cursor: pointer; }
+.my-notebook :focus-visible { outline: 3px solid #876aa0; outline-offset: 4px; }
+.notebook-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #807061; }
+.notebook-top span { display: flex; align-items: center; gap: 8px; }
+.notebook-top button { border: 0; background: transparent; color: inherit; min-width: 44px; min-height: 44px; }
+.my-notebook h2 { font-size: clamp(22px, 5vw, 28px); line-height: 1.5; margin: 16px 0 10px; overflow-wrap: anywhere; }
+.notebook-intro { color: #79695c; line-height: 1.8; font-size: 14px; }
+.notebook-date, .notebook-reading time, .notebook-entries time { font-size: 12px; color: #837565; }
+.notebook-field { display: flex; flex-direction: column; gap: 9px; font-weight: 600; margin: 24px 0; line-height: 1.7; }
+.notebook-field small { font-weight: 400; font-size: 13px; color: #867265; }
+.notebook-field input, .notebook-field textarea { box-sizing: border-box; width: 100%; border: 0; border-bottom: 1px solid #d9cbb7; border-radius: 0; color: #514139; background: transparent; padding: 8px 0; font-size: 16px; font-weight: 400; }
+.notebook-field textarea { resize: vertical; line-height: 32px; background: repeating-linear-gradient(transparent 0, transparent 31px, #d9cbb777 31px, #d9cbb777 32px); }
+.notebook-save { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; padding: 12px 16px; border: 0; border-radius: 14px; background: #74618c; color: white; }
+.notebook-save:disabled { opacity: .45; cursor: default; }
+.notebook-back { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #74618c; padding: 12px 0; min-height: 44px; border: 0; }
+.notebook-storage { font-size: 12px; color: #847769; text-align: center; }
+.notebook-entries { display: grid; gap: 12px; margin: 24px 0; }
+.notebook-entries > button { text-align: left; display: grid; gap: 8px; border: 1px solid #e1d5c3; border-radius: 12px; padding: 18px; background: #fffdf7; color: inherit; }
+.notebook-entries strong { overflow-wrap: anywhere; }
+.notebook-entries span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #847566; font-size: 14px; }
+.notebook-entries small { color: #74618c; }
+.notebook-empty { text-align: center; padding: 24px 0; line-height: 2; color: #927f6a; }
+.notebook-reading section { margin: 28px 0; }
+.notebook-reading h3 { font-size: 15px; color: #887160; }
+.notebook-reading section p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 2; }
+.notebook-signature { color: #a28b76; text-align: right; font-size: 13px; margin-top: 36px; }
+.notebook-error, .notebook-notice { padding: 12px; border-radius: 12px; background: #f4e2db; line-height: 1.6; }
+.notebook-notice { background: #e9eedf; }
+.notebook-confirm { border: 2px solid #b9a4c5; border-radius: 14px; padding: 16px; margin-top: 20px; }
+@media (max-width: 480px) { .notebook-paper { padding: 18px 20px 28px; } }

@@ -6,26 +6,17 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { CompanionProvider } from './context/CompanionContext';
 import { AppearanceLab } from './components/AppearanceLab';
-
-if (new URLSearchParams(window.location.search).get('view') === 'appearance-lab') {
-  createRoot(document.getElementById('root')!).render(<AppearanceLab />);
-} else {
+import { AuthModal } from './components/AuthModal';
 
 function AccountApp() {
   const { currentUser, isLoading } = useAuth();
   if (isLoading) return <p role="status">กำลังเปิดพื้นที่ของคุณ…</p>;
-  // Remount account-owned state and chat when the identity changes.
-  // Guest drafts remain in their existing local storage and are not uploaded.
-  return <CompanionProvider key={currentUser?.id ?? 'guest'}><App /></CompanionProvider>;
+  if (!currentUser) return <AuthModal isOpen required initialMode="register" onClose={() => {}} />;
+  // All app surfaces, including preview routes, require an authenticated account.
+  if (new URLSearchParams(window.location.search).get('view') === 'appearance-lab') return <AppearanceLab />;
+  return <CompanionProvider key={currentUser.id}><App /></CompanionProvider>;
 }
-
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AuthProvider>
-      <LanguageProvider>
-        <AccountApp />
-      </LanguageProvider>
-    </AuthProvider>
-  </StrictMode>,
+  <StrictMode><AuthProvider><LanguageProvider><AccountApp /></LanguageProvider></AuthProvider></StrictMode>,
 );
-}
+

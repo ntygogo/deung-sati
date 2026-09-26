@@ -7,6 +7,7 @@ import { AxolotlWaterPreview, type CompanionCaptureHandle } from './AxolotlWater
 import { resolveCompanionAppearance, type CompanionAppearance } from '../shared/companionAppearance';
 import type { CompanionData } from '../context/CompanionContext';
 import './DreamyHome.css';
+import { MyNotebook } from './MyNotebook';
 
 export interface DreamyHomeProps {
   onPet?: () => void;
@@ -20,6 +21,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   onOpenCompanion, onOpenJourney, onOpenFuture, onOpenChat, onStartChat, onPet }: DreamyHomeProps) {
   const companionView = useRef<CompanionCaptureHandle>(null);
   const [message, setMessage] = useState('');
+  const [notebookOpen, setNotebookOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const appearance = useMemo(() => resolveCompanionAppearance(companion ?? {}), [companion]);
   const [dnaPreview, setDnaPreview] = useState<CompanionAppearance | null>(null);
@@ -71,7 +73,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
         <div><strong>สวัสดี {userName || 'เธอ'} <span aria-hidden="true">♡</span></strong><span className="dreamy-level">Lv.{Math.max(1, level)}</span></div>
       </div>
       <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
-      <button type="button" className="room-journal" onClick={onOpenJourney} aria-label="เปิดสมุดบันทึก เส้นทางของฉัน">
+      <button type="button" className="room-journal" onClick={() => setNotebookOpen(true)} aria-label="เปิดสมุดของฉัน">
         <span className="room-book" aria-hidden="true"><BookOpen size={25} /><i /></span>
         <span className="room-object-label">สมุดของฉัน</span>
       </button>
@@ -135,5 +137,7 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
       </div>
     </section>
     <button className="dreamy-future-link" onClick={onOpenFuture}><Sparkles size={17} aria-hidden="true" /> แวะหาฉันในวันข้างหน้า <ChevronRight size={17} /></button>
+    {notebookOpen && <MyNotebook onClose={() => setNotebookOpen(false)} onOpenJourney={onOpenJourney} />}
   </main>;
 }
+
