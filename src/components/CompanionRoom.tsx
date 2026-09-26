@@ -209,6 +209,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
           <CompanionRenderer
             stage={stage}
             traceCount={traceCount}
+            source={companion}
             dna={companion.dna}
             moodState={companion.mood_state}
             isInteracting={isInteracting}
@@ -713,6 +714,7 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
               <CompanionRenderer
                 stage={1}
                 traceCount={20}
+                source={companion}
                 dna={companion.dna}
                 moodState="excited"
                 size={200}

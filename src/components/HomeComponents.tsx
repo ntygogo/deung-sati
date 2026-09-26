@@ -343,6 +343,7 @@ export const EmotionalTerrariumHero: React.FC<{
             stage={stage}
             traceCount={progress}
             dna={companion?.dna || fallbackDna}
+            source={companion ?? undefined}
             moodState={companion?.mood_state || 'calm'}
             onPet={onPetCompanion}
             size={242}
@@ -978,6 +979,5 @@ export const GrowthReflectionCard: React.FC<{
     </button>
   );
 };
-
 
 

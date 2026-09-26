@@ -930,11 +930,12 @@ function Home({
   onStartChat: (text: string) => void;
   onOpenSaved: () => void;
 }) {
-  const { companion, traceCount } = useCompanion();
+  const { companion, traceCount, petCompanion } = useCompanion();
 
   return (
     <div className="screen scrollArea homeScreenRoot">
       <DreamyHome
+        onPet={() => { void petCompanion(); }}
         companion={companion}
         traceCount={traceCount}
         onOpenMenu={onOpenMenu}

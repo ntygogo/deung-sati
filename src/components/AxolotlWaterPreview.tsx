@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CompanionAppearance } from '../shared/companionAppearance';
 import './LivingCompanion3D.css';
 
-type Props = { paused?: boolean };
+type Props = { paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
 const HELLO_DURATION = 11.8;
@@ -19,7 +20,7 @@ const REACTIONS: Reaction[] = ['content', 'squish', 'blep', 'content', 'squish',
 const FRONT_YAW = -0.372;
 
 // Meshy UniRig bone names were checked against this specific model's skin weights.
-// Keep this preview separate from the sprite renderer until its appearance is approved.
+// Shared by the hatched companion and its curled embryo pose.
 const TAIL = ['Bone_022', 'Bone_021', 'Bone_020', 'Bone_019', 'Bone_018', 'Bone_017'] as const;
 const GILLS = [
   { root: 'Bone_052', mids: ['Bone_051', 'Bone_050'], tip: 'Bone_049', phase: 0.1, side: -1 },
@@ -28,7 +29,22 @@ const GILLS = [
   { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
-export function AxolotlWaterPreview({ paused = false }: Props) {
+export function AxolotlWaterPreview({ paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false }: Props) {
+  const embryo = mode === 'embryo';
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const lastActivityVersion = useRef(activityVersion);
+  const lastPetNotice = useRef(-10000);
+  const welcomedRef = useRef(false);
+  useEffect(() => { if (interactionPulse > 0) touchedRef.current = elapsedRef.current; }, [interactionPulse]);
+  useEffect(() => {
+    if (activityVersion > lastActivityVersion.current) {
+      reactionRef.current = { kind: 'content', started: elapsedRef.current };
+      touchedRef.current = elapsedRef.current;
+      lastActivityRef.current = elapsedRef.current;
+    }
+    lastActivityVersion.current = activityVersion;
+  }, [activityVersion]);
   const mountRef = useRef<HTMLSpanElement>(null);
   const pausedRef = useRef(paused);
   const touchedRef = useRef(-100);
@@ -99,6 +115,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
 
   const reactToPet = () => {
     if (pausedRef.current || !canPlay) return;
+    if (performance.now() - lastPetNotice.current > 1000) { onPet?.(); lastPetNotice.current = performance.now(); }
     if (registerRapidPet()) return;
     const t = elapsedRef.current;
     const previous = reactionRef.current;
@@ -137,6 +154,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
+    setStatus('loading');
     let disposed = false;
     let frame = 0;
     let observer: ResizeObserver | undefined;
@@ -173,6 +191,11 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         const model = gltf.scene;
         const faces: import('three').SkinnedMesh[] = [];
         const eyelids = { value: 0 };
+        const tint = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
+        const referenceTint = new THREE.Color('#F4BACD');
+        tint.setRGB(tint.r / referenceTint.r, tint.g / referenceTint.g, tint.b / referenceTint.b);
+        const patternKind = ['pearl_freckles', 'starlight_speckles', 'water_ripples', 'petal_marks'].indexOf(appearance?.traits.pattern.id ?? '');
+
         const squish = { value: 0 };
         // Small local morphs work with the existing skinning and baked face texture.
         // These coordinates belong to this model, not to arbitrary Meshy exports.
@@ -237,16 +260,22 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           // surface rather than collapsing the sparse eye topology into a crease.
           for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
             material.onBeforeCompile = shader => {
+              shader.uniforms.axolotlTint = { value: tint };
+              shader.uniforms.axolotlPattern = { value: patternKind };
+              shader.uniforms.axolotlPatternSeed = { value: (appearance?.patternSeed ?? 0) % 1000 };
               shader.uniforms.axolotlBlink = eyelids;
               shader.uniforms.axolotlSquish = squish;
-              shader.uniforms.axolotlSkinRight = { value: new THREE.Color('#f5cfe1') };
-              shader.uniforms.axolotlSkinLeft = { value: new THREE.Color('#f8cbde') };
+              shader.uniforms.axolotlSkinRight = { value: new THREE.Color('#f5cfe1').multiply(tint) };
+              shader.uniforms.axolotlSkinLeft = { value: new THREE.Color('#f8cbde').multiply(tint) };
               shader.vertexShader = shader.vertexShader
                 .replace('#include <common>', '#include <common>\nvarying vec3 axolotlFacePosition;')
                 .replace('#include <begin_vertex>', '#include <begin_vertex>\naxolotlFacePosition = position;');
               shader.fragmentShader = shader.fragmentShader
                 .replace('#include <common>', `#include <common>
                   varying vec3 axolotlFacePosition;
+                  uniform vec3 axolotlTint;
+                  uniform float axolotlPattern;
+                  uniform float axolotlPatternSeed;
                   uniform float axolotlBlink;
                   uniform float axolotlSquish;
                   uniform vec3 axolotlSkinRight;
@@ -274,12 +303,21 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
                     coverage = max(coverage, lid);
                   }`)
                 .replace('#include <map_fragment>', `#include <map_fragment>
+                  diffuseColor.rgb *= axolotlTint;
+                  vec3 p = axolotlFacePosition;
+                  float bodyMask = (1.0 - smoothstep(1.1, 1.5, p.z)) * smoothstep(0.0, 0.25, p.y);
+                  vec3 cell = floor(p * 22.0 + axolotlPatternSeed);
+                  float noise = fract(sin(dot(cell, vec3(12.9898,78.233,39.425))) * 43758.5453);
+                  float spots = step(0.955, noise) * (1.0 - smoothstep(0.19,0.4,length(fract(p * 22.0 + axolotlPatternSeed)-0.5)));
+                  float ripple = pow(0.5 + 0.5 * sin(p.x * 24.0 + p.z * 15.0), 12.0);
+                  float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern > 1.5 && axolotlPattern < 2.5 ? ripple : spots;
+                  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.7 + vec3(0.2), bodyMask * pattern * 0.26);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-sculpted-happy-lids-v3';
+            material.customProgramCacheKey = () => 'axolotl-dna-lids-v4';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -377,7 +415,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
         halo.position.set(0, 0.065, 0);
         halo.scale.setScalar(0.42);
         antennaTip?.add(halo);
-        const light = new THREE.PointLight(0xffd7a6, 0.32, 0.7);
+        const light = new THREE.PointLight(appearance?.palette.lamp ?? 0xffd7a6, 0.32, 0.7);
         light.position.copy(halo.position);
         antennaTip?.add(light);
         disposeModel = () => {
@@ -576,6 +614,46 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
           if (!pausedRef.current && !document.hidden) {
             elapsedRef.current += elapsed;
             const t = elapsedRef.current;
+            if (embryo) {
+              const growth = Math.max(0, Math.min(20, progressRef.current)) / 20;
+              const cycle = (t + (appearance?.patternSeed ?? 0) % 7) % 14;
+              const spontaneous = THREE.MathUtils.smoothstep(cycle, 7, 7.5) * (1 - THREE.MathUtils.smoothstep(cycle, 9.2, 10.2));
+              const touchAge = t - touchedRef.current;
+              const response = touchAge >= 0 && touchAge < 2.6 ? Math.sin(Math.PI * touchAge / 2.6) : 0;
+              const wriggle = Math.max(spontaneous * (0.4 + growth * 0.35), response);
+              for (const name of names) pose(name, 0, 0, 0);
+              TAIL.forEach((bone, i) => {
+                curlSideways(bone, 0.58 + Math.sin(t * 1.25 - i * 0.48) * 0.055 + wriggle * Math.sin(t * 4.1 - i * 0.55) * 0.085);
+                bendBody(bone, 0.08 + Math.sin(t * 0.8 - i * 0.35) * 0.025);
+              });
+              for (const name of ['Bone_006', 'Bone_005', 'Bone_004', 'Bone_003', 'Bone_002'] as const) curlSideways(name, 0.08 + wriggle * Math.sin(t * 3.4) * 0.028);
+              legNames.forEach((name, i) => kickLeg(name, (i % 4 < 2 ? 1 : -1) * (0.45 + wriggle * Math.sin(t * 5.3 + i * 1.7) * 0.24)));
+              GILLS.forEach(({root,mids,tip,side,phase}) => {
+                [root,...mids,tip].forEach((bone,i) => pose(bone,0,side * Math.sin(t * 1.1 + phase - i * 0.4) * 0.035,side * Math.sin(t * 1.1 + phase - i * 0.4) * 0.07));
+              });
+              bendBody('Bone_034', 0.1 + wriggle * 0.05);
+              pose('Bone_039', 0, 0, Math.sin(t * 0.9) * 0.035);
+              const breath = Math.sin(t * 1.3);
+              const scale = 0.96 + growth * 0.12;
+              pivot.scale.set(scale, scale * (1 + breath * 0.018), scale);
+              pivot.position.set(-0.08, -0.05 + Math.sin(t * 0.75) * 0.035 + wriggle * Math.sin(t * 3.4) * 0.018, 0);
+              pivot.quaternion.setFromAxisAngle(rollAxis, -0.15 + Math.sin(t * 0.8) * 0.045 + wriggle * Math.sin(t * 2.9) * 0.07);
+              eyelids.value = 0.9 - response * 0.65;
+              squish.value = 0;
+              faces.forEach(mesh => { if(mesh.morphTargetInfluences) { mesh.morphTargetInfluences[0] = 0.2 + response * 0.4; mesh.morphTargetInfluences[1] = 0; } });
+              tongue.visible = false;
+              glowMaterial.opacity = 0.3 + (breath + 1) * 0.12;
+              halo.scale.setScalar(0.29 + (breath + 1) * 0.025);
+              light.intensity = 0.16 + (breath + 1) * 0.08;
+              mount.parentElement?.setAttribute('data-reaction', wriggle > 0.15 ? 'wriggling' : 'sleeping-embryo');
+            } else {
+            if (autoGreet && !welcomedRef.current && t > 2) {
+              welcomedRef.current = true;
+              if (lastActivityRef.current === 0) {
+                reactionRef.current = {kind: 'hello', started: t};
+                lastActivityRef.current = t;
+              }
+            }
             // A quiet current travels from the base toward the tail tip.
             // A second slower current prevents a short, visibly repeated loop.
             const smooth = THREE.MathUtils.smoothstep;
@@ -863,11 +941,12 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
               setRestPhase('awake');
             }
           }
+          }
           // Manual viewing remains available when animation is paused.
           viewYaw += (orbitRef.current - viewYaw) * (1 - Math.exp(-dt * 16));
           // Make room above the head while preserving the visible upward leap.
           // Bring the face forward for the wave while leaving room for the raised paw.
-          const viewRadius = 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.35 - waveFraming * 0.28 - helloNear * 0.65;
+          const viewRadius = embryo ? 4.1 : 3.8 + jumpHeight * 1.15 + curlFraming * 0.55 + helloFraming * 0.35 - waveFraming * 0.28 - helloNear * 0.65;
           const framingLift = jumpHeight * 0.38 + helloFraming * 0.24 + helloNear * 0.04;
           camera.position.set(Math.sin(viewYaw) * viewRadius, 0.35 + framingLift, Math.cos(viewYaw) * viewRadius);
           camera.lookAt(0, 0.04 + framingLift, 0);
@@ -895,7 +974,7 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, []);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;
@@ -903,6 +982,10 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     orbitRef.current += Math.atan2(Math.sin(delta), Math.cos(delta));
     gazeRef.current = 0;
   };
+  if (embryo) return <span className="axolotl-embryo" data-status={status} data-testid="egg-embryo-3d">
+    <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
+    {status !== 'ready' && <span className="companion-model-message" role="status">{status === 'error' ? 'เปิดตัวอ่อน 3D ไม่ได้' : 'กำลังพาน้องมา…'}</span>}
+  </span>;
   return <div className="axolotl-viewer">
     <button type="button" className="living-companion-3d axolotl-orbit" data-renderer="axolotl-water-preview" data-status={status}
     aria-label="ลูบหัวน้องเพื่อเล่นด้วย ลากบริเวณรอบตัวหรือใช้ลูกศรเพื่อหมุนดู กด Enter เพื่อให้น้องเล่น"
@@ -973,13 +1056,13 @@ export function AxolotlWaterPreview({ paused = false }: Props) {
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
     {!canPlay && <span role="status" className="companion-model-message">{status === 'error' ? 'เปิดโมเดล 3D บนอุปกรณ์นี้ไม่ได้' : 'กำลังพาน้องมาหา…'}</span>}
     </button>
-    <div className="axolotl-viewer-controls">
+    {showControls && <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay} onClick={reactToPet}>ลูบหัว ♡</button>
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase !== 'awake'} onClick={doFlip}>ตีลังกา</button>
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase !== 'awake'} onClick={sayHello} aria-label="ทักทาย โบกมือและแตะกระจก">ทักทาย</button>
       <button type="button" className="axolotl-front-button" onClick={faceViewer} aria-label="หันมาหาเรา">มองเรา</button>
-    </div>
+    </div>}
   </div>;
 }
 
