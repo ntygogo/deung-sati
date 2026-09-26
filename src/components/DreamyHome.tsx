@@ -1,3 +1,4 @@
+import { remixPreview, remixDescription, REMIX_PALETTES, selectRemixPalette, ELEMENT_LABELS } from '../shared/companionRemix';
 import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowUp, BookOpen, ChevronRight, Eye, Heart, Menu, MessageCircle, Pause, Play, Siren, Sparkles } from 'lucide-react';
 import { CompanionEgg, eggProgress } from './CompanionEgg';
@@ -28,10 +29,16 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
   const displayedAppearance = dnaPreview ?? appearance;
   const chooseCollection = (collection: CompanionCollection) => setDnaPreview(collectionPreview(appearance,collection));
   const randomizeLook = () => {
-    const choices = (Object.keys(COMPANION_COLLECTIONS) as CompanionCollection[]).filter(key=>key!==dnaPreview?.previewCollection);
-    chooseCollection(choices[Math.floor(Math.random()*choices.length)]);
+    setDnaPreview(remixPreview(displayedAppearance));
   };
   const randomizeDna = () => {
+    if(displayedAppearance.previewRemix){
+      const current=displayedAppearance.previewRemix;
+      const options=(Object.keys(ELEMENT_LABELS) as Array<keyof typeof ELEMENT_LABELS>).filter(key=>key!==current.parts.lamp);
+      const lamp=options[Math.floor(Math.random()*options.length)];
+      setDnaPreview({...displayedAppearance,previewRemix:{...current,parts:{...current.parts,lamp}},previewLamp:COMPANION_COLLECTIONS[lamp].lampShape});
+      return;
+    }
     const lamps = ['pearl', 'drop', 'bud'] as const;
     const choices = lamps.filter(lamp => lamp !== dnaPreview?.previewLamp);
     setDnaPreview({...displayedAppearance, previewLamp: choices[Math.floor(Math.random() * choices.length)]});
@@ -95,20 +102,29 @@ export function DreamyHome({ companion, traceCount, userName, level = 1, onOpenM
 
     <section className="dreamy-dna-preview dreamy-atelier" aria-label="ออกแบบน้องของฉัน">
       <span className="atelier-eyebrow">LITTLE WONDERS · ลองลุคของน้อง</span>
-      <h2>{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].name : 'น้องในแบบที่เธอชอบ'}</h2>
+      <h2>{dnaPreview?.previewRemix ? dnaPreview.palette.label : dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].name : 'น้องในแบบที่เธอชอบ'}</h2>
       <div className="atelier-collections" role="group" aria-label="เลือกชุดดีไซน์">
         {(Object.keys(COMPANION_COLLECTIONS) as CompanionCollection[]).map(key=>{
           const design=COMPANION_COLLECTIONS[key];
-          return <button type="button" key={key} aria-pressed={dnaPreview?.previewCollection===key} onClick={()=>chooseCollection(key)}>
+          return <button type="button" key={key} aria-pressed={!dnaPreview?.previewRemix && dnaPreview?.previewCollection===key} onClick={()=>chooseCollection(key)}>
             <span className="atelier-swatches" aria-hidden="true"><i style={{background:design.body}}/><i style={{background:design.fin}}/><i style={{background:design.lamp}}/></span>{design.name}
           </button>;
         })}
       </div>
-      <p role="status">{dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{dnaPreview?.previewLamp && <> · {dnaPreview.previewCollection && ['earth','water','wind','fire','leaf','flower'].includes(dnaPreview.previewCollection) && dnaPreview.previewLamp === COMPANION_COLLECTIONS[dnaPreview.previewCollection].lampShape ? 'โคมประจำธาตุ' : {pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
+      <div className="atelier-palette-grid" role="group" aria-label="เลือกชุดสีสดใส">
+        {REMIX_PALETTES.map((palette,index)=><button type="button" key={palette.name}
+          aria-pressed={dnaPreview?.previewRemix?.palette===index && !dnaPreview.previewRemix.colors}
+          onClick={()=>setDnaPreview(selectRemixPalette(displayedAppearance,index))}>
+          <span className="atelier-swatches" aria-hidden="true"><i style={{background:palette.body}}/><i style={{background:palette.fin}}/><i style={{background:palette.finTip}}/></span>{palette.name}
+        </button>)}
+      </div>
+      <p role="status">{dnaPreview?.previewRemix ? remixDescription(dnaPreview) : dnaPreview?.previewCollection ? COMPANION_COLLECTIONS[dnaPreview.previewCollection].subtitle : 'สี ลาย และแสงที่ออกแบบให้เข้าคู่กัน'}{!dnaPreview?.previewRemix && dnaPreview?.previewLamp && <> · {dnaPreview.previewCollection && ['earth','water','wind','fire','leaf','flower'].includes(dnaPreview.previewCollection) && dnaPreview.previewLamp === COMPANION_COLLECTIONS[dnaPreview.previewCollection].lampShape ? 'โคมประจำธาตุ' : {pearl:'ไข่มุก',drop:'หยดน้ำ',bud:'ดอกตูม'}[dnaPreview.previewLamp]}</>}</p>
       <div className="atelier-actions"><button type="button" onClick={randomizeLook}>✦ สุ่มลุคให้น้อง</button>
         {!isEgg && <CompanionShareCard appearance={displayedAppearance} displayName={companion?.name || 'สหายตัวน้อย'} capture={() => companionView.current ? companionView.current.capture() : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ'))} />}
       </div>
-      <div className="atelier-secondary"><button type="button" onClick={randomizeDna}>สุ่มเฉพาะโคมไฟ</button>
+      <div className="atelier-secondary"><button type="button" onClick={()=>setDnaPreview(remixPreview(displayedAppearance,'colors'))}>สุ่มเฉพาะสี</button>
+        <button type="button" onClick={()=>setDnaPreview(remixPreview(displayedAppearance,'parts'))}>สุ่มเฉพาะชิ้นส่วน</button>
+        <button type="button" onClick={randomizeDna}>สุ่มเฉพาะโคมไฟ</button>
         {dnaPreview && <button type="button" onClick={()=>setDnaPreview(null)}>กลับสู่น้องของฉัน</button>}</div>
       <small>ลองได้เต็มที่ · ไม่เปลี่ยน DNA ที่บันทึกไว้</small>
     </section>

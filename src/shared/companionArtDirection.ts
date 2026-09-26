@@ -28,7 +28,7 @@ export type CompanionCollection = keyof typeof COMPANION_COLLECTIONS;
 export function collectionPreview(base: CompanionAppearance, collection: CompanionCollection): CompanionAppearance {
   const design = COMPANION_COLLECTIONS[collection];
   const next = previewAppearance(base, { palette: design.palette, pattern: design.pattern, motion: design.motion });
-  return { ...next, previewCollection: collection, previewLamp: design.lampShape,
+  return { ...next, previewRemix: undefined, previewCollection: collection, previewLamp: design.lampShape,
     palette: { ...next.palette, label: design.name, body: design.body, secondary: design.fin, lamp: design.lamp },
     patternSeed: {lotus:121,moonpool:242,starlight:363,earth:414,water:525,wind:636,fire:747,leaf:858,flower:969}[collection] };
 }

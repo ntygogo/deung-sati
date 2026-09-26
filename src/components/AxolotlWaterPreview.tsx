@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'reac
 import { trimGillTopology } from '../shared/companionGillTopology';
 import { addElementParts, type CompanionElement } from '../shared/companionElements';
 import { COMPANION_COLLECTIONS } from '../shared/companionArtDirection';
+import { remixArt } from '../shared/companionRemix';
 import { companionMotion } from '../shared/companionBirthVisuals';
 import type { CompanionAppearance } from '../shared/companionAppearance';
 import './LivingCompanion3D.css';
@@ -200,7 +201,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
         const model = gltf.scene;
         const faces: import('three').SkinnedMesh[] = [];
         const eyelids = { value: 0 };
-        const art = appearance?.previewCollection ? COMPANION_COLLECTIONS[appearance.previewCollection] : null;
+        const art = appearance ? remixArt(appearance) : null;
         const bodyColor = new THREE.Color(appearance?.palette.body ?? '#F4BACD');
         const finColor = new THREE.Color(appearance?.palette.secondary ?? '#8BD3DD');
         const faceColor = art ? new THREE.Color(art.face) : new THREE.Color('#FFE2D7').lerp(bodyColor, 0.72);
@@ -379,11 +380,15 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                   float skinMask = smoothstep(0.04,0.22,luminance);
                   diffuseColor.rgb = mix(diffuseColor.rgb, regionColor * clamp(luminance / 0.62, 0.65, 1.16), skinMask * 0.9);
                   float bodyMask = (1.0 - smoothstep(1.05, 1.55, p.z)) * smoothstep(0.15, 0.5, p.y);
-                  vec2 uvMark = vec2(p.z, p.x) * 4.2 + axolotlPatternSeed * 0.137;
+                  vec2 uvMark = vec2(p.z, p.x * .7 + p.y * .7) * 4.2 + axolotlPatternSeed * 0.137;
                   vec2 cell = floor(uvMark);
                   float noise = fract(sin(dot(cell, vec2(12.9898,78.233))) * 43758.5453);
                   vec2 mark = fract(uvMark) - 0.5;
-                  float spots = step(0.32,noise) * (1.0-smoothstep(0.13,0.22,length(mark)));
+                  // Volumetric freckles remain dots around curved sides instead of extruded stripes.
+                  vec3 freckleGrid = p * 5.8 + axolotlPatternSeed * .137;
+                  vec3 freckleCell = floor(freckleGrid);
+                  float freckleNoise = fract(sin(dot(freckleCell,vec3(12.9898,78.233,37.719)))*43758.5453);
+                  float spots = step(.26,freckleNoise)*(1.0-smoothstep(.26,.35,length(fract(freckleGrid)-.5)));
                   float star = step(0.56,noise) * (1.0-smoothstep(0.16,0.22,sqrt(abs(mark.x*mark.y)) + .25*length(mark)));
                   float waterLine = abs(abs(p.x) - (.19 + .12*sin(p.z*3.2)));
                   float waterLine2 = abs(abs(p.x) - (.38 + .08*sin(p.z*3.2+.7)));
@@ -393,7 +398,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                   float petals = .42 + .17*cos(petalAngle*5.0);
                   float petal = (1.0-smoothstep(petals-.04,petals+.035,length(lotus))) * smoothstep(.12,.2,length(lotus));
                   float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern < 0.5 ? spots : axolotlPattern < 1.5 ? star : axolotlPattern < 2.5 ? ripple : petal;
-                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * clamp(pattern,0.0,1.0) * skinMask * 0.67);
+                  diffuseColor.rgb = mix(diffuseColor.rgb, axolotlMarkingColor, bodyMask * (1.0-smoothstep(.2,.8,axolotlFin)) * clamp(pattern,0.0,1.0) * skinMask * 0.67);
                   float cheekR = exp(-dot((p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16),(p-vec3(0.25,0.72,1.90))/vec3(.18,.10,.16)));
                   float cheekL = exp(-dot((p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16),(p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16)));
                   diffuseColor.rgb = mix(diffuseColor.rgb,axolotlCheekColor,max(cheekR,cheekL)*.52*skinMask);
@@ -404,7 +409,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-closed-gill-roots-v12';
+            material.customProgramCacheKey = () => 'axolotl-remix-volumetric-marks-v13';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -532,7 +537,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
             }
             const element = appearance.previewCollection;
             if(element && ['earth','water','wind','fire','leaf','flower'].includes(element))
-              animateElementParts = addElementParts(THREE,model,lampGroup,lampSurface,element as CompanionElement,art!.fin,art!.finTip,appearance.previewLamp===art!.lampShape);
+              animateElementParts = addElementParts(THREE,model,lampGroup,lampSurface,element as CompanionElement,art!.fin,art!.finTip,appearance.previewLamp===COMPANION_COLLECTIONS[appearance.previewRemix?.parts.lamp??element].lampShape,appearance.previewRemix?.parts);
             const collar=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),new THREE.MeshStandardMaterial({color:finColor,roughness:.4,metalness:.12}));
             collar.scale.set(.045,.017,.045);collar.position.y=.005;lampGroup.add(collar);
           }
@@ -1153,7 +1158,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, appearance?.previewLamp, appearance?.previewCollection, motionId]);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.secondary, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, appearance?.previewLamp, appearance?.previewCollection, appearance?.previewRemix, motionId]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;

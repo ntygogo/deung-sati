@@ -4,7 +4,9 @@ import { addElementSilhouette } from './companionElementSilhouette';
 export type CompanionElement = 'earth' | 'water' | 'wind' | 'fire' | 'leaf' | 'flower';
 
 /** Element lamps, skinned gill replacements, and coordinated tail silhouettes. */
-export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Three.Group, surface: Three.MeshPhysicalMaterial, element: CompanionElement, accent: string, tip: string, decorateLamp = true) {
+export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Three.Group, surface: Three.MeshPhysicalMaterial, element: CompanionElement, accent: string, tip: string, decorateLamp = true, parts?: import("./companionRemix").RemixParts) {
+  const gillElement=parts?.gills??element;
+  element=parts?.lamp??element;
   const detail = new T.MeshPhysicalMaterial({color:accent, roughness:.38, clearcoat:.65, metalness:.06});
   const soft = new T.MeshPhysicalMaterial({color:tip, roughness:.3, clearcoat:.8, metalness:.03});
   const mesh = (geometry: Three.BufferGeometry, material: Three.Material, parent: Three.Object3D, x=0,y=0,z=0) => {
@@ -45,6 +47,6 @@ export function addElementParts(T: typeof Three, model: Three.Object3D, lamp: Th
   } else if(decorateLamp) {
     for(let i=0;i<3;i++)oval(lamp,soft,Math.cos(i*2.1)*.105,.12+i*.035,Math.sin(i*2.1)*.105,.016,.021,.016);
   }
-  addElementFins(T,model,element,accent,tip);
-  return addElementSilhouette(T,model,element,accent,tip);
+  addElementFins(T,model,gillElement,accent,tip,parts?.dorsal??gillElement);
+  return addElementSilhouette(T,model,parts?.tail??gillElement,accent,tip);
 }

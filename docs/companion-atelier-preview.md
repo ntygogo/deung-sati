@@ -78,3 +78,12 @@ positioned between its upper/lower neighbors and blends their interpolated bone
 weights (up to four influences), retaining continuous motion without a rigid
 attachment. Upper and lower tips are slightly fanned apart; middle fans extend
 outward so the three tiers read separately. Tail and dorsal designs are unchanged.
+
+## Collectible remix atelier
+
+- Twelve coordinated saturated palettes, each defining body, face, belly, cheeks, markings, fin roots/tips and lamp light. Palettes travel as complete recipes across silhouettes.
+- Independent six-element gill, dorsal, tail and lamp selection; original six-gill anatomy and the corrected right upper silhouette remain shared across combinations.
+- Full-look randomization also chooses among four existing body patterns and a pattern seed. Color-only preserves shapes/patterns; parts-only preserves the selected color recipe. Explicit palette swatches, lamp-only selection and reset remain available.
+- All remix state is preview-only. It does not overwrite the companion birth snapshot or establish a uniqueness guarantee. Current selectable shape/color/pattern recipes allow 12 × 6^4 × 4 = 62,208 combinations before pattern-seed variation; this is a combination count, not a rarity claim.
+- Volumetric pearl spots avoid stretched side stripes; markings fade off fin surfaces. Exported portrait uses the active palette name and live rendered mixed geometry.
+- Verified: production build; eight relevant tests including deterministic remix isolation; all 12 palettes in mobile-sized Chromium with local fixture API responses, mixed-part controls, portrait downloads, animation and no WebGL/page errors. Not physical-device validation.

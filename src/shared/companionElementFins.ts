@@ -2,7 +2,7 @@ import type * as Three from 'three';
 import type { CompanionElement } from './companionElements';
 
 /** Replacement gill silhouettes and a continuous dorsal sail, skinned to the original rig. */
-export function addElementFins(T:typeof Three,model:Three.Object3D,element:CompanionElement,accent:string,tip:string) {
+export function addElementFins(T:typeof Three,model:Three.Object3D,element:CompanionElement,accent:string,tip:string,dorsalElement:CompanionElement=element) {
   model.updateMatrixWorld(true);
   const bones:Three.Bone[]=[];
   model.traverse(o=>{if((o as Three.Bone).isBone)bones.push(o as Three.Bone);});
@@ -97,6 +97,7 @@ export function addElementFins(T:typeof Three,model:Three.Object3D,element:Compa
     });
   }
   // One continuous, low-rooted sail follows the back into the tail base.
+  element=dorsalElement;
   const spine=['Bone_004','Bone_005','Bone_006','Bone_003','Bone_022','Bone_021'];
   const dorsalPoints=spine.map((name,i)=>locate(name).add(new T.Vector3(0,i<4?.265:i<6?.22:.17,0)));
   const dorsalCurve=new T.CatmullRomCurve3(dorsalPoints);
