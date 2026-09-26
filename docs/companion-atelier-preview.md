@@ -59,8 +59,14 @@ thin wind ribbons, water lobes, flame lobes, and angular earth plates create act
 new gill silhouettes. Both surfaces follow the existing skeleton with interpolated
 weights, including sleep and rollover motions.
 
-The source GLB shares gill and head topology. Old branching fronds are compressed
-onto their nearest rig centerline outside a protected head envelope, retaining
-closed roots rather than cutting holes. New membranes grow around these stems.
-No rear-head cover or floating root caps are used. The approved tail fan geometry
-and motion remain unchanged. The new fin skeleton is disposed on renderer cleanup.
+The source GLB shares gill and head topology. The initial stem-compression pass
+left stretched connecting faces, so it has been replaced with topology-aware
+clipping. Only projecting gill tissue is removed; intersection vertices preserve
+UVs and normalized skin weights. Actual cut boundary loops are triangulated and
+closed in the same geometry, with a root material color rather than stretched
+source texture. Two tiny authored root seams are joined only within 0.025 model
+units. All nine cut loops close; a partial cut is rejected rather than rendered.
+A regression test loads the actual GLB, validates closure and normalized weights,
+and verifies that front-face vertices are unchanged. No rear-head cover or
+floating root caps are used. The approved tail fan geometry and motion remain
+unchanged. The new fin skeleton is disposed on renderer cleanup.

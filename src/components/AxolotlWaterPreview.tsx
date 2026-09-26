@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { trimGillTopology } from '../shared/companionGillTopology';
 import { addElementParts, type CompanionElement } from '../shared/companionElements';
 import { COMPANION_COLLECTIONS } from '../shared/companionArtDirection';
 import { companionMotion } from '../shared/companionBirthVisuals';
@@ -216,7 +217,10 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
         model.traverse(object => {
           if (!(object as import('three').SkinnedMesh).isSkinnedMesh) return;
           const mesh = object as import('three').SkinnedMesh;
+          const customGills=['earth','water','wind','fire','leaf','flower'].includes(appearance?.previewCollection ?? '');
+          if(customGills)trimGillTopology(THREE,mesh,new Set(GILLS.flatMap(g=>[g.root,...g.mids,g.tip])));
           const positions = mesh.geometry.getAttribute('position');
+          if(!customGills)mesh.geometry.setAttribute('axolotlGillCap',new THREE.BufferAttribute(new Float32Array(positions.count),1));
           // Mark the verified bulb joints; replacement lamps keep the authored stalk intact.
           const bulbIndices = mesh.geometry.getAttribute('skinIndex');
           const bulbWeights = mesh.geometry.getAttribute('skinWeight');
@@ -232,40 +236,11 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
           const skinWeights = mesh.geometry.getAttribute('skinWeight');
           const finBones = new Set<string>([...TAIL, ...GILLS.flatMap(g => [g.root, ...g.mids, g.tip])]);
           const finRegions = new Float32Array(positions.count);
-          const gillBones = new Set<string>(GILLS.flatMap(g => [g.root,...g.mids,g.tip]));
-          const gillRegions = new Float32Array(positions.count);
           for (let i = 0; i < positions.count; i++) {
             for (let j = 0; j < 4; j++) {
               const bone = mesh.skeleton.bones[skinIndices.getComponent(i, j)];
               if (bone && finBones.has(bone.name)) finRegions[i] += skinWeights.getComponent(i, j);
-              if (bone && gillBones.has(bone.name)) gillRegions[i] += skinWeights.getComponent(i,j);
             }
-          }
-          // Compress the old branching fronds into narrow living stems. Their
-          // topology stays closed and the head/root envelope remains untouched.
-          if (['earth','water','wind','fire','leaf','flower'].includes(appearance?.previewCollection ?? '')) {
-            model.updateMatrixWorld(true);
-            const chains=GILLS.map(g=>[g.root,...g.mids,g.tip].map(name=>model.getObjectByName(name)!.getWorldPosition(new THREE.Vector3())));
-            const vertex=new THREE.Vector3(),nearest=new THREE.Vector3(),candidate=new THREE.Vector3(),segment=new THREE.Vector3();
-            for(let i=0;i<positions.count;i++) {
-              if(gillRegions[i]<.35) continue;
-              vertex.fromBufferAttribute(positions,i);
-              const x=vertex.x-.10,y=vertex.y-.87,z=vertex.z-1.49;
-              const envelope=Math.hypot((x*.932+z*.363)/.64,y/.48,(-x*.363+z*.932)/.57);
-              const blend=THREE.MathUtils.smoothstep(envelope,.98,1.12)*THREE.MathUtils.smoothstep(gillRegions[i],.35,.8);
-              if(blend===0)continue;
-              let distance=Infinity;
-              for(const chain of chains)for(let k=0;k<chain.length-1;k++) {
-                segment.copy(chain[k+1]).sub(chain[k]);
-                const u=THREE.MathUtils.clamp(candidate.copy(vertex).sub(chain[k]).dot(segment)/segment.lengthSq(),0,1);
-                candidate.copy(chain[k]).addScaledVector(segment,u);
-                const d=candidate.distanceToSquared(vertex);if(d<distance){distance=d;nearest.copy(candidate);}
-              }
-              const radius=Math.sqrt(distance);
-              candidate.copy(vertex).sub(nearest).multiplyScalar(Math.min(1,.024/Math.max(radius,.0001))).add(nearest);
-              vertex.lerp(candidate,blend);positions.setXYZ(i,vertex.x,vertex.y,vertex.z);
-            }
-            positions.needsUpdate=true;mesh.geometry.computeVertexNormals();
           }
           mesh.geometry.setAttribute('axolotlFinRegion', new THREE.BufferAttribute(finRegions, 1));
           const smile = new Float32Array(positions.count * 3);
@@ -341,8 +316,8 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
               shader.uniforms.axolotlSkinRight = { value: faceColor.clone() };
               shader.uniforms.axolotlSkinLeft = { value: faceColor.clone() };
               shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nvarying vec3 axolotlFacePosition;\nattribute float axolotlFinRegion;\nvarying float axolotlFin;\nattribute float axolotlLampRegion;\nvarying float axolotlLamp;')
-                .replace('#include <begin_vertex>', '#include <begin_vertex>\naxolotlFacePosition = position;\naxolotlFin = axolotlFinRegion;\naxolotlLamp = axolotlLampRegion;');
+                .replace('#include <common>', '#include <common>\nvarying vec3 axolotlFacePosition;\nattribute float axolotlFinRegion;\nvarying float axolotlFin;\nattribute float axolotlLampRegion;\nvarying float axolotlLamp;\nattribute float axolotlGillCap;\nvarying float axolotlCap;')
+                .replace('#include <begin_vertex>', '#include <begin_vertex>\naxolotlFacePosition = position;\naxolotlFin = axolotlFinRegion;\naxolotlLamp = axolotlLampRegion;\naxolotlCap = axolotlGillCap;');
               shader.fragmentShader = shader.fragmentShader
                 .replace('#include <common>', `#include <common>
                   varying vec3 axolotlFacePosition;
@@ -357,6 +332,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                   uniform vec3 axolotlMarkingColor;
                   varying float axolotlFin;
                   varying float axolotlLamp;
+                  varying float axolotlCap;
                   uniform float axolotlPattern;
                   uniform float axolotlPatternSeed;
                   uniform float axolotlBlink;
@@ -422,12 +398,13 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
                   float cheekL = exp(-dot((p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16),(p-vec3(-.40,.68,1.69))/vec3(.18,.10,.16)));
                   diffuseColor.rgb = mix(diffuseColor.rgb,axolotlCheekColor,max(cheekR,cheekL)*.52*skinMask);
                   diffuseColor.rgb = mix(diffuseColor.rgb, axolotlLampColor,smoothstep(.4,.9,axolotlLamp)*.8);
+                  diffuseColor.rgb = mix(diffuseColor.rgb,mix(axolotlFaceColor,axolotlFinColor,.72),axolotlCap);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-element-fins-v11';
+            material.customProgramCacheKey = () => 'axolotl-closed-gill-roots-v12';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
