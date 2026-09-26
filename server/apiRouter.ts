@@ -353,7 +353,8 @@ apiApp.post('/user/consent', requireAuth, async (req: AuthenticatedRequest, res:
 apiApp.get('/companion/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const companion = await companionRepository.findByUserId(req.userId!);
-    res.json({ companion });
+    const snapshot = companion ? await companionRepository.getDnaSnapshot(companion.id) : null;
+    res.json({ companion, snapshot });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

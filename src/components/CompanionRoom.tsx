@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCompanion } from '../context/CompanionContext';
+import { CompanionDnaSummary } from './CompanionDnaSummary';
 import { CompanionRenderer } from './CompanionRenderer';
 import { TraceConversationActions } from './TraceConversationActions';
 import type { Conversation } from '../shared/conversation';
@@ -217,6 +218,8 @@ export const CompanionRoom: React.FC<CompanionRoomProps> = ({ onBack, onOpenChat
             size={270}
           />
         </div>
+
+        <CompanionDnaSummary source={companion} />
 
         {/* Mascot Mindful Speech Bubble */}
         <div

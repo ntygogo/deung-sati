@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { birthVisuals } from '../../src/shared/companionBirthVisuals.js';
 import { db } from '../db/database.js';
 import type { IDatabaseAdapter } from '../db/types.js';
 
@@ -316,6 +317,7 @@ export class CompanionRepository {
 
     const snapshotId = `snap_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
     const dnaJson = {
+      ...birthVisuals({ emotionalAwareness: totalEA, somaticAwareness: totalSA, cognitiveClarity: totalCC, consciousAction: totalCA }, seedInt),
       primaryColor,
       secondaryColor,
       eyeShape: eyeShapes[eyeIndex],

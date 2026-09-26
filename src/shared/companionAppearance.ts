@@ -70,7 +70,7 @@ const legacyFields: Partial<Record<TraitKey, string>> = {
   pattern: 'body_pattern', motion: 'movement_personality', habitat: 'safe_space_theme',
 };
 const birthFields: Partial<Record<TraitKey, string>> = {
-  eyes: 'eyeShape', cheeks: 'cheekStyle', gills: 'gillStyle', lantern: 'lanternShape', tail: 'tailStyle', aura: 'auraStyle',
+  pattern: 'bodyPattern', motion: 'movementPersonality', eyes: 'eyeShape', cheeks: 'cheekStyle', gills: 'gillStyle', lantern: 'lanternShape', tail: 'tailStyle', aura: 'auraStyle',
 };
 const aliases: Record<string, string> = {
   feathered_majestic: 'triple_feather', feathered: 'triple_feather', soft_feather: 'triple_feather',

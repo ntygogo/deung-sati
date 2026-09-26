@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { companionMotion } from '../shared/companionBirthVisuals';
 import type { CompanionAppearance } from '../shared/companionAppearance';
 import './LivingCompanion3D.css';
 
@@ -31,6 +32,8 @@ const GILLS = [
 
 export function AxolotlWaterPreview({ paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false }: Props) {
   const embryo = mode === 'embryo';
+  const motionId = appearance?.traits.motion.id;
+  const motionProfile = companionMotion(motionId);
   const progressRef = useRef(progress);
   progressRef.current = progress;
   const lastActivityVersion = useRef(activityVersion);
@@ -310,14 +313,17 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
                   float noise = fract(sin(dot(cell, vec3(12.9898,78.233,39.425))) * 43758.5453);
                   float spots = step(0.955, noise) * (1.0 - smoothstep(0.19,0.4,length(fract(p * 22.0 + axolotlPatternSeed)-0.5)));
                   float ripple = pow(0.5 + 0.5 * sin(p.x * 24.0 + p.z * 15.0), 12.0);
-                  float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern > 1.5 && axolotlPattern < 2.5 ? ripple : spots;
+                  vec3 mark = fract(p * 22.0 + axolotlPatternSeed) - 0.5;
+                  float star = step(0.965, noise) * max((1.0-smoothstep(0.025,0.07,abs(mark.x))) * (1.0-smoothstep(0.18,0.42,abs(mark.y))), (1.0-smoothstep(0.025,0.07,abs(mark.y))) * (1.0-smoothstep(0.18,0.42,abs(mark.x))));
+                  float petal = step(0.94, noise) * (1.0-smoothstep(0.6,1.0,length(mark.xy / vec2(0.17,0.38))));
+                  float pattern = axolotlPattern < 0.0 ? 0.0 : axolotlPattern < 0.5 ? spots : axolotlPattern < 1.5 ? star : axolotlPattern < 2.5 ? ripple : petal;
                   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.7 + vec3(0.2), bodyMask * pattern * 0.26);
                   float axolotlLidCoverage = 0.0;
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(0.1503, 0.9447, 1.9278), axolotlSkinRight, 1.0);
                   closeAxolotlEye(diffuseColor.rgb, axolotlLidCoverage, vec3(-0.3378, 0.8956, 1.7373), axolotlSkinLeft, -1.0);`)
                 .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.65, axolotlLidCoverage);');
             };
-            material.customProgramCacheKey = () => 'axolotl-dna-lids-v4';
+            material.customProgramCacheKey = () => 'axolotl-dna-lids-v5';
           }
         });
         // Keep authored GLB materials intact when the textured model arrives.
@@ -614,6 +620,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
           if (!pausedRef.current && !document.hidden) {
             elapsedRef.current += elapsed;
             const t = elapsedRef.current;
+            const flowTime = t * motionProfile.flow;
             if (embryo) {
               const growth = Math.max(0, Math.min(20, progressRef.current)) / 20;
               const cycle = (t + (appearance?.patternSeed ?? 0) % 7) % 14;
@@ -757,7 +764,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
               mesh.morphTargetInfluences[1] = squish.value;
             });
             TAIL.forEach((bone, index) => {
-              const phase = t * 1.45 - index * 0.51;
+              const phase = flowTime * 1.45 - index * 0.51;
               const spread = 0.035 + index * 0.013;
               const follow = flipping ? Math.sin(Math.PI * THREE.MathUtils.clamp((age - 0.5 - index * 0.07) / 2.4, 0, 1)) : 0;
               pose(bone,
@@ -773,20 +780,20 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
             });
             GILLS.forEach(({ root, mids, tip, phase, side }) => {
               const follow = flipping ? Math.sin((age - phase * 0.06) * 4.2) * Math.sin(Math.PI * flight) * 0.035 : 0;
-              const current = follow + wriggle * Math.sin(age * 8 - phase) * 0.024 + Math.sin(t * 1.33 + phase) * 0.038 + Math.sin(t * 0.54 + phase * 0.6) * 0.014;
+              const current = follow + wriggle * Math.sin(age * 8 - phase) * 0.024 + Math.sin(flowTime * 1.33 + phase) * 0.038 + Math.sin(t * 0.54 + phase * 0.6) * 0.014;
               const finFlow = 1 - lieDown * 0.55;
               pose(root, finFlow * current * 0.42, finFlow * side * current * 0.66, finFlow * side * (current * 1.35 + response * 0.035));
               mids.forEach((bone, index) => {
-                const delayed = Math.sin(t * 1.33 + phase - 0.3 - index * 0.28);
+                const delayed = Math.sin(flowTime * 1.33 + phase - 0.3 - index * 0.28);
                 pose(bone, finFlow * delayed * 0.033, finFlow * side * delayed * 0.04, finFlow * side * delayed * (0.06 + index * 0.012));
               });
-              pose(tip, finFlow * Math.sin(t * 1.33 + phase - 0.55) * 0.045,
+              pose(tip, finFlow * Math.sin(flowTime * 1.33 + phase - 0.55) * 0.045,
                 finFlow * side * Math.sin(t * 0.92 + phase - 0.4) * 0.037,
-                finFlow * side * Math.sin(t * 1.33 + phase - 0.65) * 0.087);
+                finFlow * side * Math.sin(flowTime * 1.33 + phase - 0.65) * 0.087);
             });
             // A small attentive tilt accompanies the smile; the antenna follows.
             pose('Bone_036', -tuck * 0.07 + launch * 0.025, wriggle * Math.sin(age * 6) * 0.045, tuck * 0.045 + belly * 0.035);
-            pose('Bone_035', motion * response * -0.018 - tuck * 0.08, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * (Math.sin(t * 0.77) * 0.012 + response * 0.05));
+            pose('Bone_035', motion * response * -0.018 - tuck * 0.08, motion * Math.sin(t * 1.12 - 0.4) * 0.012, motion * (Math.sin(flowTime * 0.77) * 0.012 * motionProfile.tilt + response * 0.05));
             pose('Bone_034', -motion * content * 0.035 + launch * 0.055 - tuck * 0.04 + wriggle * Math.sin(age * 7) * 0.045, motion * gazeRef.current * (0.035 + affection * 0.055), motion * (Math.sin(t * 1.12 - 0.85) * 0.015 + content * 0.06));
             pose('Bone_032', tuck * 0.28 - launch * 0.14, 0, -tuck * 0.12);
             pose('Bone_027', tuck * 0.28 - launch * 0.14, 0, tuck * 0.12);
@@ -830,25 +837,25 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
               curlSideways(name, leading * (name === 'Bone_003' || name === 'Bone_002' ? -0.35 : 0.2));
               bendBody(name, stretch * (name === 'Bone_006' ? 0.08 : -0.035));
             }
-            bendBody('Bone_036', curl * 0.3 + lieDown * 0.18 + stand * 0.26 - crouch * 0.06);
-            bendBody('Bone_035', curl * 0.3 + lieDown * 0.16 + stand * 0.31 - crouch * 0.08);
-            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * 0.12 - stretch * 0.13 + stand * 0.3 + risePush * 0.045);
-            curlSideways('Bone_036', -restCurl * 0.1 + leading);
-            curlSideways('Bone_035', -restCurl * 0.12 + leading * 0.7);
+            bendBody('Bone_036', curl * 0.3 + lieDown * -0.04 + stand * 0.26 - crouch * 0.06);
+            bendBody('Bone_035', curl * 0.3 + lieDown * -0.06 + stand * 0.31 - crouch * 0.08);
+            bendBody('Bone_034', curl * 0.33 - launch * 0.06 + lieDown * -0.09 - stretch * 0.13 + stand * 0.3 + risePush * 0.045);
+            curlSideways('Bone_036', -restCurl * 0.025 + leading);
+            curlSideways('Bone_035', -restCurl * 0.035 + leading * 0.7);
             const neck = bones.get('Bone_034');
             if (neck) neck.quaternion.multiply(delta.setFromEuler(euler.set(0, 0, glass * Math.sin(age * 1.6) * 0.09 * motion)));
             pose('Bone_042', motion * Math.sin(t * 0.92) * 0.009, 0, motion * Math.sin(t * 0.88) * 0.014);
             if (antennaBase) antennaBase.quaternion.multiply(delta.setFromAxisAngle(antennaLieAxis, belly * 1.4 + lieDown * 0.1));
             pose('Bone_039', 0, 0, motion * Math.sin(t * 0.88 - 0.5) * 0.018 + (flipping ? Math.sin(age * 5 - 0.8) * Math.sin(Math.PI * flight) * 0.035 : 0));
             // Inhale brightens the antenna; exhale releases it gradually.
-            const breath = (1 + Math.sin(t * 1.3 - 0.4)) / 2;
-            const sleepBreath = (1 + Math.sin(t * 1.05 - 0.4)) / 2;
+            const breath = (1 + Math.sin(t * 1.3 * motionProfile.breath - 0.4)) / 2;
+            const sleepBreath = (1 + Math.sin(t * 1.05 * motionProfile.breath - 0.4)) / 2;
             const glowBreath = THREE.MathUtils.lerp(breath, sleepBreath, sleepy);
             const shimmer = 0.035 * Math.sin(t * 3.2) * Math.sin(t * 2.1);
             glowMaterial.opacity = 0.31 + motion * (0.33 * glowBreath + shimmer);
             halo.scale.setScalar(0.34 + motion * 0.12 * glowBreath);
             light.intensity = 0.24 + motion * 0.24 * glowBreath;
-            pivot.position.y = motion * (Math.sin(t * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
+            pivot.position.y = motion * motionProfile.bob * (Math.sin(flowTime * 1.3) * 0.018 + Math.sin(t * 0.46) * 0.009);
             pivot.position.y += jumpHeight - anticipation * 0.13 - settle * 0.04;
             const squash = anticipation * 0.055 + settle * 0.025 + crouch * 0.07;
             pivot.scale.set(1 + squash * 0.5, 1 - squash, 1 + squash * 0.5);
@@ -863,7 +870,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
               .multiply(delta.setFromEuler(euler.set(0, motion * Math.sin(t * 0.39) * 0.013, 0)));
             if (resting.phase !== 'awake') {
               pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, restYaw));
-              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.16 + walk * Math.sin(stepPhase + 0.35) * 0.018));
+              pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis, lieDown * 0.22 + walk * Math.sin(stepPhase + 0.35) * 0.018));
             }
             if (helloActive) {
               const rising = stand * 1.03 + risePush * 0.075;
@@ -974,7 +981,7 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
       disposeModel?.();
       if (renderer) { renderer.dispose(); renderer.domElement.remove(); }
     };
-  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed]);
+  }, [embryo, autoGreet, appearance?.identity, appearance?.palette.body, appearance?.palette.lamp, appearance?.traits.pattern.id, appearance?.patternSeed, motionId]);
 
   const faceViewer = () => {
     lastActivityRef.current = elapsedRef.current;
@@ -986,7 +993,8 @@ export function AxolotlWaterPreview({ paused = false, appearance, mode = 'compan
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
     {status !== 'ready' && <span className="companion-model-message" role="status">{status === 'error' ? 'เปิดตัวอ่อน 3D ไม่ได้' : 'กำลังพาน้องมา…'}</span>}
   </span>;
-  return <div className="axolotl-viewer">
+  return <div className="axolotl-viewer" data-rest={restPhase} data-paused={paused} data-motion={motionId} data-pattern={appearance?.traits.pattern.id}>
+    <span className="axolotl-sleep-letters" aria-hidden="true"><i>Z</i><i>z</i><i>z</i></span>
     <button type="button" className="living-companion-3d axolotl-orbit" data-renderer="axolotl-water-preview" data-status={status}
     aria-label="ลูบหัวน้องเพื่อเล่นด้วย ลากบริเวณรอบตัวหรือใช้ลูกศรเพื่อหมุนดู กด Enter เพื่อให้น้องเล่น"
     onPointerDown={event => {

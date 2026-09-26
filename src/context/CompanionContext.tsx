@@ -1,3 +1,5 @@
+import { birthVisuals } from '../shared/companionBirthVisuals';
+import { appearanceHash } from '../shared/companionAppearance';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { validateLoopForConfirmation } from '../shared/chat-protocol';
@@ -226,7 +228,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         if (compRes.ok) {
           const data = await compRes.json();
-          setCompanion(data.companion || null);
+          setCompanion(data.companion ? { ...data.companion, snapshot: data.snapshot ?? data.companion.snapshot } : null);
         }
 
         // Fetch traces
@@ -780,7 +782,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setWallet(result.reward.wallet);
       }
       if (result.companion) {
-        setCompanion(result.companion);
+        setCompanion(previous => ({ ...result.companion, snapshot: result.snapshot ?? (previous?.id === result.companion.id ? previous?.snapshot : undefined) }));
       }
       setTraces((prev) =>
         prev.map((t) =>
@@ -865,6 +867,10 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const completedLoopId = `guest_cloop_${Date.now()}`;
       const completedLoopRecord = {
+        emotional_awareness: data.skills?.emotional_awareness ? 1 : 0,
+        somatic_awareness: data.skills?.somatic_awareness ? 1 : 0,
+        cognitive_clarity: data.skills?.cognitive_clarity ? 1 : 0,
+        conscious_action: data.skills?.conscious_action ? 1 : 0,
         id: completedLoopId,
         user_id: 'guest',
         conversation_id: data.conversationId,
@@ -961,6 +967,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const hatchedComp: CompanionData = {
           ...companion,
+          snapshot: companion.snapshot ?? guestBirthSnapshot(companion, savedCompleted),
           stage: 1,
           unlocked_max_stage: 1,
         };
@@ -990,7 +997,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         if (res.ok) {
           const data = await res.json();
-          if (data.companion) setCompanion(data.companion);
+          if (data.companion) setCompanion(previous => ({ ...data.companion, snapshot: data.snapshot ?? (previous?.id === data.companion.id ? previous?.snapshot : undefined) }));
         }
       } catch (e) {
         console.warn('Pet interaction sync:', e);
@@ -1000,6 +1007,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // 5. Hatch Egg (when traceCount >= 20)
   const hatchCompanion = async (): Promise<{ success: boolean; companion?: CompanionData; snapshot?: any; error?: string }> => {
+    if (companion && companion.stage > 0) return { success: true, companion, snapshot: companion.snapshot };
     if (traceCount < 20) {
       return { success: false, error: `สะสมบันทึกการรู้ตัวได้ ${traceCount}/20 ครั้ง ต้องครบ 20 ครั้งก่อนฟักนะ` };
     }
@@ -1022,6 +1030,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!companion) return { success: false, error: 'No companion found' };
       const hatchedComp: CompanionData = {
         ...companion,
+        snapshot: companion.snapshot ?? guestBirthSnapshot(companion, JSON.parse(localStorage.getItem(LOCAL_STORAGE_COMPLETED_LOOPS_KEY) || '[]')),
         stage: 1, // Hatchling
         unlocked_max_stage: 1,
         mood_state: 'excited',
@@ -1075,3 +1084,10 @@ export const useCompanion = () => {
   if (!ctx) throw new Error('useCompanion must be used within CompanionProvider');
   return ctx;
 };
+
+function guestBirthSnapshot(companion: CompanionData, loops: Array<Record<string, unknown>>) {
+  const counted = loops.filter(loop => loop.progress_counted !== false);
+  const score = (key: string) => counted.reduce((sum, loop) => sum + (loop[key] ? 1 : 0), 0);
+  const skillsSummary = { emotionalAwareness: score('emotional_awareness'), somaticAwareness: score('somatic_awareness'), cognitiveClarity: score('cognitive_clarity'), consciousAction: score('conscious_action') };
+  return { seed: companion.seed, dna_json: { ...birthVisuals(skillsSummary, appearanceHash(String(companion.seed))), skillsSummary, primaryColor: companion.dna?.primary_pink_shade ?? 'soft_sakura', secondaryColor: companion.dna?.secondary_color, totalCompletedLoops: counted.length } };
+}
