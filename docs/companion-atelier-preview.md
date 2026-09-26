@@ -70,3 +70,11 @@ A regression test loads the actual GLB, validates closure and normalized weights
 and verifies that front-face vertices are unchanged. No rear-head cover or
 floating root caps are used. The approved tail fan geometry and motion remain
 unchanged. The new fin skeleton is disposed on renderer cleanup.
+
+## Six-gill anatomy correction
+Every element has three separate gill fans per side: upper, middle, and lower.
+The four source bone chains are not the anatomical count. Each middle fan is
+positioned between its upper/lower neighbors and blends their interpolated bone
+weights (up to four influences), retaining continuous motion without a rigid
+attachment. Upper and lower tips are slightly fanned apart; middle fans extend
+outward so the three tiers read separately. Tail and dorsal designs are unchanged.
