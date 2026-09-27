@@ -1,3 +1,4 @@
+import { settleChat } from '../../server/services/chatQuota.js';
 import { recordAiUsage } from '../../server/services/aiUsage.js';
 import { requireBetaTrial } from '../../server/services/betaTrial.js';
 import { requireAuth } from '../../server/middleware/auth.js';
@@ -127,14 +128,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   await requireAuth(req, res, () => { authenticated = true; });
   if (!authenticated) return;
 
-  const { messages, requestId, exerciseResult, loopGuide, pastLoopContext } = req.body || {};
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const { requestId, exerciseResult, loopGuide, pastLoopContext } = req.body || {};
+  if (!Array.isArray(req.body?.messages) || req.body.messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
 
   let trialAllowed = false;
   await requireBetaTrial(req, res, () => { trialAllowed = true; });
   if (!trialAllowed) return;
+  const { messages } = req.body;
+  try {
 
   const loopContext = prepareLoopChat(messages, loopGuide);
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -177,6 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       suggested_intervention: 'ground',
     };
 
+    await settleChat(res.locals.chatReservation, false);
+    res.locals.chatReservation = undefined;
     res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'protect', risk_type: isDomesticViolence ? ['domestic_violence'] : ['crisis'] })}\n\n`);
     res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
     res.write(`event: chunk\ndata: ${JSON.stringify({ text: crisisText, requestId })}\n\n`);
@@ -263,6 +268,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
+            httpOptions: { timeout: 45000 },
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -276,6 +282,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (rawText.trim()) {
           const { assistant_message, turn } = sanitizeResponse(rawText, loopContext);
 
+          await settleChat(res.locals.chatReservation, true);
+          res.locals.chatReservation = undefined;
           res.write(`event: safety\ndata: ${JSON.stringify({ mode: 'normal' })}\n\n`);
           res.write(`event: assistant_token\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
           res.write(`event: chunk\ndata: ${JSON.stringify({ text: assistant_message, requestId })}\n\n`);
@@ -298,6 +306,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  await settleChat(res.locals.chatReservation, false);
+  res.locals.chatReservation = undefined;
   // Honest Error State - NO Fake Local Dialogue
   const errorText = 'เมื่อกี้การเชื่อมต่อกับ AI ขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะเธอ 🌱';
   const errorTurn: ChatEngineTurnResponse = {
@@ -319,5 +329,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.write(`event: assistant_meta\ndata: ${JSON.stringify(errorTurn)}\n\n`);
   res.write(`event: done\ndata: ${JSON.stringify({ requestId, fullText: errorText, source: 'error', structuredTurn: errorTurn, options: errorTurn.quick_replies })}\n\n`);
   res.end();
+  } finally { await settleChat(res.locals.chatReservation, false); }
 }
+
 
