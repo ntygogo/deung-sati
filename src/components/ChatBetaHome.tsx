@@ -28,9 +28,9 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
         <span className="dreamy-wordmark">Deung Sati<span aria-hidden="true">*</span></span>
         <div className="dreamy-header-actions"><span className="beta-badge">CHAT BETA</span><button className="dreamy-menu" onClick={onOpenMenu} aria-label="เปิดเมนู"><Menu size={23} /></button></div>
       </header>
-      <div className="dreamy-greeting"><img className="dreamy-avatar" src="/images/companion-hatched.webp" alt="น้องดึงสติ" /><strong>สวัสดี {currentUser?.name || 'เธอ'}</strong></div>
+      <div className="dreamy-greeting"><img className="dreamy-avatar" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ" /><strong>สวัสดี {currentUser?.name || 'เธอ'}</strong></div>
       <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
-      <img className="beta-companion" src="/images/companion-hatched.webp" alt="น้องดึงสติ เพื่อนในห้องพักใจ" width="240" height="240" fetchPriority="high" />
+      <img className="beta-companion" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ เพื่อนในห้องพักใจ" width="240" height="240" fetchPriority="high" />
     </section>
     <section className="dreamy-chat-card" aria-labelledby="beta-heading">
       <div className="dreamy-chat-heading"><div><h1 id="beta-heading">ตอนนี้ข้างในเป็นยังไงบ้าง?</h1><p>ไม่ต้องเรียบเรียงให้ดี ก็เริ่มเล่าได้เลย</p></div></div>

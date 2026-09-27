@@ -200,7 +200,7 @@ const Baby = ({
   dark?: boolean;
   size?: number;
 }) => {
-  const imgSrc = "/images/companion-hatched.webp";
+  const imgSrc = "/images/deung-sati-selfie.webp";
 
   const dim = size || (small ? 56 : 116);
 
@@ -1785,7 +1785,7 @@ function ChatScreen({
               <div className="aiRow">
                 <div className="aiAvatar">
                   <img
-                    src="/images/companion-hatched.webp"
+                    src="/images/deung-sati-selfie.webp"
                     alt="น้องดึงสติ"
                     className="aiAvatarImg"
                   />
