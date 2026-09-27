@@ -260,16 +260,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="auth-footer-notes">
           <div className="auth-privacy-guarantee">
             <ShieldCheck size={14} className="text-primary" />
-            <span>ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้ และจะไม่ถูกย้ายเข้าบัญชีโดยอัตโนมัติ</span>
+            <span>{required ? 'เริ่มนับสิทธิ์ทดลองเมื่อส่งข้อความแรก ไม่มีการเรียกเก็บเงินอัตโนมัติ' : 'ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้ และจะไม่ถูกย้ายเข้าบัญชีโดยอัตโนมัติ'}</span>
           </div>
 
-          <button
+          {!required && <button
             type="button"
             className="btn-continue-guest"
             onClick={onClose}
           >
             ใช้งานต่อในโหมดทดลองใช้ (ไม่ล็อกอิน) →
-          </button>
+          </button>}
         </div>
       </div>
     </div>
