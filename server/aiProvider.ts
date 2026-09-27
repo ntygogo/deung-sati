@@ -34,7 +34,7 @@ export interface StreamChatResponseParams {
     fullText: string,
     source: 'gemini' | 'error',
     structuredTurn: ChatEngineTurnResponse
-  ) => void;
+  ) => void | Promise<void>;
   onError?: (err: Error) => void;
 }
 
@@ -238,7 +238,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
       onAssistantToken(crisisText);
       onAssistantMeta(fullCrisisTurn);
-      onDone(crisisText, 'gemini', fullCrisisTurn);
+      await onDone(crisisText, 'gemini', fullCrisisTurn);
       return;
     }
 
@@ -334,6 +334,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
+            httpOptions: { timeout: 45000 },
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -355,7 +356,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           // Send internal metadata separately
           onAssistantMeta(turn);
           // Complete the turn
-          onDone(assistant_message, 'gemini', turn);
+          await onDone(assistant_message, 'gemini', turn);
           return;
         }
       } catch (err: any) {
@@ -387,7 +388,8 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
     };
     onAssistantToken(fallbackErrorText);
     onAssistantMeta(errorTurn);
-    onDone(fallbackErrorText, 'error', errorTurn);
+    await onDone(fallbackErrorText, 'error', errorTurn);
   }
 }
+
 
