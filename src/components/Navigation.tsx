@@ -288,7 +288,7 @@ export const AppDrawer: React.FC<{
         <div className="drawerHeader">
           <div className="drawerBrandInfo">
             <img
-              src="/images/companion_form1.png"
+              src="/images/companion-hatched.webp"
               alt="น้องดึงสติ"
               className="drawerBabyAvatar"
             />

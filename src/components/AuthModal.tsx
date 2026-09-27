@@ -47,7 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   if (currentUser) return (
     <div className="jar-modal-overlay" onClick={required ? undefined : onClose}>
       <div className="jar-modal-card auth-modal-card" role="dialog" aria-modal="true" aria-label="บัญชีของฉัน" onClick={(e) => e.stopPropagation()}>
-        <img className="beta-profile-image" src="/images/companion_form1.png" alt="น้องดึงสติ" /><h3>บัญชีของฉัน</h3>
+        <img className="beta-profile-image" src="/images/companion-hatched.webp" alt="น้องดึงสติ" /><h3>บัญชีของฉัน</h3>
         <p>{currentUser.name}</p>
         <p>{currentUser.email}</p>
         <p>ดึงสติ · เวอร์ชันทดลองแชท</p>
@@ -108,7 +108,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="jar-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="auth-modal-badge-icon">
-              <img src="/images/companion_form1.png" alt="น้องดึงสติ" />
+              <img src="/images/companion-hatched.webp" alt="น้องดึงสติ" />
             </div>
             <div>
               <h3 className="jar-modal-title">
