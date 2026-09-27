@@ -28,18 +28,19 @@ async function signup(email:string){const response=await http('/auth/register',u
 const alice=await signup('billing-a@example.test'),bob=await signup('billing-b@example.test');
 const now=Date.now(), day=86400000;
 const secret='whsec_local_fixture_only';
-const fixtureStripe=new Stripe('sk_test_local_fixture_only');
-function setup(){process.env.BILLING_MODE='test';process.env.STRIPE_SECRET_KEY='sk_test_local_fixture_only';process.env.STRIPE_WEBHOOK_SECRET=secret;process.env.BILLING_APP_ORIGIN='https://example.test';process.env.BILLING_TEST_USER_IDS=[alice.id,bob.id].join(',');process.env.BILLING_ADMIN_USER_IDS=alice.id;}
+const fixtureStripe=new Stripe('sk_test_localfixtureonly');
+function setup(){process.env.BILLING_MODE='test';process.env.STRIPE_SECRET_KEY='sk_test_localfixtureonly';process.env.STRIPE_WEBHOOK_SECRET=secret;process.env.BILLING_APP_ORIGIN='https://example.test';process.env.BILLING_TEST_USER_IDS=[alice.id,bob.id].join(',');process.env.BILLING_ADMIN_USER_IDS=alice.id;}
 function snapshot(order:BillingOrder,extra:Partial<PaymentSnapshot>={}):PaymentSnapshot{return {orderId:order.id,userId:order.user_id!,sessionId:order.session_id||'cs_test_'+order.id,paymentIntent:'pi_'+order.id,amount:order.amount,currency:order.currency,paid:true,expired:false,failed:false,refundedAmount:0,livemode:false,...extra};}
 let first:BillingOrder, second:BillingOrder;
 let checkoutParams:Stripe.Checkout.SessionCreateParams|undefined;
 let checkoutIdem:string|undefined;
 let remoteSession:any;
 let remoteIntent:any;
+let refundState='succeeded';
 const provider={checkout:{sessions:{create:async(params:Stripe.Checkout.SessionCreateParams,opts:{idempotencyKey:string})=>{
   checkoutParams=params;checkoutIdem=opts.idempotencyKey;
   remoteSession={id:'cs_test_'+params.metadata!.orderId,url:'https://checkout.stripe.com/c/pay/test_fixture',livemode:false,metadata:params.metadata,client_reference_id:params.client_reference_id,amount_total:14900,currency:'thb',payment_status:'unpaid',status:'open',payment_intent:null};return remoteSession;
-},retrieve:async()=>remoteSession}},paymentIntents:{retrieve:async()=>remoteIntent}} as unknown as Stripe;
+},retrieve:async()=>remoteSession}},paymentIntents:{retrieve:async()=>remoteIntent},refunds:{list:()=>({async *[Symbol.asyncIterator](){yield {status:refundState,amount:remoteIntent.latest_charge?.amount_refunded||0};}})}} as unknown as Stripe;
 
 await test('billing integration — isolated database, no Stripe/AI network calls',async t=>{
  try{
@@ -155,6 +156,48 @@ await test('billing integration — isolated database, no Stripe/AI network call
     assert.equal(status,403);assert.equal(next,false);
     assert.equal((await http('/loops/conversations',alice.token)).status,200);
   });
+  await t.test('live checkout, isolated entitlements, replay, mode mismatch and refunds',async()=>{
+    const previousTestOrders=(await ordersForUser(alice.id)).map(o=>o.id);
+    process.env.BILLING_MODE='live';process.env.STRIPE_SECRET_KEY='rk_live_fixtureonly';
+    assert.equal(billingConfigured(),true);
+    assert.equal((await ordersForUser(alice.id)).length,0);
+    const create=provider.checkout.sessions.create;
+    const liveProvider={...provider,checkout:{sessions:{...provider.checkout.sessions,create:async(...args:any[])=>{const session=await (create as any)(...args);session.livemode=true;return session;}}}} as unknown as Stripe;
+    await createCheckout(alice.id,liveProvider);
+    const live=(await ordersForUser(alice.id))[0];assert.equal(live.mode,'live');
+    assert.ok(!checkoutParams!.line_items![0].price_data!.product_data!.name.includes('ทดสอบ'));
+    assert.equal((await chatAccessStatus(alice.id)).state,'expired');
+    remoteSession.payment_status='paid';remoteSession.payment_intent='pi_live_'+live.id;
+    remoteIntent={id:remoteSession.payment_intent,livemode:true,metadata:{orderId:live.id},amount:14900,currency:'thb',latest_charge:{amount_refunded:0}};
+    await reconcileOrder(live,'evt_live_paid',false,liveProvider);
+    const paid=(await ordersForUser(alice.id))[0];
+    assert.equal(Date.parse(paid.expires_at!)-Date.parse(paid.starts_at!),30*day);
+    assert.equal((await chatAccessStatus(alice.id)).paymentMode,'live');
+    assert.equal((await chatAccessStatus(alice.id)).quota?.limit,50);
+    await reconcileOrder(paid,'evt_live_paid',false,liveProvider);
+    assert.equal((await ordersForUser(alice.id))[0].expires_at,paid.expires_at);
+    remoteIntent.livemode=false;await assert.rejects(reconcileOrder(paid,undefined,false,liveProvider));remoteIntent.livemode=true;
+    await assert.rejects(applyPayment(snapshot(paid),null,'evt_wrong_mode'));
+    remoteIntent.latest_charge.amount_refunded=5000;
+    await handleStripeEvent({id:'evt_live_partial',type:'charge.refunded',livemode:true,data:{object:{payment_intent:remoteIntent.id}}} as Stripe.Event,liveProvider);
+    assert.equal((await ordersForUser(alice.id))[0].status,'partially_refunded');
+    remoteIntent.latest_charge.amount_refunded=14900;
+    refundState='pending';
+    await handleStripeEvent({id:'evt_live_pending',type:'refund.updated',livemode:true,data:{object:{payment_intent:remoteIntent.id}}} as Stripe.Event,liveProvider);
+    assert.equal((await ordersForUser(alice.id))[0].status,'partially_refunded');
+    refundState='failed';
+    await handleStripeEvent({id:'evt_live_failed',type:'refund.failed',livemode:true,data:{object:{payment_intent:remoteIntent.id}}} as Stripe.Event,liveProvider);
+    assert.equal((await ordersForUser(alice.id))[0].status,'partially_refunded');
+    refundState='succeeded';
+    await handleStripeEvent({id:'evt_live_full',type:'refund.updated',livemode:true,data:{object:{payment_intent:remoteIntent.id}}} as Stripe.Event,liveProvider);
+    assert.equal((await chatAccessStatus(alice.id)).state,'expired');
+    const payload=JSON.stringify({id:'evt_live_ignored',type:'customer.created',livemode:true,data:{object:{}}});
+    const signature=fixtureStripe.webhooks.generateTestHeaderString({payload,secret});
+    assert.equal((await http('/billing/webhook',undefined,'POST',payload,{'stripe-signature':signature})).status,200);
+    const testPayload=payload.replace('"livemode":true','"livemode":false');
+    assert.equal((await http('/billing/webhook',undefined,'POST',testPayload,{'stripe-signature':fixtureStripe.webhooks.generateTestHeaderString({payload:testPayload,secret})})).status,400);
+    setup();assert.deepEqual((await ordersForUser(alice.id)).map(o=>o.id),previousTestOrders);
+  });
   await t.test('Postgres serializes concurrent purchases and duplicate delivery',{skip:!pgUrl},async()=>{
     const charlie=await signup('billing-c@example.test');process.env.BILLING_TEST_USER_IDS+=','+charlie.id;
     const one=await reserveOrder(charlie.id,now-2*3600000),two=await reserveOrder(charlie.id,now);
@@ -166,3 +209,4 @@ await test('billing integration — isolated database, no Stripe/AI network call
   });
  }finally{server.close();await db.close();}
 });
+
