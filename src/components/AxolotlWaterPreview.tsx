@@ -1389,6 +1389,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
       aria-label="ท่าเล่นเต็มรูปแบบ" title={fullMotion ? 'ลดการเคลื่อนไหวของน้อง' : 'เปิดท่าเล่นเต็มรูปแบบ'}
       aria-pressed={fullMotion} onClick={() => setFullMotion(value => !value)}>
       <Sparkles size={16} strokeWidth={1.6} aria-hidden="true" />
+      <span>{fullMotion ? 'เล่นเต็มที่แล้ว' : 'ให้น้องเล่น'}</span>
     </button>}
     {showControls && <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay} onClick={reactToPet}>ลูบหัว ♡</button>
