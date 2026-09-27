@@ -7,10 +7,13 @@ export function ensureBillingSchema(): Promise<void> {
   return ready;
 }
 async function createSchema() {
-  await db.execute(`CREATE TABLE IF NOT EXISTS billing_orders (
+  for (const mode of ['test','live'] as const) {
+  const orders = mode === 'live' ? 'billing_orders_live' : 'billing_orders';
+  const events = mode === 'live' ? 'billing_events_live' : 'billing_events';
+  await db.execute(`CREATE TABLE IF NOT EXISTS ${orders} (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
-    mode VARCHAR(8) NOT NULL CHECK (mode = 'test'),
+    mode VARCHAR(8) NOT NULL CHECK (mode = '${mode}'),
     plan_id VARCHAR(40) NOT NULL,
     amount INTEGER NOT NULL CHECK (amount > 0),
     currency VARCHAR(3) NOT NULL,
@@ -25,10 +28,11 @@ async function createSchema() {
     starts_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ
   )`);
-  await db.execute('CREATE INDEX IF NOT EXISTS billing_orders_user ON billing_orders(user_id, created_at)');
-  await db.execute(`CREATE TABLE IF NOT EXISTS billing_events (
+  await db.execute(`CREATE INDEX IF NOT EXISTS ${orders}_user ON ${orders}(user_id, created_at)`);
+  await db.execute(`CREATE TABLE IF NOT EXISTS ${events} (
     id VARCHAR(255) PRIMARY KEY, processed_at TIMESTAMPTZ NOT NULL
   )`);
+  }
   await db.execute(`CREATE TABLE IF NOT EXISTS ai_usage (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
@@ -40,3 +44,4 @@ async function createSchema() {
     created_at TIMESTAMPTZ NOT NULL
   )`);
 }
+
