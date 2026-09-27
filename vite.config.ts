@@ -19,6 +19,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  build: { rollupOptions: { input: { app: "index.html", companionReference: "companion-reference.html" } } },
   plugins: [react(), apiPlugin()],
 })
 

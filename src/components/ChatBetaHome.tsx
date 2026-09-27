@@ -1,3 +1,4 @@
+import { CurrentCompanion } from './CurrentCompanion';
 import { BetaTrialNotice } from './BetaTrialNotice';
 import { useState, type FormEvent } from 'react';
 import { ArrowUp, Menu, MessageCircle, History } from 'lucide-react';
@@ -30,7 +31,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
       </header>
       <div className="dreamy-greeting"><img className="dreamy-avatar" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ" /><strong>สวัสดี {currentUser?.name || 'เธอ'}</strong></div>
       <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
-      <img className="beta-companion" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ เพื่อนในห้องพักใจ" width="240" height="240" fetchPriority="high" />
+      <div className="beta-live-companion"><CurrentCompanion /></div>
     </section>
     <section className="dreamy-chat-card" aria-labelledby="beta-heading">
       <div className="dreamy-chat-heading"><div><h1 id="beta-heading">ตอนนี้ข้างในเป็นยังไงบ้าง?</h1><p>ไม่ต้องเรียบเรียงให้ดี ก็เริ่มเล่าได้เลย</p></div></div>
