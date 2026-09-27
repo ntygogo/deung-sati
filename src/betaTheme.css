@@ -1,0 +1,53 @@
+/* Chat Beta palette: the same warm mauve, rose and cream as Dreamy Home. */
+:root, .beta-app {
+  --bg-canvas:#eee1e8;--bg-surface:#fff9f3;--bg-surface-subtle:#f5e9ed;--bg-main:#f8eeeb;
+  --bg-cream:#f8eeeb;--bg-card:#fff9f3;--primary:#805b80;--primary-hover:#694668;
+  --primary-dark:#634565;--primary-subtle:#eddfec;--border-subtle:#e3d1dd;--border-medium:#d7bed1;
+  --border-light:#e8d8e3;--border-focus:#a476a0;--text-primary:#51445e;--text-secondary:#756174;
+  --text-muted:#806b7c;--sage-primary:#a777a0;--sage-dark:#654765;--sage-light:#eee1ed;
+  --cocoa-dark:#51445e;--cocoa-mid:#755572;--cocoa-light:#806b7c;--lavender-deep:#805b80;
+  --font-family:'Noto Sans Thai',Tahoma,system-ui,sans-serif;
+}
+body {background:linear-gradient(145deg,#e7d9e7,#f7e7dd)!important;color:#51445e}
+.beta-app .phone {background:#f8eeeb;border-color:#7c627b;box-shadow:0 22px 65px #6c476b33}
+.beta-app .screen,.beta-app .chatScreen{background:linear-gradient(180deg,#eee1ed,#fbefe8)!important}
+.beta-app .appHeader{background:#eddfebf5!important;border-color:#deccdc!important;color:#604962}
+.beta-app .appHeader .headerTitle,.beta-app .headerBrand{color:#604962!important}
+.beta-app .chatMessages{background:transparent!important}
+.beta-app .userBubble{background:linear-gradient(130deg,#9f7297,#805b80)!important;color:#fffaf6!important;border:0!important;box-shadow:0 3px 10px #97688c20}
+.beta-app .userBubble small{color:#f5e5f0!important}
+.beta-app .aiBubble{background:#fffaf5!important;color:#51445e!important;border-color:#e5d4df!important}
+.beta-app .aiAvatar,.beta-app .officialBabyContainer{background:#eddaea!important;border-color:#d9bdd2!important;box-shadow:none!important;overflow:hidden}
+.beta-app .aiAvatarImg,.beta-app .officialBabyImg{width:100%;height:100%;object-fit:cover;transform:scale(1.22);object-position:62% 35%}
+.beta-app .babyAuraPulse{display:none}
+.beta-app .quickReplies button,.beta-chat-tools button,.beta-history-dialog button{background:#fff6f1!important;color:#755272!important;border:1px solid #ddc4d7!important;border-radius:16px;padding:8px 12px;min-height:38px;font:inherit}
+.beta-app .composer{background:#f9eee9!important;border-color:#dfc9d8!important}
+.beta-app .composer input{background:#fffaf5!important;color:#51445e!important;border-color:#dfc9d8!important}
+.beta-app .sendButton,.beta-app .exerciseCompleteBtn{background:#805b80!important;color:#fffaf6!important;box-shadow:none!important}
+.beta-app .plusButton{background:#ead8e7!important;color:#755272!important}
+.beta-app .bottomNav{background:#fff7f0f5!important;border-color:#dec8d9!important}
+.beta-app .navActive{color:#805b80!important}.beta-app .navActive .navIconWrap{background:#ead8e7!important}
+.beta-app .navIconWrap svg{stroke:#80607e}.beta-app .navActive .navIconWrap svg{stroke:#70476c}
+.beta-app .beta-chat-tools{background:#f3e7eff0!important;color:#614b67!important;flex-shrink:0}
+.beta-history-dialog{background:linear-gradient(160deg,#eee0ed,#fff1e7)!important;color:#51445e!important}
+.beta-app .exerciseModalCard,.beta-app .evidenceModal{background:#fff6ee!important;color:#51445e}
+.beta-app .exerciseModalCard input,.beta-app .exerciseModalCard textarea{background:#fffdf8;border-color:#ddc5d6;color:#51445e}
+.beta-app .appDrawerPanel{background:linear-gradient(170deg,#ecdeeb,#fff1e8)!important}
+.jar-modal-overlay{background:#69536b70!important;backdrop-filter:blur(8px)}
+.jar-modal-card.auth-modal-card{background:linear-gradient(150deg,#f0e2ef,#fff4e9)!important;border:1px solid #fff6ed;color:#51445e!important;box-shadow:0 16px 55px #6a476b30}
+.auth-modal-card h3,.auth-modal-card p,.auth-modal-card label{color:#614b67}
+.auth-modal-card .auth-input{background:#fff9f4;border-color:#d7bdd0;color:#51445e;font-size:16px}
+.auth-tab-btn.active{background:#ead7e6!important;color:#654464!important}
+.auth-modal-card .btn-auth-submit{background:#805b80!important;color:#fff9f5!important;box-shadow:0 4px 15px #805b8020}
+.auth-modal-card .btn-continue-guest{color:#755272!important;border-color:#d7bdd0!important}
+.auth-modal-badge-icon{background:#e6cfe2!important;overflow:hidden;border-radius:50%;width:48px;height:48px}
+.auth-modal-badge-icon img{width:100%;height:100%;object-fit:cover;transform:scale(1.2)}
+.beta-profile-image{display:block;width:88px;height:88px;border-radius:50%;background:#e8d3e3;object-fit:cover;margin:0 auto 10px}
+.beta-signup-note{font-size:12px;line-height:1.7;padding:10px 12px;border:1px solid #e0cadd;border-radius:14px;background:#fff5ed}
+.beta-trial-notice{margin:8px 16px;padding:10px 13px;border:1px solid #dbc3d6;border-radius:16px;background:#f5e8ef;color:#624961;flex-shrink:0;font-size:12px;line-height:1.7}
+.beta-trial-notice strong,.beta-trial-notice span{display:block}.beta-trial-notice strong{font-weight:600}
+.beta-trial-notice button{font:inherit;padding:7px 12px;margin-top:7px;min-height:36px;background:#805b80;color:#fff;border:0;border-radius:18px}
+.beta-trial-notice[data-expired=true]{background:#f5e5e8;border-color:#cdaac1}
+.beta-home>.beta-trial-notice{margin:18px 24px}.beta-app button:disabled{cursor:not-allowed;opacity:.55}
+.beta-app button:focus-visible,.auth-modal-card button:focus-visible{outline:3px solid #805b80;outline-offset:3px}
+@media(max-width:480px){.beta-app .phone{border:0;border-radius:0}.beta-app{padding:0}}

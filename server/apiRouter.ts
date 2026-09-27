@@ -1,3 +1,6 @@
+import { betaRouter } from './routes/beta.js';
+import { requireBetaTrial } from './services/betaTrial.js';
+import { CHAT_ONLY_BETA, betaEndpointBlocked } from '../src/shared/release.js';
 import express from 'express';
 import { conversationsRouter } from './routes/conversations.js';
 import { futureSelfRouter } from './routes/futureSelf.js';
@@ -17,6 +20,15 @@ export const apiApp = express();
 
 apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
+// Enforce the beta scope on the server as well as the navigation.
+apiApp.use((req, res, next) => {
+  if (betaEndpointBlocked(req.path, req.method)) {
+    res.status(404).json({ error: 'ฟีเจอร์นี้ยังไม่เปิดในเวอร์ชันทดลองแชท' });
+    return;
+  }
+  next();
+});
+apiApp.use('/beta', betaRouter);
 apiApp.use('/loops/conversations', conversationsRouter);
 apiApp.use('/user/future-self', futureSelfRouter);
 
@@ -24,6 +36,7 @@ apiApp.use('/user/future-self', futureSelfRouter);
 apiApp.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
+    release: CHAT_ONLY_BETA ? 'chat-beta' : 'full',
     timestamp: new Date().toISOString(),
   });
 });
@@ -49,7 +62,7 @@ apiApp.post('/safety-check', async (req: Request, res: Response) => {
 });
 
 // 4. Pure Gemini Streaming Chat endpoint (SSE) with Structured Turn Contract
-apiApp.post('/chat/stream', async (req: Request, res: Response) => {
+apiApp.post('/chat/stream', requireAuth, requireBetaTrial, async (req: Request, res: Response) => {
   try {
     const { messages, sessionId = 'default-session', sessionState, requestId, exerciseResult, loopGuide, pastLoopContext } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -62,7 +75,7 @@ apiApp.post('/chat/stream', async (req: Request, res: Response) => {
 
     // Safe debugging log (no secrets)
     console.log(
-      `[Chat API] reqId=${requestId ?? 'none'}, count=${messages.length}, lastRole=${lastMsg?.role}, preview="${latestUserMsg.slice(0, 50)}"`
+      `[Chat API] reqId=${requestId ?? 'none'}, count=${messages.length}, lastRole=${lastMsg?.role}`
     );
 
     // Record user message in session
