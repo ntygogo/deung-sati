@@ -1,3 +1,4 @@
+import { recordAiUsage } from './services/aiUsage.js';
 import { pastLoopInstruction } from '../src/shared/conversation.js';
 import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
@@ -19,6 +20,7 @@ import {
 import { classifySafety, type SafetyClassification } from './safetyClassifier.js';
 
 export interface StreamChatResponseParams {
+  userId?: string;
   messages: Array<{ role: string; content: string }>;
   safety?: SafetyClassification;
   sessionState?: any;
@@ -32,7 +34,7 @@ export interface StreamChatResponseParams {
     fullText: string,
     source: 'gemini' | 'error',
     structuredTurn: ChatEngineTurnResponse
-  ) => void;
+  ) => void | Promise<void>;
   onError?: (err: Error) => void;
 }
 
@@ -196,7 +198,7 @@ export function sanitizeDeungSatiResponse(raw: string, loopContext?: LoopChatCon
 }
 
 export async function streamChatResponse(params: StreamChatResponseParams): Promise<void> {
-  const { messages, safety, requestId, exerciseResult, loopGuide, pastLoopContext, onAssistantToken, onAssistantMeta, onDone } = params;
+  const { userId, messages, safety, requestId, exerciseResult, loopGuide, pastLoopContext, onAssistantToken, onAssistantMeta, onDone } = params;
 
   try {
     const loopContext = prepareLoopChat(messages, loopGuide);
@@ -236,7 +238,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
       onAssistantToken(crisisText);
       onAssistantMeta(fullCrisisTurn);
-      onDone(crisisText, 'gemini', fullCrisisTurn);
+      await onDone(crisisText, 'gemini', fullCrisisTurn);
       return;
     }
 
@@ -321,6 +323,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
         : 0.5;
 
     for (const modelCandidate of uniqueCandidates) {
+      let usageRecorded = false;
       try {
         console.log(`[AI_CALL_START] requestId=${requestId ?? '1'} model=${modelCandidate}`);
         const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
@@ -331,6 +334,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
+            httpOptions: { timeout: 45000 },
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -338,6 +342,8 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           },
         });
 
+        await recordAiUsage(userId, modelCandidate, response.usageMetadata);
+        usageRecorded = true;
         const rawText = response.text || '';
         if (rawText.trim()) {
           const { assistant_message, turn } = sanitizeDeungSatiResponse(rawText, loopContext);
@@ -350,10 +356,11 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           // Send internal metadata separately
           onAssistantMeta(turn);
           // Complete the turn
-          onDone(assistant_message, 'gemini', turn);
+          await onDone(assistant_message, 'gemini', turn);
           return;
         }
       } catch (err: any) {
+        if (!usageRecorded) await recordAiUsage(userId, modelCandidate, undefined, 'provider_error');
         lastError = err;
         const status = err?.status || err?.statusCode || '';
         console.warn(`[AI Provider] Model ${modelCandidate} call failed (${status}). Trying next candidate...`);
@@ -381,7 +388,8 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
     };
     onAssistantToken(fallbackErrorText);
     onAssistantMeta(errorTurn);
-    onDone(fallbackErrorText, 'error', errorTurn);
+    await onDone(fallbackErrorText, 'error', errorTurn);
   }
 }
+
 

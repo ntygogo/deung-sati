@@ -1402,3 +1402,4 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
 }
 
 function clampGaze(value: number) { return Math.max(-1, Math.min(1, value)); }
+

@@ -208,3 +208,4 @@ ${formatOfficialStagesForPrompt()}
   "quickReplies": ["ตัวเลือกตอบสั้นๆ 2-4 ตัวเลือกที่เข้ากับคำตอบนี้อย่างเป็นธรรมชาติ"]
 }
 `;
+

@@ -1,3 +1,5 @@
+import { settleChat } from './services/chatQuota.js';
+import { billingRouter, stripeWebhook } from './routes/billing.js';
 import { betaRouter } from './routes/beta.js';
 import { requireBetaTrial } from './services/betaTrial.js';
 import { CHAT_ONLY_BETA, betaEndpointBlocked } from '../src/shared/release.js';
@@ -18,6 +20,7 @@ import { validateLoopForConfirmation } from '../src/shared/chat-protocol/index.j
 
 export const apiApp = express();
 
+apiApp.post('/billing/webhook', express.raw({type:'application/json', limit:'256kb'}), stripeWebhook);
 apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
 // Enforce the beta scope on the server as well as the navigation.
@@ -29,6 +32,7 @@ apiApp.use((req, res, next) => {
   next();
 });
 apiApp.use('/beta', betaRouter);
+apiApp.use('/billing', billingRouter);
 apiApp.use('/loops/conversations', conversationsRouter);
 apiApp.use('/user/future-self', futureSelfRouter);
 
@@ -97,6 +101,7 @@ apiApp.post('/chat/stream', requireAuth, requireBetaTrial, async (req: Request, 
 
     // Stream AI response directly from Gemini Multi-Turn with Shared Protocol Fallback
     await streamChatResponse({
+      userId: (req as import('./middleware/auth.js').AuthenticatedRequest).userId,
       messages,
       safety,
       sessionState,
@@ -127,11 +132,13 @@ apiApp.post('/chat/stream', requireAuth, requireBetaTrial, async (req: Request, 
           );
         }
       },
-      onDone: (
+      onDone: async (
         fullText: string,
         source: 'gemini' | 'error',
         structuredTurn: ChatEngineTurnResponse
       ) => {
+        await settleChat(res.locals.chatReservation, source === 'gemini' && structuredTurn.safety_state !== 'crisis');
+        res.locals.chatReservation = undefined;
         // Record assistant turn in session
         sessionStore.recordAssistantTurn(sessionId, fullText);
         if (!res.writableEnded) {
@@ -166,7 +173,9 @@ apiApp.post('/chat/stream', requireAuth, requireBetaTrial, async (req: Request, 
         }
       },
     });
+    await settleChat(res.locals.chatReservation, false);
   } catch (err) {
+    await settleChat(res.locals.chatReservation, false).catch(() => undefined);
     console.error('Chat endpoint error:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error' });
@@ -1035,3 +1044,4 @@ apiApp.post('/user/migrate-legacy-local', requireAuth, async (req: Authenticated
     res.status(500).json({ error: err.message || 'Legacy data migration failed' });
   }
 });
+

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { UserAccount, MembershipTier } from '../types';
+import type { UserAccount } from '../types';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
@@ -10,7 +10,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
-  upgradePlus: (tier: MembershipTier, plusExpiresAt?: string) => void;
   updateProfile: (name: string, email: string) => Promise<{ success: boolean; message?: string }>;
 }
 
@@ -198,12 +197,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const upgradePlus = (tier: MembershipTier) => {
-    if (currentUser) {
-      setCurrentUser((prev) => (prev ? { ...prev, isPlus: true, tier } : null));
-    }
-  };
-
   const updateProfile = async (name: string, email: string): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'กรุณาเข้าสู่ระบบก่อน' };
     const cleanName = name.trim();
@@ -229,7 +222,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
-        upgradePlus,
         updateProfile,
       }}
     >
