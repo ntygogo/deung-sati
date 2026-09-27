@@ -9,12 +9,23 @@ export function billingMode(): 'test' | 'live' | null {
 }
 export function billingOrdersTable() { return billingMode() === 'live' ? 'billing_orders_live' : 'billing_orders'; }
 export function billingEventsTable() { return billingMode() === 'live' ? 'billing_events_live' : 'billing_events'; }
+let reportedConfigIssue = false;
 export function billingConfigured(): boolean {
   const mode = billingMode();
   const key = process.env.STRIPE_SECRET_KEY || '';
-  return !!mode && new RegExp(`^(sk|rk)_${mode}_[A-Za-z0-9]+$`).test(key)
-    && !!process.env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_')
-    && !!process.env.BILLING_APP_ORIGIN;
+  const checks = {
+    modeValid: !!mode,
+    keyFormatValid: !!mode && new RegExp(`^(sk|rk)_${mode}_[A-Za-z0-9]+$`).test(key),
+    webhookFormatValid: !!process.env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_'),
+    originPresent: !!process.env.BILLING_APP_ORIGIN,
+  };
+  const configured = Object.values(checks).every(Boolean);
+  // Log only booleans, once per process. Never log credential values.
+  if (!configured && !reportedConfigIssue) {
+    console.error('[Billing] Configuration incomplete', checks);
+    reportedConfigIssue = true;
+  }
+  return configured;
 }
 export function canUseBilling(userId: string): boolean {
   return billingMode() === 'live' || (billingMode() === 'test' && inUserList('BILLING_TEST_USER_IDS', userId));
