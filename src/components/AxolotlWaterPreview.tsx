@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { Sparkles } from 'lucide-react';
 import { trimGillTopology } from '../shared/companionGillTopology';
 import { addElementParts, type CompanionElement } from '../shared/companionElements';
 import { COMPANION_COLLECTIONS } from '../shared/companionArtDirection';
@@ -1385,8 +1386,9 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
     {!canPlay && <span role="status" className="companion-model-message">{status === 'error' ? 'เปิดโมเดล 3D บนอุปกรณ์นี้ไม่ได้' : 'กำลังพาน้องมาหา…'}</span>}
     </button>
     {systemReducedMotion && <button type="button" className="companion-motion-toggle"
+      aria-label="ท่าเล่นเต็มรูปแบบ" title={fullMotion ? 'ลดการเคลื่อนไหวของน้อง' : 'เปิดท่าเล่นเต็มรูปแบบ'}
       aria-pressed={fullMotion} onClick={() => setFullMotion(value => !value)}>
-      {fullMotion ? 'ลดการเคลื่อนไหวของน้อง' : 'เปิดท่าเล่นเต็มรูปแบบ'}
+      <Sparkles size={16} strokeWidth={1.6} aria-hidden="true" />
     </button>}
     {showControls && <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay} onClick={reactToPet}>ลูบหัว ♡</button>

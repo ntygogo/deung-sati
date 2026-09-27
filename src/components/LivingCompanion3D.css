@@ -18,7 +18,8 @@
 .axolotl-viewer-controls { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 4px; width: max-content; max-width: 100%; }
 .axolotl-viewer-controls .axolotl-front-button { position: static; transform: none; padding-inline: 6px; }
 .axolotl-front-button:disabled { opacity: 0.5; cursor: default; }
-.companion-motion-toggle{position:absolute;z-index:4;top:0;left:50%;transform:translateX(-50%);min-height:36px;max-width:100%;padding:6px 12px;border:1px solid #d8bfd3;border-radius:20px;background:#fff8f4ed;color:#62465f;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+.companion-motion-toggle{position:absolute;z-index:4;top:4px;right:4px;display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:50%;background:transparent;color:#92758d;cursor:pointer}
+.companion-motion-toggle[aria-pressed=true]{color:#805b80;background:#fff8f470}
 .companion-motion-toggle:focus-visible{outline:3px solid #a881b8;outline-offset:2px}
 
 @media (max-width:459px) {
