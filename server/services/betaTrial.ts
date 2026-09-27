@@ -1,3 +1,4 @@
+import { billingMode } from './billingConfig.js';
 import { boundChatInput, quotaStatus, reserveChat, QuotaError } from './chatQuota.js';
 import { paidCoverage } from './billing.js';
 import { db } from '../db/database.js';
@@ -36,7 +37,7 @@ async function baseAccessStatus(userId: string, start = false, now = Date.now())
   const paid = await paidCoverage(userId, Date.parse(trial.expiresAt || '') || 0, now);
   if (start && !paid.hasPurchased) trial = await trialStatus(userId, true, now);
   if (paid.paidUntil) return {...trial, state:'active', expiresAt:paid.paidUntil,
-    daysRemaining:Math.ceil((Date.parse(paid.paidUntil)-now)/86400000), paidUntil:paid.paidUntil, paymentMode:'test'};
+    daysRemaining:Math.ceil((Date.parse(paid.paidUntil)-now)/86400000), paidUntil:paid.paidUntil, paymentMode:billingMode() || 'test'};
   if (paid.hasPurchased && trial.state === 'not_started') return {...trial,state:'expired',daysRemaining:0};
   return trial;
 }
