@@ -792,6 +792,7 @@ async function triggerAiStream(
       credentials: "include",
       body: JSON.stringify({
         messages: formattedMessages,
+        quotaRequestId: crypto.randomUUID(),
         sessionId: conversation?.id,
         pastLoopContext: conversation?.pastContext,
         requestId,
@@ -806,7 +807,7 @@ async function triggerAiStream(
       return;
     }
 
-    if (response.status === 403) window.dispatchEvent(new Event("beta-trial-change"));
+    if ((response.status === 403 || response.status === 429)) window.dispatchEvent(new Event("beta-trial-change"));
     if (setDebugInfo) {
       setDebugInfo((prev) => ({
         ...prev,
@@ -816,7 +817,8 @@ async function triggerAiStream(
     }
 
     if (!response.ok) {
-      throw new Error(`Server returned HTTP ${response.status}: ${response.statusText}`);
+      const detail = await response.json().catch(() => ({}));
+      throw Object.assign(new Error(detail.error || 'ยังส่งข้อความไม่ได้ กรุณาลองอีกครั้ง'), {userFacing: true});
     }
 
     if (!response.body) throw new Error("No response stream body");
@@ -915,7 +917,7 @@ async function triggerAiStream(
           m.id === aiMsgId
             ? {
                 ...m,
-                text: "เมื่อกี้ระบบสะดุดนิดนึง ลองส่งอีกครั้งได้เลยนะ 🌱",
+                text: err?.userFacing ? errorMsg : "เมื่อกี้ระบบสะดุดนิดนึง ลองส่งอีกครั้งได้เลยนะ 🌱",
                 isStreaming: false,
                 hasError: true,
               }
@@ -4888,3 +4890,4 @@ button {
   }
 }
 `;
+

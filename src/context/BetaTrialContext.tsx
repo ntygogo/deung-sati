@@ -23,7 +23,7 @@ export function BetaTrialProvider({ children }: {children: ReactNode}) {
   useEffect(()=>{
     alive.current=true; void refresh();
     const update=()=>void refresh();
-    const timer=window.setInterval(()=>{setCheckedAt(Date.now());},30000);
+    const timer=window.setInterval(()=>{setCheckedAt(Date.now());void refresh();},30000);
     window.addEventListener('beta-trial-change',update);window.addEventListener('focus',update);
     return()=>{alive.current=false;clearInterval(timer);window.removeEventListener('beta-trial-change',update);window.removeEventListener('focus',update);};
   },[refresh]);
@@ -32,3 +32,4 @@ export function BetaTrialProvider({ children }: {children: ReactNode}) {
   return <Context.Provider value={{trial:current,error,canChat:!!current&&!expired&&!error,refresh,expressInterest:()=>request('interest','POST')}}>{children}</Context.Provider>;
 }
 export function useBetaTrial(){const value=useContext(Context);if(!value)throw new Error('Missing beta provider');return value;}
+

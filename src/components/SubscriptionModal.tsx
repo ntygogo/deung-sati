@@ -1,3 +1,4 @@
+import { CHAT_LIMITS } from '../shared/chatQuota';
 import { useEffect, useRef, useState } from 'react';
 import { authHeaders } from '../utils/authHeaders';
 import { useBetaTrial } from '../context/BetaTrialContext';
@@ -79,6 +80,8 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
     {status&&<>
       <section className="billing-plan"><h3>อยู่กับดึงสติต่ออีก 30 วัน</h3><p className="billing-price">{baht(status.plan.amount)} <span>/ 30 วัน</span></p>
         <p>คุยกับ AI เพื่อทบทวนเรื่องในใจ และย้อนอ่านบทสนทนาของตัวเอง</p>
+        <p>แชทได้ {CHAT_LIMITS.paid} ข้อความ/วัน · ทดลองฟรี {CHAT_LIMITS.trial} ข้อความ/วัน เป็นเวลา 14 วัน</p>
+        <p>รีเซ็ตเที่ยงคืนเวลาไทย · ครั้งละไม่เกิน 4,000 ตัวอักษร · ข้อความที่ระบบตอบไม่สำเร็จไม่หักโควตา</p>
         <p>จ่ายเป็นครั้ง ๆ ไม่มีการต่ออายุหรือตัดเงินอัตโนมัติ</p>
         <p>{status.access.state==='not_started'?'ยังไม่ได้เริ่มทดลองฟรี 14 วัน':status.access.state==='expired'?'สิทธิ์แชทหมดแล้ว ยังย้อนอ่านประวัติได้':`สิทธิ์ปัจจุบันถึง ${date(status.access.expiresAt)} น. (เวลาไทย)`}</p>
         <p>ซื้อก่อนหมดอายุ: เพิ่มวันต่อจากสิทธิ์เดิม ซื้อหลังหมดอายุ: เริ่มเมื่อยืนยันยอดสำเร็จ</p>
@@ -113,3 +116,4 @@ export function BillingReturn(){
   function close(){const url=new URL(window.location.href);url.searchParams.delete('billing');url.searchParams.delete('order');window.history.replaceState({},'',url);setOpen(false);}
   return <SubscriptionModal isOpen={open} onClose={close}/>;
 }
+
