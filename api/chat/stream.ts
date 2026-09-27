@@ -1,3 +1,5 @@
+import { requireBetaTrial } from '../../server/services/betaTrial.js';
+import { requireAuth } from '../../server/middleware/auth.js';
 import { pastLoopInstruction } from '../../src/shared/conversation.js';
 type VercelRequest = any;
 type VercelResponse = any;
@@ -120,10 +122,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  let authenticated = false;
+  await requireAuth(req, res, () => { authenticated = true; });
+  if (!authenticated) return;
+
   const { messages, requestId, exerciseResult, loopGuide, pastLoopContext } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages' });
   }
+
+  let trialAllowed = false;
+  await requireBetaTrial(req, res, () => { trialAllowed = true; });
+  if (!trialAllowed) return;
 
   const loopContext = prepareLoopChat(messages, loopGuide);
   const apiKey = process.env.GEMINI_API_KEY || '';

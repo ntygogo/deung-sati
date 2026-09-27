@@ -1,3 +1,4 @@
+import { CHAT_ONLY_BETA } from '../shared/release';
 import React, { useEffect, useState } from 'react';
 import { bookConfig } from '../config/bookConfig';
 import { useAuth } from '../context/AuthContext';
@@ -260,6 +261,16 @@ export const AppDrawer: React.FC<{
     }
   };
 
+  if (CHAT_ONLY_BETA) return isOpen ? <div className="appDrawerBackdrop drawerBackdropOpen" onClick={onClose}>
+    <div className="appDrawerPanel drawerPanelOpen" role="dialog" aria-modal="true" aria-label="เมนูเวอร์ชันทดลอง" onClick={e => e.stopPropagation()}>
+      <div className="beta-menu-links"><h2>Deung Sati · Chat Beta</h2>
+        <button onClick={onClose} autoFocus>กลับไปใช้งาน</button>
+        <button onClick={() => onSelectRoute?.('account')}>บัญชีของฉัน / ออกจากระบบ</button>
+        <p>เวอร์ชันทดลองแชทฟรี เพื่อช่วยรับฟังและมองเรื่องในใจให้ชัดขึ้น</p>
+        <p>พบปัญหาหรืออยากเสนอแนะ ส่งให้นัตตี้พร้อมอธิบายขั้นตอนที่พบได้เลย ไม่จำเป็นต้องส่งข้อความส่วนตัวในแชท</p>
+      </div>
+    </div>
+  </div> : null;
   return (
     <div
       className={`appDrawerBackdrop ${isOpen ? 'drawerBackdropOpen' : ''}`}
@@ -277,8 +288,8 @@ export const AppDrawer: React.FC<{
         <div className="drawerHeader">
           <div className="drawerBrandInfo">
             <img
-              src="/images/nibbana_baby_sage.jpg"
-              alt="Nibbana Baby"
+              src="/images/companion-hatched.webp"
+              alt="น้องดึงสติ"
               className="drawerBabyAvatar"
             />
             <div>

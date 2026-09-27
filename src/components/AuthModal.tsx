@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface AuthModalProps {
   isOpen: boolean;
+  required?: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
   onSuccess?: () => void;
@@ -22,6 +23,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
+  required = false,
   onClose,
   initialMode = 'login',
   onSuccess,
@@ -43,12 +45,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   if (!isOpen) return null;
 
   if (currentUser) return (
-    <div className="jar-modal-overlay" onClick={onClose}>
+    <div className="jar-modal-overlay" onClick={required ? undefined : onClose}>
       <div className="jar-modal-card auth-modal-card" role="dialog" aria-modal="true" aria-label="บัญชีของฉัน" onClick={(e) => e.stopPropagation()}>
-        <h3>บัญชีของฉัน</h3>
+        <img className="beta-profile-image" src="/images/companion-hatched.webp" alt="น้องดึงสติ" /><h3>บัญชีของฉัน</h3>
         <p>{currentUser.name}</p>
         <p>{currentUser.email}</p>
-        <p>สถานะสมาชิก: {currentUser.isPlus ? 'Plus' : 'Free'}</p>
+        <p>ดึงสติ · เวอร์ชันทดลองแชท</p>
         <button type="button" className="btn-auth-submit" disabled={isLoading} onClick={async () => {
           setIsLoading(true);
           await logout();
@@ -106,7 +108,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="jar-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="auth-modal-badge-icon">
-              <span>🔐</span>
+              <img src="/images/companion-hatched.webp" alt="น้องดึงสติ" />
             </div>
             <div>
               <h3 className="jar-modal-title">
@@ -114,16 +116,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </h3>
               <p className="jar-modal-sub">
                 {mode === 'login'
-                  ? 'เข้าสู่ระบบเพื่อเปิดประวัติและสหายของบัญชีนี้'
-                  : 'บันทึกประวัติสภาพใจและรักษาสิทธิ์ข้ามอุปกรณ์'}
+                  ? 'เข้าสู่ระบบเพื่อเปิดประวัติแชทของบัญชีนี้'
+                  : 'เก็บประวัติแชทในบัญชี เปิดอ่านต่อได้ข้ามอุปกรณ์'}
               </p>
             </div>
           </div>
-          <button type="button" className="btn-close-modal" onClick={onClose} aria-label="ปิด">
+          {!required && <button type="button" className="btn-close-modal" onClick={onClose} aria-label="ปิด">
             <X size={18} />
-          </button>
+          </button>}
         </div>
 
+        <p className="beta-signup-note">ทดลองฟรี 14 วันจากข้อความแรก ไม่มีการเรียกเก็บเงินอัตโนมัติ</p>
         {/* Tab Switcher */}
         <div className="auth-tab-row">
           <button
@@ -257,16 +260,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="auth-footer-notes">
           <div className="auth-privacy-guarantee">
             <ShieldCheck size={14} className="text-primary" />
-            <span>ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้ และจะไม่ถูกย้ายเข้าบัญชีโดยอัตโนมัติ</span>
+            <span>{required ? 'เริ่มนับสิทธิ์ทดลองเมื่อส่งข้อความแรก ไม่มีการเรียกเก็บเงินอัตโนมัติ' : 'ข้อมูลโหมดทดลองยังอยู่ในเครื่องนี้ และจะไม่ถูกย้ายเข้าบัญชีโดยอัตโนมัติ'}</span>
           </div>
 
-          <button
+          {!required && <button
             type="button"
             className="btn-continue-guest"
             onClick={onClose}
           >
             ใช้งานต่อในโหมดทดลองใช้ (ไม่ล็อกอิน) →
-          </button>
+          </button>}
         </div>
       </div>
     </div>

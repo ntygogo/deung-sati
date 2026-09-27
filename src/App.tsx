@@ -1,3 +1,8 @@
+import { useBetaTrial } from './context/BetaTrialContext';
+import { BetaTrialNotice } from './components/BetaTrialNotice';
+import { CHAT_ONLY_BETA, betaScreenAllowed } from './shared/release';
+import { ChatBetaHome } from './components/ChatBetaHome';
+import { authHeaders } from './utils/authHeaders';
 import React, { useEffect, useRef, useState } from "react";
 import {
   type Screen,
@@ -195,9 +200,7 @@ const Baby = ({
   dark?: boolean;
   size?: number;
 }) => {
-  const imgSrc = dark
-    ? "/images/nibbana_baby_dark.jpg"
-    : "/images/nibbana_baby_sage.jpg";
+  const imgSrc = "/images/companion-hatched.webp";
 
   const dim = size || (small ? 56 : 116);
 
@@ -209,7 +212,7 @@ const Baby = ({
       style={{ width: dim, height: dim }}
     >
       <div className="babyAuraPulse" />
-      <img src={imgSrc} alt="Nibbana Baby" className="officialBabyImg" />
+      <img src={imgSrc} alt="น้องดึงสติ" className="officialBabyImg" />
     </div>
   );
 };
@@ -225,7 +228,7 @@ const BottomNav = ({
   const eggLabel = companion?.stage === 0 ? `ไข่ (${Math.min(20, traceCount)}/20)` : (companion?.name || "สหาย");
 
   return (
-    <div className="bottomNav">
+    <div className={`bottomNav ${CHAT_ONLY_BETA ? "beta-nav" : ""}`}>
       <NavItem
         active={screen === "home"}
         label="วันนี้"
@@ -238,7 +241,7 @@ const BottomNav = ({
         icon="chat"
         onClick={() => setScreen("chat")}
       />
-      <NavItem
+      {!CHAT_ONLY_BETA && <><NavItem
         active={screen === "companion"}
         label={eggLabel}
         icon="egg"
@@ -249,7 +252,7 @@ const BottomNav = ({
         label="ฉัน"
         icon="user"
         onClick={() => setScreen("profile")}
-      />
+      /></>}
     </div>
   );
 };
@@ -370,7 +373,9 @@ const DevDebugPanel = ({
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const { canChat } = useBetaTrial();
+  const [screen, updateScreen] = useState<Screen>("home");
+  const setScreen = (next: Screen) => updateScreen(betaScreenAllowed(next) ? next : "home");
   const [showEvidence, setShowEvidence] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -392,7 +397,7 @@ export default function App() {
   const [onboardingLifecycle, setOnboardingLifecycle] = useState<OnboardingLifecycleStatus>("pending_hydration");
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (CHAT_ONLY_BETA || !isHydrated) return;
 
     setOnboardingLifecycle((current) => {
       // Once active, reveal_only, completed, or cancelled, do not interrupt flow
@@ -480,7 +485,7 @@ export default function App() {
   };
 
   const handleStartChatFromHome = (textToSend: string) => {
-    if (!chats.ready || chats.locked || debugInfo.isLoading) { setScreen("chat"); return; }
+    if (!canChat || !chats.ready || chats.locked || debugInfo.isLoading) { setScreen("chat"); return; }
     setScreen("chat");
     const reqId = ++globalRequestId.current;
     const userMsg: ChatMessage = {
@@ -508,14 +513,14 @@ export default function App() {
   };
 
   return (
-    <div className="appShell">
+    <div className="appShell beta-app">
       <style>{styles}</style>
 
       <div className="phone">
         {isDebugMode && <DevDebugPanel debugInfo={debugInfo} />}
 
         {/* Conversational Onboarding if new user or pending reveal (Decoupled lifecycle) */}
-        {(onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
+        {!CHAT_ONLY_BETA && (onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
           <ConversationalOnboarding
             initialStep={onboardingLifecycle === "reveal_only" ? 5 : 1}
             onComplete={handleOnboardingComplete}
@@ -523,7 +528,13 @@ export default function App() {
           />
         )}
 
-        {screen === "home" && (
+        {screen === "home" && CHAT_ONLY_BETA && <ChatBetaHome
+          onOpenMenu={() => setIsDrawerOpen(true)} onOpenChat={() => setScreen("chat")}
+          ready={canChat && chats.ready && !chats.locked && !debugInfo.isLoading}
+          onStartChat={handleStartChatFromHome}
+          onHistory={async () => { setScreen('chat'); try { await chats.flush(); setRecentChats(await chats.listAll()); } catch {} }}
+        />}
+        {screen === "home" && !CHAT_ONLY_BETA && (
           <Home
             setScreen={setScreen}
             onOpenMenu={() => setIsDrawerOpen(true)}
@@ -558,10 +569,10 @@ export default function App() {
             continuation={!!chats.active.parentTraceId}
             pastContext={chats.pastContext}
             beforeSave={chats.flush}
-            disabled={!chats.ready || chats.locked}
+            disabled={!canChat || !chats.ready || chats.locked}
             onContinue={() => resumeTrace(chats.sourceTrace)}
             onOpenSaved={() => setShowSavedLoops(true)}
-            onNewChat={() => chats.startNew().catch(() => undefined)}
+            onNewChat={() => { if(canChat) void chats.startNew().catch(() => undefined); }}
             onHistory={async () => { try { await chats.flush(); setRecentChats(await chats.listAll()); } catch {} }}
             onReload={() => chats.reload().catch(() => undefined)}
             storageError={chats.error}
@@ -607,13 +618,13 @@ export default function App() {
           <BottomNav screen={screen} setScreen={setScreen} />
         )}
 
-        {showSavedLoops && <div role="dialog" aria-modal="true" aria-label="ลูปที่บันทึก" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
+        {showSavedLoops && <div className="beta-history-dialog" role="dialog" aria-modal="true" aria-label="ลูปที่บันทึก" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
           <button onClick={() => { setShowSavedLoops(false); setSelectedChatTrace(null); }}>กลับไปแชท</button>
           <h2>ลูปที่บันทึก</h2>
           {traces.length === 0 && <p>เมื่อบันทึกลูปแล้ว กลับมาคุยต่อได้ที่นี่</p>}
           {selectedChatTrace ? <><h3>{selectedChatTrace.title}</h3><p>{selectedChatTrace.summary}</p><TraceConversationActions trace={selectedChatTrace} history={chats.history} resume={resumeTrace} remove={chats.removeHistory} isGuest={chats.isGuest} /><button onClick={() => setSelectedChatTrace(null)}>ดูลูปอื่น</button></> : traces.map(t => <button key={t.id} onClick={() => setSelectedChatTrace(t)} style={{ display: 'block', padding: 16, margin: '12px 0', width: '100%', textAlign: 'left' }}>{t.title}</button>)}
         </div>}
-        {recentChats && <div role="dialog" aria-modal="true" aria-label="ประวัติแชท" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
+        {recentChats && <div className="beta-history-dialog" role="dialog" aria-modal="true" aria-label="ประวัติแชท" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: '#faf6fc', padding: 20, overflowY: 'auto' }}>
           <button onClick={() => setRecentChats(null)}>กลับไปแชท</button><h2>ประวัติแชท</h2>
           {recentChats.length === 0 && <p>ยังไม่มีบทสนทนาที่บันทึก</p>}
           {recentChats.map(c => <div key={c.id} style={{ borderBottom: '1px solid #ddd4e0', padding: '12px 0' }}>
@@ -777,7 +788,8 @@ async function triggerAiStream(
 
     const response = await fetch("/api/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
+      credentials: "include",
       body: JSON.stringify({
         messages: formattedMessages,
         sessionId: conversation?.id,
@@ -794,6 +806,7 @@ async function triggerAiStream(
       return;
     }
 
+    if (response.status === 403) window.dispatchEvent(new Event("beta-trial-change"));
     if (setDebugInfo) {
       setDebugInfo((prev) => ({
         ...prev,
@@ -911,6 +924,7 @@ async function triggerAiStream(
       );
     }
   } finally {
+    window.dispatchEvent(new Event("beta-trial-change"));
     if (isSendingRef) {
       isSendingRef.current = false;
     }
@@ -1173,6 +1187,7 @@ function ChatScreen({
   onOpenExercise: (id: ExerciseId) => void;
   onOpenMenu: () => void;
 }) {
+  const { canChat: trialCanChat } = useBetaTrial();
   const [inputText, setInputText] = useState("");
   const [dismissedExerciseMsgIds, setDismissedExerciseMsgIds] = useState<string[]>([]);
   const [activeInlineExercise, setActiveInlineExercise] = useState<{ msgId: string; exerciseId: string } | null>(null);
@@ -1610,14 +1625,15 @@ function ChatScreen({
         onOpenMenu={onOpenMenu}
       />
 
-      <div style={{ padding: '8px 16px', fontSize: 12, background: '#faf6fc', color: '#51375f' }}>
+      <BetaTrialNotice />
+      <div className="beta-chat-tools" style={{ padding: '8px 16px', fontSize: 12, background: '#faf6fc', color: '#51375f' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button onClick={onOpenSaved} disabled={debugInfo.isLoading}>ลูปที่บันทึก</button>
           <button onClick={onHistory} disabled={debugInfo.isLoading}>ประวัติแชท</button>
-          <button onClick={onNewChat} disabled={debugInfo.isLoading || disabled && !trace}>เริ่มเรื่องใหม่</button>
+          <button onClick={onNewChat} disabled={debugInfo.isLoading || !trialCanChat || disabled && !trace}>เริ่มเรื่องใหม่</button>
         </div>
         {trace && <p>{continuation ? 'คุยต่อจากลูป' : 'ลูปเดิม'}: {trace.title} · {new Date(trace.created_at).toLocaleDateString('th-TH')}</p>}
-        {disabled && trace && <button onClick={() => void onContinue().catch(() => undefined)}>คุยเรื่องนี้ต่อ</button>}
+        {trialCanChat && disabled && trace && <button onClick={() => void onContinue().catch(() => undefined)}>คุยเรื่องนี้ต่อ</button>}
         {isGuest && <div>ประวัติแชทเก็บในเบราว์เซอร์นี้เท่านั้น</div>}
         {storageError && <div role="alert">{storageError} <button onClick={() => void beforeSave().catch(() => undefined)}>ลองเก็บแชทอีกครั้ง</button> <button onClick={onReload}>เปิดข้อมูลล่าสุดแทนแชทในหน้านี้</button></div>}
         {continuationNotice && <p role="status">{continuationNotice}</p>}
@@ -1769,8 +1785,8 @@ function ChatScreen({
               <div className="aiRow">
                 <div className="aiAvatar">
                   <img
-                    src="/images/nibbana_baby_sage.jpg"
-                    alt="Nibbana Baby"
+                    src="/images/companion-hatched.webp"
+                    alt="น้องดึงสติ"
                     className="aiAvatarImg"
                   />
                 </div>
@@ -2243,7 +2259,8 @@ function BeforeSpeak({
     try {
       const res = await fetch("/api/filter-communication", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
+        credentials: "include",
         body: JSON.stringify({ rawMessage: text.trim() }),
       });
       const data = await res.json();
@@ -2404,7 +2421,8 @@ function Perspective({
     try {
       const res = await fetch("/api/analyze-empathy", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           relationshipType: "คนสำคัญ / แฟน / เพื่อน",
           situation: situationText.trim(),
