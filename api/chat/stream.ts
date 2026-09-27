@@ -1,3 +1,4 @@
+import { recordAiUsage } from '../../server/services/aiUsage.js';
 import { requireBetaTrial } from '../../server/services/betaTrial.js';
 import { requireAuth } from '../../server/middleware/auth.js';
 import { pastLoopInstruction } from '../../src/shared/conversation.js';
@@ -253,6 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : 0.5;
 
     for (const modelCandidate of modelCandidates) {
+      let usageRecorded = false;
       try {
         const response = await ai.models.generateContent({
           model: modelCandidate,
@@ -268,6 +270,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
         });
 
+        await recordAiUsage(req.userId, modelCandidate, response.usageMetadata);
+        usageRecorded = true;
         const rawText = response.text || '';
         if (rawText.trim()) {
           const { assistant_message, turn } = sanitizeResponse(rawText, loopContext);
@@ -288,6 +292,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.end();
         }
       } catch (err: any) {
+        if (!usageRecorded) await recordAiUsage(req.userId, modelCandidate, undefined, 'provider_error');
         console.warn(`[Vercel Serverless Stream]: Model ${modelCandidate} failed (${err?.status || err?.message}). Trying next...`);
       }
     }

@@ -1,407 +1,115 @@
-import React, { useState } from 'react';
-import {
-  X,
-  Crown,
-  Check,
-  Sparkles,
-  CreditCard,
-  QrCode,
-  MessageCircle,
-  ShieldCheck,
-  ChevronRight,
-  Copy,
-  ExternalLink,
-  Building2,
-  Users,
-  FileText,
-  BarChart3,
-  Award,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { authHeaders } from '../utils/authHeaders';
+import { useBetaTrial } from '../context/BetaTrialContext';
+import type { BetaTrialStatus } from '../shared/betaTrial';
+import '../billing.css';
 
-import { useAuth } from '../context/AuthContext';
-
-interface SubscriptionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onUpgradeSuccess: () => void;
-  isAlreadyPlus?: boolean;
-  onOpenAuth?: () => void;
+interface Order { id:string;amount:number;status:string;createdAt:string;startsAt:string|null;expiresAt:string|null;refundedAmount:number;mode:'test' }
+interface Status { mode:'test';enabled:boolean;isAdmin:boolean;plan:{amount:number;days:number};access:BetaTrialStatus;orders:Order[] }
+interface Usage {model:string;attempts:number;estimated_usd:number|null;unpriced_attempts:number}
+interface Report {since:string;sales:{gross_satang:number;refunded_satang:number};usage:Usage[];perUser:{user_id:string|null;attempts:number;estimated_usd:number|null;unpriced_attempts:number}[];orders:Record<string,unknown>[];trial:{started:number};buyers:{buyers:number};note:string}
+const baht = (satang:number) => (satang/100).toLocaleString('th-TH',{style:'currency',currency:'THB'});
+const date = (value:string|null) => value ? new Date(value).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'medium',timeStyle:'short'}) : '—';
+const labels:Record<string,string> = {pending:'รอยืนยันการชำระ',paid:'ชำระแล้ว',expired:'รายการหมดอายุ',failed:'ชำระไม่สำเร็จ',refunded:'คืนเงินครบแล้ว',partially_refunded:'คืนเงินบางส่วน'};
+async function api<T>(path:string,method='GET'):Promise<T> {
+  const res=await fetch('/api/billing'+path,{method,credentials:'include',headers:authHeaders(),...(method==='POST'?{body:'{}'}:{})});
+  const data=await res.json();
+  if(!res.ok) throw new Error(data.error || 'ยังเชื่อมต่อระบบชำระเงินไม่ได้');
+  return data as T;
 }
 
-type PlanCategory = 'individual' | 'corporate';
-type BillingPlan = 'monthly' | 'yearly';
-type PaymentMethod = 'promptpay' | 'card' | 'line';
-
-export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
-  isOpen,
-  onClose,
-  onUpgradeSuccess,
-  isAlreadyPlus = false,
-  onOpenAuth,
-}) => {
-  const { currentUser, upgradePlus } = useAuth();
-  const [planCategory, setPlanCategory] = useState<PlanCategory>('individual');
-  const [selectedPlan, setSelectedPlan] = useState<BillingPlan>('yearly');
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('promptpay');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [showQrStep, setShowQrStep] = useState<boolean>(false);
-  const [copiedAccount, setCopiedAccount] = useState<boolean>(false);
-
-  if (!isOpen) return null;
-
-  const handleCopyAccount = () => {
-    navigator.clipboard.writeText('0271872775');
-    setCopiedAccount(true);
-    setTimeout(() => setCopiedAccount(false), 2500);
-  };
-
-  const handleSimulatePayment = () => {
-    if (selectedMethod === 'line') {
-      window.open('https://lin.ee/snQhce5', '_blank');
-      return;
+export function SubscriptionModal({isOpen,onClose}:{isOpen:boolean;onClose:()=>void;onUpgradeSuccess?:()=>void;isAlreadyPlus?:boolean;onOpenAuth?:()=>void}) {
+  return isOpen ? <BillingPanel onClose={onClose}/> : null;
+}
+function BillingPanel({onClose}:{onClose:()=>void}) {
+  const dialog=useRef<HTMLDialogElement>(null);
+  const [status,setStatus]=useState<Status|null>(null);
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [report,setReport]=useState<Report|null>(null);
+  const {refresh}=useBetaTrial();
+  useEffect(()=>{ dialog.current?.showModal(); },[]);
+  useEffect(()=>{
+    let disposed=false;
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    let attempts=0;
+    const params=new URLSearchParams(window.location.search);
+    const returnedOrder=params.get('order');
+    const isReturn=params.get('billing')==='return' && /^[a-f0-9-]{36}$/.test(returnedOrder || '');
+    async function load(){
+      try {
+        let data=await api<Status>('/status');
+        const order=data.orders.find(o=>o.id===returnedOrder);
+        if(isReturn && data.enabled && order?.status==='pending' && attempts<12) {
+          attempts++;
+          await api('/orders/'+returnedOrder+'/reconcile','POST');
+          data=await api<Status>('/status');
+        }
+        if(disposed)return;
+        setStatus(data);setError('');await refresh();
+        if(isReturn && data.orders.some(o=>o.id===returnedOrder && o.status==='pending') && attempts<12 && data.enabled) timer=setTimeout(()=>void load(),5000);
+      } catch(e){if(!disposed)setError((e as Error).message);}
     }
-
-    if (selectedMethod === 'promptpay' && !showQrStep) {
-      setShowQrStep(true);
-      return;
-    }
-
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      upgradePlus(selectedPlan);
-      onUpgradeSuccess();
-      setShowQrStep(false);
-    }, 1500);
-  };
-
-  const amount = selectedPlan === 'yearly' ? '1,190' : '149';
-  const periodText = selectedPlan === 'yearly' ? 'ต่อปี (เฉลี่ย ฿99/เดือน)' : 'ต่อเดือน';
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="subscription-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Close Button */}
-        <button
-          type="button"
-          className="btn-modal-close"
-          onClick={onClose}
-          aria-label="ปิดหน้าต่าง"
-        >
-          <X size={20} />
-        </button>
-
-        {/* Modal Header */}
-        <div className="sub-header-hero">
-          <div className="sub-crown-badge">
-            <Crown size={22} className="text-amber-500" />
-          </div>
-          <div className="sub-hero-tag">
-            <Sparkles size={13} />
-            <span>DEUNG SATI PLUS &amp; ENTERPRISE</span>
-          </div>
-          <h2 className="sub-modal-title">
-            {planCategory === 'corporate' ? 'ดึงสติ สำหรับองค์กร (Enterprise)' : 'ดึงสติ พลัส (Plus)'}
-          </h2>
-          <p className="sub-modal-sub">
-            {planCategory === 'corporate'
-              ? 'โซลูชันดูแลสุขภาพใจพนักงาน ลดความเหนื่อยล้า (Burnout) และสร้างวัฒนธรรมการสื่อสารที่ปลอดภัยในองค์กร'
-              : 'พื้นที่ดูแลใจไร้ขีดจำกัด ถอดรหัสลูปใจ ชี้ให้เห็นความจริง & คลื่นเสียงผ่อนคลายพรีเมียม'}
-          </p>
-        </div>
-
-        {/* Category Switcher Tabs: Individual vs Corporate */}
-        <div className="sub-category-tabs">
-          <button
-            type="button"
-            className={`sub-cat-tab-btn ${planCategory === 'individual' ? 'active' : ''}`}
-            onClick={() => setPlanCategory('individual')}
-          >
-            <Users size={16} />
-            <span>บุคคลทั่วไป (Personal)</span>
-          </button>
-          <button
-            type="button"
-            className={`sub-cat-tab-btn ${planCategory === 'corporate' ? 'active' : ''}`}
-            onClick={() => setPlanCategory('corporate')}
-          >
-            <Building2 size={16} />
-            <span>องค์กร &amp; HR (Corporate)</span>
-          </button>
-        </div>
-
-        {isAlreadyPlus && planCategory === 'individual' ? (
-          <div className="sub-already-plus-box">
-            <div className="already-plus-icon">👑✨</div>
-            <h3>คุณเป็นสมาชิก ดึงสติ พลัส เรียบร้อยแล้ว!</h3>
-            <p>ขอบคุณที่ร่วมเป็นส่วนหนึ่งในการสนับสนุนการพัฒนาแอปดึงสตินะครับ 🌿</p>
-            <button type="button" className="btn-primary" onClick={onClose} style={{ marginTop: 12 }}>
-              กลับสู่แอป
-            </button>
-          </div>
-        ) : showQrStep && planCategory === 'individual' ? (
-          /* PromptPay QR Code Step */
-          <div className="promptpay-step-container">
-            <div className="promptpay-qr-box">
-              <div className="promptpay-header-tag">
-                <QrCode size={16} />
-                <span>สแกน QR Code เพื่อโอนเข้าบัญชี</span>
-              </div>
-
-              {/* Nutty's Official Thai QR Payment Image */}
-              <div className="qr-image-wrapper">
-                <img
-                  src="/images/nutty_promptpay_qr.jpg"
-                  alt="พร้อมเพย์ กสิกรไทย ภักษร พรพบรักแท้"
-                  className="qr-img-nutty"
-                />
-              </div>
-
-              <div className="qr-price-badge">
-                <span>ยอดชำระ ({selectedPlan === 'yearly' ? 'รายปี' : 'รายเดือน'}):</span>
-                <strong>฿{amount} บาท</strong>
-              </div>
-
-              {/* Bank Account Info Box */}
-              <div className="bank-info-card">
-                <div className="bank-logo-row">
-                  <span className="kbank-badge">ธนาคารกสิกรไทย (KBANK)</span>
-                  <button
-                    type="button"
-                    className="btn-copy-account"
-                    onClick={handleCopyAccount}
-                  >
-                    {copiedAccount ? <Check size={13} /> : <Copy size={13} />}
-                    <span>{copiedAccount ? 'คัดลอกแล้ว!' : 'คัดลอกเลขบัญชี'}</span>
-                  </button>
-                </div>
-                <div className="bank-details-row">
-                  <span className="bank-account-num">027-1-87277-5</span>
-                  <span className="bank-account-name">ชื่อบัญชี: น.ส. ภักษร พรพบรักแท้</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="promptpay-actions-column">
-              <a
-                href="https://lin.ee/snQhce5"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-send-slip-line"
-              >
-                <MessageCircle size={16} />
-                <span>ส่งสลิปแจ้งโอนผ่าน LINE (@ntygogo)</span>
-                <ExternalLink size={14} style={{ marginLeft: 'auto' }} />
-              </a>
-
-              <div className="promptpay-actions-row">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowQrStep(false)}
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  className="btn-confirm-pay"
-                  onClick={handleSimulatePayment}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? 'กำลังยืนยัน...' : 'ฉันโอนเงินเรียบร้อยแล้ว ✨'}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : planCategory === 'corporate' ? (
-          /* ================================================================
-             🏢 CORPORATE / ENTERPRISE PACKAGE CONTENT
-             ================================================================ */
-          <div className="sub-content-body">
-            {/* Corporate Tier Banner */}
-            <div className="corp-hero-card">
-              <div className="corp-badge-row">
-                <span className="corp-tag-badge">🏢 FOR TEAMS &amp; HR WELLNESS</span>
-                <span className="corp-tax-badge">🧾 หักภาษีได้ 200%</span>
-              </div>
-              <h3 className="corp-card-title">แพ็กเกจยกระดับสุขภาพใจและประสิทธิภาพทีม</h3>
-              <p className="corp-card-desc">
-                สำหรับบริษัท สตาร์ตอัป และองค์กรที่ต้องการให้พนักงานมีสติ ลดความขัดแย้ง และทำงานร่วมกันอย่างมีความสุข
-              </p>
-              <div className="corp-price-estimate">
-                <span>ราคาเริ่มต้นเพียง</span>
-                <strong>฿99 - ฿129</strong>
-                <span>/ พนักงาน / เดือน (ตามขนาดทีม)</span>
-              </div>
-            </div>
-
-            {/* Corporate Specific Benefits */}
-            <div className="sub-benefits-list">
-              <h4 className="benefits-heading">🏢 สิทธิประโยชน์สำหรับองค์กร &amp; ทีม:</h4>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>Deung Sati Plus Full Access</strong> สำหรับพนักงานทุกคน (แชท AI ไม่จำกัด, ฝึกสติ, เสียงบำบัด)</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><BarChart3 size={13} /></div>
-                <span><strong>HR Team Wellness Report (Anonymous)</strong> — รายงานดัชนีความเครียดและสภาพอากาศอารมณ์ทีมรายเดือน (ตามหลัก PDPA 100%)</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Award size={13} /></div>
-                <span><strong>In-House Workshop โดยคุณนัตตี้ (NTYGOGO)</strong> — สิทธิ์จองเวิร์กช็อปถอดรหัสลูปสื่อสารและ Mindful Leadership 3.5 ชม.</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><FileText size={13} /></div>
-                <span><strong>ออกใบเสนอราคา &amp; ใบกำกับภาษีเต็มรูปแบบ</strong> — ยื่นหักค่าใช้จ่ายอบรมพัฒนาบุคลากรได้</span>
-              </div>
-            </div>
-
-            {/* Corporate Action Button */}
-            <a
-              href="https://lin.ee/snQhce5"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-corporate-cta"
-            >
-              <MessageCircle size={18} />
-              <span>ขอใบเสนอราคา &amp; ปรึกษาแพ็กเกจองค์กร (ทัก LINE นัตตี้)</span>
-              <ExternalLink size={16} style={{ marginLeft: 'auto' }} />
-            </a>
-
-            <div className="sub-guarantee-row">
-              <ShieldCheck size={14} className="text-emerald-600" />
-              <span>ปรับแต่งแพ็กเกจได้ตามขนาดทีม (10 - 500+ คน) • ออกใบกำกับภาษีถูกต้อง</span>
-            </div>
-          </div>
-        ) : (
-          /* ================================================================
-             👤 INDIVIDUAL / PERSONAL PLAN CONTENT
-             ================================================================ */
-          <div className="sub-content-body">
-            {/* User Account Association Status */}
-            {currentUser ? (
-              <div className="sub-user-account-badge">
-                <ShieldCheck size={14} className="text-emerald-500" />
-                <span>อัปเกรดสิทธิ์ผูกกับบัญชี: <strong>{currentUser.email}</strong></span>
-              </div>
-            ) : onOpenAuth ? (
-              <div className="sub-user-guest-warning" onClick={() => { onClose(); onOpenAuth(); }}>
-                <span>💡 ยังไม่ได้ล็อกอิน? <u>เข้าสู่ระบบ/สมัครสมาชิก</u> เพื่อผูกสิทธิ์ถาวร</span>
-              </div>
-            ) : null}
-
-            {/* Plan Selector Toggle */}
-            <div className="sub-plans-grid">
-              <div
-                className={`sub-plan-card ${selectedPlan === 'yearly' ? 'active' : ''}`}
-                onClick={() => setSelectedPlan('yearly')}
-              >
-                <div className="plan-discount-ribbon">ประหยัด 33% 🌟</div>
-                <div className="plan-radio-row">
-                  <div className={`plan-radio-circle ${selectedPlan === 'yearly' ? 'selected' : ''}`} />
-                  <span className="plan-name">รายปี (แนะนำ)</span>
-                </div>
-                <div className="plan-price-row">
-                  <span className="plan-price-val">฿1,190</span>
-                  <span className="plan-period">/ปี</span>
-                </div>
-                <span className="plan-saving-note">เฉลี่ยเพียง ฿99/เดือน</span>
-              </div>
-
-              <div
-                className={`sub-plan-card ${selectedPlan === 'monthly' ? 'active' : ''}`}
-                onClick={() => setSelectedPlan('monthly')}
-              >
-                <div className="plan-radio-row">
-                  <div className={`plan-radio-circle ${selectedPlan === 'monthly' ? 'selected' : ''}`} />
-                  <span className="plan-name">รายเดือน</span>
-                </div>
-                <div className="plan-price-row">
-                  <span className="plan-price-val">฿149</span>
-                  <span className="plan-period">/เดือน</span>
-                </div>
-                <span className="plan-saving-note">ยกเลิกได้ตลอดเวลา</span>
-              </div>
-            </div>
-
-            {/* Premium Benefits List */}
-            <div className="sub-benefits-list">
-              <h4 className="benefits-heading">สิ่งที่คุณจะได้รับจากแพ็กเกจ พลัส:</h4>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>แชทดึงสติ &amp; แยกแยะความจริงไม่อั้น 24 ชม.</strong> — ระบายและถอดรหัสลูปใจได้ทุกเวลา</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>สังเคราะห์ลูปพฤติกรรม 5 ลูป ไม่จำกัด</strong> — ค้นหาปมที่ทำซ้ำและเห็นทางเลือกใหม่</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>ปลดล็อกคลื่นเสียงบำบัด &amp; ซาวด์กล่อมนอนพรีเมียม</strong> — ขันทิเบต, 432Hz, ฝนแม่สลอง</span>
-              </div>
-              <div className="benefit-item">
-                <div className="benefit-check-icon"><Check size={13} /></div>
-                <span><strong>สิทธิ์จองเวิร์กช็อป Deung Sati Lab</strong> &amp; Retreat ดอยแม่สลองรอบ Early Bird</span>
-              </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div className="payment-methods-box">
-              <label className="payment-methods-label">เลือกช่องทางชำระเงิน:</label>
-              <div className="payment-chips-row">
-                <button
-                  type="button"
-                  className={`payment-chip-btn ${selectedMethod === 'promptpay' ? 'active' : ''}`}
-                  onClick={() => setSelectedMethod('promptpay')}
-                >
-                  <QrCode size={15} />
-                  <span>PromptPay QR</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`payment-chip-btn ${selectedMethod === 'card' ? 'active' : ''}`}
-                  onClick={() => setSelectedMethod('card')}
-                >
-                  <CreditCard size={15} />
-                  <span>บัตรเครดิต/เดบิต</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`payment-chip-btn ${selectedMethod === 'line' ? 'active' : ''}`}
-                  onClick={() => setSelectedMethod('line')}
-                >
-                  <MessageCircle size={15} />
-                  <span>สมัครผ่าน LINE</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Submit Action Button */}
-            <button
-              type="button"
-              className="btn-subscribe-cta"
-              onClick={handleSimulatePayment}
-              disabled={isProcessing}
-            >
-              <Sparkles size={18} />
-              <span>
-                {selectedMethod === 'line'
-                  ? 'ทักแชต LINE @ntygogo เพื่อสมัครสมาชิก'
-                  : `สมัครสมาชิก ฿${amount} ${periodText}`}
-              </span>
-              <ChevronRight size={18} style={{ marginLeft: 'auto' }} />
-            </button>
-
-            {/* Trust & Guarantee Footnote */}
-            <div className="sub-guarantee-row">
-              <ShieldCheck size={14} className="text-emerald-600" />
-              <span>ความปลอดภัยมาตรฐานสากล • กดยกเลิกได้ตลอดเวลา ไม่มีข้อผูกมัด</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+    void load();
+    return()=>{disposed=true;if(timer)clearTimeout(timer);};
+  },[refresh]);
+  async function reload(){setBusy(true);try{setStatus(await api<Status>('/status'));setError('');await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function checkout(){
+    setBusy(true);setError('');
+    try {const result=await api<{url:string}>('/checkout','POST');const url=new URL(result.url);
+      if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw new Error('ลิงก์ชำระเงินไม่ถูกต้อง');
+      window.location.assign(url.href);
+    }catch(e){setError((e as Error).message);setBusy(false);}
+  }
+  async function reconcile(id:string){setBusy(true);try{await api('/orders/'+id+'/reconcile','POST');await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function loadReport(){setBusy(true);try{setReport(await api<Report>('/admin/report'));setError('');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  function exportOrders(){
+    if(!report)return;
+    const keys=['id','user_id','status','amount','refunded_amount','created_at','paid_at','starts_at','expires_at'];
+    const cell=(v:unknown)=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';
+    const csv='\uFEFF'+[keys.join(','),...report.orders.map(o=>keys.map(k=>cell(o[k])).join(','))].join('\r\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    const anchor=document.createElement('a');anchor.href=url;anchor.download='deung-sati-test-orders.csv';anchor.click();URL.revokeObjectURL(url);
+  }
+  return <dialog className="billing-dialog" ref={dialog} aria-labelledby="billing-title" onCancel={onClose}>
+    <header><div><small>ดึงสติ · บัญชีของฉัน</small><h2 id="billing-title">สิทธิ์ใช้งานและการชำระเงิน</h2></div><button onClick={onClose} aria-label="ปิด">✕</button></header>
+    <p className="billing-test">โหมดทดสอบ · ไม่มีการเรียกเก็บเงินจริง</p>
+    {error&&<p role="alert" className="billing-error">{error} <button disabled={busy} onClick={()=>void reload()}>ลองอีกครั้ง</button></p>}
+    {!status&&!error&&<p role="status">กำลังโหลดสิทธิ์ใช้งาน…</p>}
+    {status&&<>
+      <section className="billing-plan"><h3>อยู่กับดึงสติต่ออีก 30 วัน</h3><p className="billing-price">{baht(status.plan.amount)} <span>/ 30 วัน</span></p>
+        <p>คุยกับ AI เพื่อทบทวนเรื่องในใจ และย้อนอ่านบทสนทนาของตัวเอง</p>
+        <p>จ่ายเป็นครั้ง ๆ ไม่มีการต่ออายุหรือตัดเงินอัตโนมัติ</p>
+        <p>{status.access.state==='not_started'?'ยังไม่ได้เริ่มทดลองฟรี 14 วัน':status.access.state==='expired'?'สิทธิ์แชทหมดแล้ว ยังย้อนอ่านประวัติได้':`สิทธิ์ปัจจุบันถึง ${date(status.access.expiresAt)} น. (เวลาไทย)`}</p>
+        <p>ซื้อก่อนหมดอายุ: เพิ่มวันต่อจากสิทธิ์เดิม ซื้อหลังหมดอายุ: เริ่มเมื่อยืนยันยอดสำเร็จ</p>
+        <button className="billing-primary" disabled={!status.enabled||busy} onClick={()=>void checkout()}>{busy?'กำลังดำเนินการ…':'ทดสอบชำระด้วยพร้อมเพย์'}</button>
+        {!status.enabled&&<p className="billing-muted">ยังไม่เปิดขาย ขณะนี้เตรียมระบบและทดสอบเฉพาะบัญชีที่กำหนดไว้ ราคาและโควตาจะยืนยันก่อนเปิดขายจริง</p>}
+      </section>
+      <section><h3>ประวัติการชำระเงิน</h3><button disabled={busy} onClick={()=>void reload()}>อัปเดตข้อมูล</button>
+        {!status.orders.length?<p className="billing-muted">ยังไม่มีรายการชำระเงิน</p>:<ul className="billing-orders">{status.orders.map(o=><li key={o.id}>
+          <div><strong>{baht(o.amount)} · {labels[o.status]||o.status}</strong><span className="billing-tag">ทดสอบ</span></div>
+          <p>{date(o.createdAt)} · รายการ {o.id.slice(0,8)}</p>
+          {o.expiresAt&&<p>ช่วงสิทธิ์: {date(o.startsAt)} – {date(o.expiresAt)}</p>}
+          {o.refundedAmount>0&&<p>คืนเงินแล้ว {baht(o.refundedAmount)} {o.status==='refunded'?'· สิทธิ์จากรายการนี้ถูกยกเลิก':''}</p>}
+          {o.status==='pending'&&<button disabled={busy||!status.enabled} onClick={()=>void reconcile(o.id)}>ตรวจสอบยอดอีกครั้ง</button>}
+          <a href={`mailto:puksorn.gg@gmail.com?subject=${encodeURIComponent('สอบถามการชำระเงิน '+o.id)}`}>แจ้งปัญหา / ขอคืนเงิน</a>
+        </li>)}</ul>}
+        <p className="billing-muted">ถ้าจ่ายแล้วแต่สิทธิ์ยังไม่ขึ้น ให้ตรวจสอบยอดอีกครั้งก่อนสร้างรายการใหม่ การกลับจากหน้าชำระเงินอย่างเดียวไม่ถือว่าจ่ายสำเร็จ</p>
+      </section>
+      {status.isAdmin&&<section><h3>หลังบ้านสำหรับผู้ดูแล</h3><button disabled={busy} onClick={()=>void loadReport()}>ดูรายงาน 30 วัน</button>
+        {report&&<><p>{report.note}</p><p>ยอดทดสอบ {baht(Number(report.sales.gross_satang))} · คืนเงิน {baht(Number(report.sales.refunded_satang))}</p>
+          <p>เริ่มทดลอง {report.trial.started} บัญชี · ผู้ซื้อทดสอบ {report.buyers.buyers} บัญชี (ไม่ใช่อัตราเปลี่ยนเป็นลูกค้าของกลุ่มเดียวกัน)</p>
+          <div className="billing-table"><table><thead><tr><th>โมเดล</th><th>เรียกใช้</th><th>ต้นทุนที่ประเมินได้ USD</th><th>ยังไม่ทราบต้นทุน</th></tr></thead><tbody>{report.usage.map(u=><tr key={u.model}><td>{u.model}</td><td>{u.attempts}</td><td>{u.estimated_usd===null?'ยังไม่มีราคา':Number(u.estimated_usd).toFixed(4)}</td><td>{u.unpriced_attempts}</td></tr>)}</tbody></table></div>
+          <details><summary>ต้นทุนแยกตามบัญชี (ไม่แสดงข้อความแชท)</summary>{report.perUser.map(u=><p key={u.user_id||'deleted'}>{u.user_id?.slice(0,8)||'บัญชีถูกลบ'} · {u.attempts} ครั้ง · {u.estimated_usd===null?'ยังไม่มีราคา':`$${Number(u.estimated_usd).toFixed(4)}`} · ยังไม่ทราบต้นทุน {u.unpriced_attempts} ครั้ง</p>)}</details>
+          <button onClick={exportOrders}>ดาวน์โหลดรายการทดสอบล่าสุด 100 รายการ (CSV)</button>
+          <p className="billing-muted">ยอดเงินจริง ค่าธรรมเนียม และเงินโอนเข้าธนาคารต้องตรวจจากผู้ให้บริการหลังเปิดระบบจริง การคืนเงินทดสอบทำผ่าน Stripe Dashboard แล้วระบบจะรับสถานะกลับมา</p>
+        </>}
+      </section>}
+    </>}
+  </dialog>;
+}
+export function BillingReturn(){
+  const [open,setOpen]=useState(()=>['return','cancel'].includes(new URLSearchParams(window.location.search).get('billing')||''));
+  function close(){const url=new URL(window.location.href);url.searchParams.delete('billing');url.searchParams.delete('order');window.history.replaceState({},'',url);setOpen(false);}
+  return <SubscriptionModal isOpen={open} onClose={close}/>;
+}

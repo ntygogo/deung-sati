@@ -5,4 +5,6 @@ export interface BetaTrialStatus {
   expiresAt: string | null;
   daysRemaining: number;
   interested: boolean;
+  paidUntil?: string | null;
+  paymentMode?: 'test';
 }

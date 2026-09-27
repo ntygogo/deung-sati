@@ -1,3 +1,4 @@
+import { BillingReturn } from './components/SubscriptionModal';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -15,7 +16,7 @@ function AccountApp() {
   if (!currentUser) return <AuthModal isOpen required initialMode="register" onClose={() => {}} />;
   // Remount account-owned state and chat when the identity changes.
   // Guest drafts remain in their existing local storage and are not uploaded.
-  return <CompanionProvider key={currentUser?.id ?? 'guest'}><BetaTrialProvider><App /></BetaTrialProvider></CompanionProvider>;
+  return <CompanionProvider key={currentUser?.id ?? 'guest'}><BetaTrialProvider><App /><BillingReturn /></BetaTrialProvider></CompanionProvider>;
 }
 
 createRoot(document.getElementById('root')!).render(
