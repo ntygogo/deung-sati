@@ -4,4 +4,4 @@
 
 .beta-companion{border-radius:50%;box-shadow:0 10px 30px #76557026}
 
-.beta-live-companion{position:absolute;z-index:2;left:50%;top:115px;transform:translateX(-50%);width:280px;height:240px}.current-companion{position:relative;width:100%;height:100%}.current-companion-poster{position:absolute;inset:8%;width:84%;height:84%;object-fit:contain;border-radius:50%}
+.beta-live-companion{position:absolute;z-index:2;left:50%;top:115px;transform:translateX(-50%);width:280px;height:240px}.current-companion{position:relative;width:100%;height:100%}.current-companion-loading{position:absolute;inset:0;display:grid;place-items:center;color:#62465f;font-size:14px;text-align:center}
