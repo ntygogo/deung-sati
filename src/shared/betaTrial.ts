@@ -8,6 +8,6 @@ export interface BetaTrialStatus {
   daysRemaining: number;
   interested: boolean;
   paidUntil?: string | null;
-  paymentMode?: 'test';
+  paymentMode?: 'test' | 'live';
 }
 
