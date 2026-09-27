@@ -87,6 +87,25 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
   const dragRef = useRef<{ id: number; x: number; y: number; yaw: number; moved: boolean; pet: boolean; lastX: number; lastY: number; distance: number; direction: number; travel: number } | null>(null);
   const suppressClickRef = useRef(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [systemReducedMotion, setSystemReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [fullMotion, setFullMotion] = useState(false);
+  const reducedMotionRef = useRef(systemReducedMotion);
+  reducedMotionRef.current = systemReducedMotion && !fullMotion;
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setSystemReducedMotion(preference.matches);
+    const cancelGesture = () => { dragRef.current = null; suppressClickRef.current = true; };
+    const onVisibility = () => { if (document.hidden) cancelGesture(); };
+    preference.addEventListener('change', update);
+    window.addEventListener('blur', cancelGesture);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      preference.removeEventListener('change', update);
+      window.removeEventListener('blur', cancelGesture);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   const canPlay = status === 'ready';
@@ -144,7 +163,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
     const previous = reactionRef.current;
     if (previous.kind === 'flip' && t - previous.started < FLIP_DURATION) return;
     let kind = REACTIONS[reactionCountRef.current++ % REACTIONS.length];
-    if (kind === 'flip' && (t - lastFlipRef.current < 9 || window.matchMedia('(prefers-reduced-motion: reduce)').matches)) kind = 'blep';
+    if (kind === 'flip' && (t - lastFlipRef.current < 9 || reducedMotionRef.current)) kind = 'blep';
     if (kind === 'flip') lastFlipRef.current = t;
     if (kind === 'hello') orbitRef.current += Math.atan2(Math.sin(FRONT_YAW - orbitRef.current), Math.cos(FRONT_YAW - orbitRef.current));
     reactionRef.current = { kind, started: t };
@@ -183,7 +202,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
     let observer: ResizeObserver | undefined;
     let renderer: import('three').WebGLRenderer | undefined;
     let disposeModel: (() => void) | undefined;
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const reducedMotion = { get matches() { return reducedMotionRef.current; } };
 
     const start = async () => {
       try {
@@ -1302,7 +1321,7 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
       const x = (event.clientX - box.left) / box.width, y = (event.clientY - box.top) / box.height;
       const pet = !pausedRef.current && hit.visible && ((x - hit.x) / hit.rx) ** 2 + ((y - hit.y) / hit.ry) ** 2 < 1;
       dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: orbitRef.current, moved: false, pet, lastX: event.clientX, lastY: event.clientY, distance: 0, direction: 0, travel: 0 };
-      if (pet) event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.setPointerCapture(event.pointerId);
     }}
     onPointerMove={event => {
       const box = event.currentTarget.getBoundingClientRect();
@@ -1339,12 +1358,17 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
     onPointerUp={event => {
       const drag = dragRef.current;
       if (!drag || drag.id !== event.pointerId) return;
-      if (drag.pet && drag.moved) reactToPet();
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      // Handle taps here, including touch browsers that omit the synthesized click.
+      // Clear the drag before releasing capture so idle/rest cannot remain blocked.
       dragRef.current = null;
+      suppressClickRef.current = true;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      const tap = !drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= 12;
+      if (tap || (drag.pet && drag.moved)) reactToPet();
     }}
     onPointerCancel={() => { dragRef.current = null; suppressClickRef.current = true; }}
-    onPointerLeave={() => { gazeRef.current = 0; if (!dragRef.current?.moved) dragRef.current = null; }}
+    onLostPointerCapture={() => { dragRef.current = null; }}
+    onPointerLeave={() => { gazeRef.current = 0; }}
     onKeyDown={event => {
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
@@ -1360,6 +1384,10 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
     <span ref={mountRef} className="living-companion-canvas" aria-hidden="true" />
     {!canPlay && <span role="status" className="companion-model-message">{status === 'error' ? 'เปิดโมเดล 3D บนอุปกรณ์นี้ไม่ได้' : 'กำลังพาน้องมาหา…'}</span>}
     </button>
+    {systemReducedMotion && <button type="button" className="companion-motion-toggle"
+      aria-pressed={fullMotion} onClick={() => setFullMotion(value => !value)}>
+      {fullMotion ? 'ลดการเคลื่อนไหวของน้อง' : 'เปิดท่าเล่นเต็มรูปแบบ'}
+    </button>}
     {showControls && <div className="axolotl-viewer-controls">
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay} onClick={reactToPet}>ลูบหัว ♡</button>
       <button type="button" className="axolotl-front-button" disabled={paused || !canPlay || restPhase === 'waking'} onClick={toggleRest}>{restPhase === 'awake' ? 'นอนพัก' : restPhase === 'waking' ? 'กำลังตื่น…' : 'ปลุกน้อง'}</button>
