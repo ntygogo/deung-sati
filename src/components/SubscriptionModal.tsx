@@ -5,8 +5,8 @@ import { useBetaTrial } from '../context/BetaTrialContext';
 import type { BetaTrialStatus } from '../shared/betaTrial';
 import '../billing.css';
 
-interface Order { id:string;amount:number;status:string;createdAt:string;startsAt:string|null;expiresAt:string|null;refundedAmount:number;mode:'test' }
-interface Status { mode:'test';enabled:boolean;isAdmin:boolean;plan:{amount:number;days:number};access:BetaTrialStatus;orders:Order[] }
+interface Order { id:string;amount:number;status:string;createdAt:string;startsAt:string|null;expiresAt:string|null;refundedAmount:number;mode:'test'|'live' }
+interface Status { mode:'test'|'live';enabled:boolean;isAdmin:boolean;plan:{amount:number;days:number};access:BetaTrialStatus;orders:Order[] }
 interface Usage {model:string;attempts:number;estimated_usd:number|null;unpriced_attempts:number}
 interface Report {since:string;sales:{gross_satang:number;refunded_satang:number};usage:Usage[];perUser:{user_id:string|null;attempts:number;estimated_usd:number|null;unpriced_attempts:number}[];orders:Record<string,unknown>[];trial:{started:number};buyers:{buyers:number};note:string}
 const baht = (satang:number) => (satang/100).toLocaleString('th-TH',{style:'currency',currency:'THB'});
@@ -70,11 +70,11 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
     const cell=(v:unknown)=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';
     const csv='\uFEFF'+[keys.join(','),...report.orders.map(o=>keys.map(k=>cell(o[k])).join(','))].join('\r\n');
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-    const anchor=document.createElement('a');anchor.href=url;anchor.download='deung-sati-test-orders.csv';anchor.click();URL.revokeObjectURL(url);
+    const anchor=document.createElement('a');anchor.href=url;anchor.download=`deung-sati-${status?.mode || 'disabled'}-orders.csv`;anchor.click();URL.revokeObjectURL(url);
   }
   return <dialog className="billing-dialog" ref={dialog} aria-labelledby="billing-title" onCancel={onClose}>
     <header><div><small>ดึงสติ · บัญชีของฉัน</small><h2 id="billing-title">สิทธิ์ใช้งานและการชำระเงิน</h2></div><button onClick={onClose} aria-label="ปิด">✕</button></header>
-    <p className="billing-test">โหมดทดสอบ · ไม่มีการเรียกเก็บเงินจริง</p>
+    {status?.mode === 'test' && <p className="billing-test">โหมดทดสอบ · ไม่มีการเรียกเก็บเงินจริง</p>}
     {error&&<p role="alert" className="billing-error">{error} <button disabled={busy} onClick={()=>void reload()}>ลองอีกครั้ง</button></p>}
     {!status&&!error&&<p role="status">กำลังโหลดสิทธิ์ใช้งาน…</p>}
     {status&&<>
@@ -84,13 +84,14 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
         <p>รีเซ็ตเที่ยงคืนเวลาไทย · ครั้งละไม่เกิน 4,000 ตัวอักษร · ข้อความที่ระบบตอบไม่สำเร็จไม่หักโควตา</p>
         <p>จ่ายเป็นครั้ง ๆ ไม่มีการต่ออายุหรือตัดเงินอัตโนมัติ</p>
         <p>{status.access.state==='not_started'?'ยังไม่ได้เริ่มทดลองฟรี 14 วัน':status.access.state==='expired'?'สิทธิ์แชทหมดแล้ว ยังย้อนอ่านประวัติได้':`สิทธิ์ปัจจุบันถึง ${date(status.access.expiresAt)} น. (เวลาไทย)`}</p>
+        <p>ขอคืนเงินหรือตรวจสอบรายการได้ที่ puksorn.gg@gmail.com การคืนเงินเต็มจำนวนจะยกเลิกช่วงสิทธิ์ของรายการนั้น และไม่เลื่อนช่วงสิทธิ์ของรายการอื่น</p>
         <p>ซื้อก่อนหมดอายุ: เพิ่มวันต่อจากสิทธิ์เดิม ซื้อหลังหมดอายุ: เริ่มเมื่อยืนยันยอดสำเร็จ</p>
-        <button className="billing-primary" disabled={!status.enabled||busy} onClick={()=>void checkout()}>{busy?'กำลังดำเนินการ…':'ทดสอบชำระด้วยพร้อมเพย์'}</button>
-        {!status.enabled&&<p className="billing-muted">ยังไม่เปิดขาย ขณะนี้เตรียมระบบและทดสอบเฉพาะบัญชีที่กำหนดไว้ ราคาและโควตาจะยืนยันก่อนเปิดขายจริง</p>}
+        <button className="billing-primary" disabled={!status.enabled||busy} onClick={()=>void checkout()}>{busy?'กำลังดำเนินการ…':status.mode === 'live' ? 'ชำระ 149 บาทด้วยพร้อมเพย์' : 'ทดสอบชำระด้วยพร้อมเพย์'}</button>
+        {!status.enabled&&<p className="billing-muted">ขณะนี้ระบบชำระเงินยังไม่พร้อม กรุณากลับมาตรวจสอบอีกครั้ง</p>}
       </section>
       <section><h3>ประวัติการชำระเงิน</h3><button disabled={busy} onClick={()=>void reload()}>อัปเดตข้อมูล</button>
         {!status.orders.length?<p className="billing-muted">ยังไม่มีรายการชำระเงิน</p>:<ul className="billing-orders">{status.orders.map(o=><li key={o.id}>
-          <div><strong>{baht(o.amount)} · {labels[o.status]||o.status}</strong><span className="billing-tag">ทดสอบ</span></div>
+          <div><strong>{baht(o.amount)} · {labels[o.status]||o.status}</strong>{o.mode === 'test' && <span className="billing-tag">ทดสอบ</span>}</div>
           <p>{date(o.createdAt)} · รายการ {o.id.slice(0,8)}</p>
           {o.expiresAt&&<p>ช่วงสิทธิ์: {date(o.startsAt)} – {date(o.expiresAt)}</p>}
           {o.refundedAmount>0&&<p>คืนเงินแล้ว {baht(o.refundedAmount)} {o.status==='refunded'?'· สิทธิ์จากรายการนี้ถูกยกเลิก':''}</p>}
@@ -100,11 +101,11 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
         <p className="billing-muted">ถ้าจ่ายแล้วแต่สิทธิ์ยังไม่ขึ้น ให้ตรวจสอบยอดอีกครั้งก่อนสร้างรายการใหม่ การกลับจากหน้าชำระเงินอย่างเดียวไม่ถือว่าจ่ายสำเร็จ</p>
       </section>
       {status.isAdmin&&<section><h3>หลังบ้านสำหรับผู้ดูแล</h3><button disabled={busy} onClick={()=>void loadReport()}>ดูรายงาน 30 วัน</button>
-        {report&&<><p>{report.note}</p><p>ยอดทดสอบ {baht(Number(report.sales.gross_satang))} · คืนเงิน {baht(Number(report.sales.refunded_satang))}</p>
-          <p>เริ่มทดลอง {report.trial.started} บัญชี · ผู้ซื้อทดสอบ {report.buyers.buyers} บัญชี (ไม่ใช่อัตราเปลี่ยนเป็นลูกค้าของกลุ่มเดียวกัน)</p>
+        {report&&<><p>{report.note}</p><p>{status.mode === 'live' ? 'ยอดชำระ' : 'ยอดทดสอบ'} {baht(Number(report.sales.gross_satang))} · คืนเงิน {baht(Number(report.sales.refunded_satang))}</p>
+          <p>เริ่มทดลอง {report.trial.started} บัญชี · ผู้ซื้อ {report.buyers.buyers} บัญชี (ไม่ใช่อัตราเปลี่ยนเป็นลูกค้าของกลุ่มเดียวกัน)</p>
           <div className="billing-table"><table><thead><tr><th>โมเดล</th><th>เรียกใช้</th><th>ต้นทุนที่ประเมินได้ USD</th><th>ยังไม่ทราบต้นทุน</th></tr></thead><tbody>{report.usage.map(u=><tr key={u.model}><td>{u.model}</td><td>{u.attempts}</td><td>{u.estimated_usd===null?'ยังไม่มีราคา':Number(u.estimated_usd).toFixed(4)}</td><td>{u.unpriced_attempts}</td></tr>)}</tbody></table></div>
           <details><summary>ต้นทุนแยกตามบัญชี (ไม่แสดงข้อความแชท)</summary>{report.perUser.map(u=><p key={u.user_id||'deleted'}>{u.user_id?.slice(0,8)||'บัญชีถูกลบ'} · {u.attempts} ครั้ง · {u.estimated_usd===null?'ยังไม่มีราคา':`$${Number(u.estimated_usd).toFixed(4)}`} · ยังไม่ทราบต้นทุน {u.unpriced_attempts} ครั้ง</p>)}</details>
-          <button onClick={exportOrders}>ดาวน์โหลดรายการทดสอบล่าสุด 100 รายการ (CSV)</button>
+          <button onClick={exportOrders}>ดาวน์โหลดรายการล่าสุด 100 รายการ (CSV)</button>
           <p className="billing-muted">ยอดเงินจริง ค่าธรรมเนียม และเงินโอนเข้าธนาคารต้องตรวจจากผู้ให้บริการหลังเปิดระบบจริง การคืนเงินทดสอบทำผ่าน Stripe Dashboard แล้วระบบจะรับสถานะกลับมา</p>
         </>}
       </section>}
