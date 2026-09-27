@@ -175,7 +175,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
     assert.equal((await chatAccessStatus(alice.id)).paymentMode,'live');
     assert.equal((await chatAccessStatus(alice.id)).quota?.limit,50);
     await reconcileOrder(paid,'evt_live_paid',false,liveProvider);
-    assert.equal((await ordersForUser(alice.id))[0].expires_at,paid.expires_at);
+    assert.equal(new Date((await ordersForUser(alice.id))[0].expires_at!).getTime(),new Date(paid.expires_at!).getTime());
     remoteIntent.livemode=false;await assert.rejects(reconcileOrder(paid,undefined,false,liveProvider));remoteIntent.livemode=true;
     await assert.rejects(applyPayment(snapshot(paid),null,'evt_wrong_mode'));
     remoteIntent.latest_charge.amount_refunded=5000;
@@ -199,6 +199,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
     setup();assert.deepEqual((await ordersForUser(alice.id)).map(o=>o.id),previousTestOrders);
   });
   await t.test('Postgres serializes concurrent purchases and duplicate delivery',{skip:!pgUrl},async()=>{
+    setup();
     const charlie=await signup('billing-c@example.test');process.env.BILLING_TEST_USER_IDS+=','+charlie.id;
     const one=await reserveOrder(charlie.id,now-2*3600000),two=await reserveOrder(charlie.id,now);
     await Promise.all([applyPayment(snapshot(one),null,'evt_concurrent_a',now),applyPayment(snapshot(two),null,'evt_concurrent_b',now)]);
