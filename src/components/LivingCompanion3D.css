@@ -18,8 +18,14 @@
 .axolotl-viewer-controls { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 4px; width: max-content; max-width: 100%; }
 .axolotl-viewer-controls .axolotl-front-button { position: static; transform: none; padding-inline: 6px; }
 .axolotl-front-button:disabled { opacity: 0.5; cursor: default; }
+.axolotl-viewer .companion-motion-toggle{position:absolute;z-index:4;top:4px;right:4px;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:40px;padding:8px 12px;border:1px solid #dcb4cb;border-radius:22px;background:linear-gradient(135deg,#fff5f9,#f8dce9);box-shadow:0 3px 10px #805b801a;color:#70415f;font:600 12px/1.25 'Noto Sans Thai',system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+.axolotl-viewer .companion-motion-toggle[aria-pressed=true]{color:#665277;border-color:#d7c6e5;background:#f4edf9;box-shadow:none}
+.axolotl-viewer .companion-motion-toggle:hover{border-color:#b983a2}
+.axolotl-viewer .companion-motion-toggle:active{transform:scale(.97)}
+.companion-motion-toggle:focus-visible{outline:3px solid #a881b8;outline-offset:2px}
 
 @media (max-width:459px) {
   .axolotl-viewer-controls { width:100%;flex-wrap:wrap;justify-content:center;gap:3px; }
   .axolotl-viewer-controls .axolotl-front-button { min-height:31px;padding:4px 6px; }
 }
+
