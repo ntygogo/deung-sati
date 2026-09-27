@@ -5,10 +5,10 @@ import { resolveCompanionAppearance } from '../shared/companionAppearance';
 const Model = lazy(() => import('./AxolotlWaterPreview').then(m => ({ default: m.AxolotlWaterPreview })));
 // This collection activates the corrected topology AND replacement gills.
 const CURRENT_APPEARANCE = collectionPreview(resolveCompanionAppearance(), 'flower');
-export function CurrentCompanion({ captureRef, controls = false }: { captureRef?: Ref<CompanionCaptureHandle>; controls?: boolean }) {
+export function CurrentCompanion({ captureRef, controls = false, paused = false, onReady }: { captureRef?: Ref<CompanionCaptureHandle>; controls?: boolean; paused?: boolean; onReady?: () => void }) {
   const [ready, setReady] = useState(false);
   return <div className="current-companion" data-model-version="corrected-gills-2026-09-26">
     {!ready && <img className="current-companion-poster" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ" />}
-    <Suspense fallback={null}><Model ref={captureRef} appearance={CURRENT_APPEARANCE} showControls={controls} autoGreet onReady={() => setReady(true)} /></Suspense>
+    <Suspense fallback={null}><Model ref={captureRef} appearance={CURRENT_APPEARANCE} showControls={controls} paused={paused} onReady={() => { setReady(true); onReady?.(); }} /></Suspense>
   </div>;
 }
