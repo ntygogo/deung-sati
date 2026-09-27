@@ -33,7 +33,17 @@ billingRouter.get('/status', async (req: AuthenticatedRequest,res) => {
 billingRouter.post('/checkout', async (req: AuthenticatedRequest,res) => {
   if (!billingConfigured() || !canTestBilling(req.userId!)) { res.status(503).json({error:'ยังไม่เปิดรับชำระเงินจริง ขณะนี้ทดสอบเฉพาะบัญชีที่กำหนดไว้'}); return; }
   try { res.json(await createCheckout(req.userId!)); }
-  catch { res.status(503).json({error:'ยังเปิดหน้าชำระเงินไม่ได้ กรุณาลองอีกครั้ง'}); }
+  catch (error) {
+    // Never log provider messages, headers, request bodies or credentials.
+    const e = error as { type?: string; code?: string; statusCode?: number; requestId?: string };
+    const safeToken = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(value) ? value : undefined;
+    console.error('[Billing] Checkout failed', {
+      type: safeToken(e?.type), code: safeToken(e?.code),
+      status: typeof e?.statusCode === 'number' ? e.statusCode : undefined,
+      requestId: typeof e?.requestId === 'string' && /^req_[A-Za-z0-9]+$/.test(e.requestId) ? e.requestId : undefined,
+    });
+    res.status(503).json({error:'ยังเปิดหน้าชำระเงินไม่ได้ กรุณาลองอีกครั้ง'});
+  }
 });
 billingRouter.post('/orders/:id/reconcile', async (req: AuthenticatedRequest,res) => {
   if (!billingConfigured() || !canTestBilling(req.userId!)) { res.status(503).json({error:'ระบบทดสอบยังไม่พร้อม'}); return; }
