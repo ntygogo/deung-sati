@@ -28,6 +28,18 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
   const [report,setReport]=useState<Report|null>(null);
+  const [confirmationOrderId,setConfirmationOrderId]=useState<string|null>(()=>{
+    const params=new URLSearchParams(window.location.search);
+    return params.get('billing')==='return' ? params.get('order') : null;
+  });
+  const confirmedOrder=status?.orders.find(o=>o.id===confirmationOrderId && o.status==='paid' && o.refundedAmount===0
+    && o.startsAt && o.expiresAt && Number.isFinite(Date.parse(o.startsAt)) && Number.isFinite(Date.parse(o.expiresAt)));
+  function dismissConfirmation(){
+    setConfirmationOrderId(null);
+    const url=new URL(window.location.href);
+    url.searchParams.delete('billing');url.searchParams.delete('order');
+    window.history.replaceState({},'',url);
+  }
   const {refresh}=useBetaTrial();
   useEffect(()=>{ dialog.current?.showModal(); },[]);
   useEffect(()=>{
@@ -62,7 +74,7 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
       window.location.assign(url.href);
     }catch(e){setError((e as Error).message);setBusy(false);}
   }
-  async function reconcile(id:string){setBusy(true);try{await api('/orders/'+id+'/reconcile','POST');await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function reconcile(id:string){setConfirmationOrderId(id);setBusy(true);try{await api('/orders/'+id+'/reconcile','POST');await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function loadReport(){setBusy(true);try{setReport(await api<Report>('/admin/report'));setError('');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   function exportOrders(){
     if(!report)return;
@@ -73,7 +85,21 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
     const anchor=document.createElement('a');anchor.href=url;anchor.download=`deung-sati-${status?.mode || 'disabled'}-orders.csv`;anchor.click();URL.revokeObjectURL(url);
   }
   return <dialog className="billing-dialog" ref={dialog} aria-labelledby="billing-title" onCancel={onClose}>
-    <header><div><small>ดึงสติ · บัญชีของฉัน</small><h2 id="billing-title">สิทธิ์ใช้งานและการชำระเงิน</h2></div><button onClick={onClose} aria-label="ปิด">✕</button></header>
+    <header><div><small>ดึงสติ · บัญชีของฉัน</small><h2 id="billing-title">{confirmedOrder?'ชำระเงินสำเร็จแล้ว':'สิทธิ์ใช้งานและการชำระเงิน'}</h2></div><button onClick={onClose} aria-label="ปิด">✕</button></header>
+    {confirmedOrder ? <section className="billing-plan" aria-live="polite" aria-atomic="true">
+      <p style={{fontSize:'2.5rem',margin:'0',color:'#365b45'}} aria-hidden="true">✓</p>
+      <h3>{confirmedOrder.mode==='test'?'ยืนยันการชำระเงินทดสอบแล้ว':'ได้รับชำระเงินแล้ว ขอบคุณนะ'}</h3>
+      <p className="billing-price">{baht(confirmedOrder.amount)}</p>
+      <p>เพิ่มสิทธิ์แชท 30 วันให้บัญชีนี้แล้ว</p>
+      <dl>
+        <dt>วันเริ่มสิทธิ์ของรายการนี้</dt><dd style={{margin:'4px 0 16px',fontWeight:600}}>{date(confirmedOrder.startsAt)} น.</dd>
+        <dt>วันสิ้นสุดสิทธิ์ของรายการนี้</dt><dd style={{margin:'4px 0 16px',fontWeight:600}}>{date(confirmedOrder.expiresAt)} น.</dd>
+      </dl>
+      <p className="billing-muted">เวลาไทย · หากมีสิทธิ์เดิมเหลืออยู่ ระบบต่อเพิ่มให้จากวันสิ้นสุดเดิม</p>
+      <p>จ่ายครั้งเดียว ไม่มีการตัดเงินหรือต่ออายุอัตโนมัติ</p>
+      <button className="billing-primary" onClick={()=>{dismissConfirmation();onClose();}}>รับทราบ กลับไปใช้งาน</button>
+      <button style={{width:'100%',marginTop:10}} onClick={dismissConfirmation}>ดูประวัติการชำระเงิน</button>
+    </section> : <>
     {status?.mode === 'test' && <p className="billing-test">โหมดทดสอบ · ไม่มีการเรียกเก็บเงินจริง</p>}
     {error&&<p role="alert" className="billing-error">{error} <button disabled={busy} onClick={()=>void reload()}>ลองอีกครั้ง</button></p>}
     {!status&&!error&&<p role="status">กำลังโหลดสิทธิ์ใช้งาน…</p>}
@@ -110,6 +136,7 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
         </>}
       </section>}
     </>}
+    </>}
   </dialog>;
 }
 export function BillingReturn(){
@@ -117,4 +144,3 @@ export function BillingReturn(){
   function close(){const url=new URL(window.location.href);url.searchParams.delete('billing');url.searchParams.delete('order');window.history.replaceState({},'',url);setOpen(false);}
   return <SubscriptionModal isOpen={open} onClose={close}/>;
 }
-
