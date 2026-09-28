@@ -51,3 +51,10 @@ body {background:linear-gradient(145deg,#e7d9e7,#f7e7dd)!important;color:#51445e
 .beta-home>.beta-trial-notice{margin:18px 24px}.beta-app button:disabled{cursor:not-allowed;opacity:.55}
 .beta-app button:focus-visible,.auth-modal-card button:focus-visible{outline:3px solid #805b80;outline-offset:3px}
 @media(max-width:480px){.beta-app .phone{border:0;border-radius:0}.beta-app{padding:0}}
+
+
+/* Keep account details one tap away without taking over the conversation. */
+.beta-access-strip{flex-shrink:0;margin:0;padding:0 16px;background:#f4eaf2;border-bottom:1px solid #e6d7e4;color:#795d7d;font-size:11px;line-height:1.4}
+.beta-access-strip>button{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;padding:6px 0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.beta-access-strip>span{display:block;padding:8px 0}.beta-access-label{font-weight:600;white-space:nowrap}.beta-access-quota{color:#927e95;white-space:nowrap}.beta-access-more{margin-left:auto;color:#86608e;white-space:nowrap}.beta-access-strip[data-expired=true]{background:#f6e7eb;color:#9a627d}.beta-access-strip>button:focus-visible{outline:2px solid #af8fbc;outline-offset:-2px;border-radius:7px}
+@media(max-width:350px){.beta-access-strip{padding:0 10px;font-size:10px}.beta-access-strip>button{gap:6px}}

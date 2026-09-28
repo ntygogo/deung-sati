@@ -1633,7 +1633,7 @@ function ChatScreen({
         onOpenMenu={onOpenMenu}
       />
 
-      <BetaTrialNotice />
+      <BetaTrialNotice compact />
       <div className="beta-chat-tools" style={{ padding: '8px 16px', fontSize: 12, background: '#faf6fc', color: '#51375f' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button onClick={onOpenSaved} disabled={debugInfo.isLoading}>ลูปที่บันทึก</button>
@@ -4896,5 +4896,6 @@ button {
   }
 }
 `;
+
 
 

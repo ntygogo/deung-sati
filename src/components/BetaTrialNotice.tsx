@@ -1,10 +1,18 @@
 import { SubscriptionModal } from './SubscriptionModal';
 import { useState } from 'react';
 import { useBetaTrial } from '../context/BetaTrialContext';
-export function BetaTrialNotice(){
+export function BetaTrialNotice({compact=false}:{compact?:boolean}){
   const {trial,error,refresh,expressInterest}=useBetaTrial();
   const [busy,setBusy]=useState(false);
   const [billingOpen,setBillingOpen]=useState(false);
+  if(compact) return <aside className="beta-access-strip" data-expired={trial?.state==='expired'}>
+    {error ? <button onClick={()=>void refresh()} aria-label="ตรวจสอบสิทธิ์อีกครั้ง">ตรวจสอบสิทธิ์ไม่สำเร็จ · ลองอีกครั้ง ↻</button> : !trial ? <span role="status">กำลังตรวจสอบสิทธิ์…</span> : <button onClick={()=>setBillingOpen(true)} aria-label="ดูรายละเอียดสิทธิ์ใช้งานและการชำระเงิน">
+      <span className="beta-access-label">{trial.state==='expired'?'สิทธิ์แชทหมดแล้ว':trial.state==='not_started'?'ทดลองฟรี 14 วัน':`เหลือ ${trial.daysRemaining} วัน`}</span>
+      {trial.quota && trial.state!=='expired' && <span className="beta-access-quota">วันนี้ {trial.quota.remaining}/{trial.quota.limit} ข้อความ</span>}
+      <span className="beta-access-more">ดูสิทธิ์ ›</span>
+    </button>}
+    <SubscriptionModal isOpen={billingOpen} onClose={()=>setBillingOpen(false)}/>
+  </aside>;
   if(error)return <aside className="beta-trial-notice" role="alert">{error} <button onClick={()=>void refresh()}>ลองอีกครั้ง</button></aside>;
   if(!trial)return <aside className="beta-trial-notice" role="status">กำลังตรวจสอบสิทธิ์ทดลอง…</aside>;
   const until=trial.expiresAt?new Date(trial.expiresAt).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
@@ -17,5 +25,6 @@ export function BetaTrialNotice(){
     <SubscriptionModal isOpen={billingOpen} onClose={()=>setBillingOpen(false)}/>
   </aside>;
 }
+
 
 
