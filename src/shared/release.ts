@@ -5,6 +5,7 @@ export function betaScreenAllowed(screen: string): boolean {
 }
 export function betaEndpointBlocked(path: string, method: string): boolean {
   if (!CHAT_ONLY_BETA) return false;
-  return /^\/(user\/future-self|notebook|missions)(\/|$)/.test(path)
+  return /^\/(user\/future-self|missions)(\/|$)/.test(path)
     || (method !== 'GET' && /^\/(companion|wallet)(\/|$)/.test(path));
 }
+

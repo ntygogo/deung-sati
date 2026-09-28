@@ -16,6 +16,7 @@ current renderer. The current user-approved profile is
 `public/images/deung-sati-selfie.webp` (uploaded 27 Sep 2026). Preserve it unless
 requested to change it. Do not regenerate from obsolete references.
 
-Chat beta remains chat-only; model display must not grant XP, hatch pets, or
+Phase 1 includes chat and the account-synced notebook. Phase 2 is a Coming Soon page only; model display and notebook writes must not grant XP, hatch pets, or
 mutate stored companion DNA. The reference page contains public artwork only,
 no account/session data and no auth bypass into the application.
+
