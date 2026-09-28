@@ -14,6 +14,7 @@ export interface GrowthDnaProps {
 }
 
 interface CompanionRendererProps {
+  previewLabel?: string;
   stage: number; // 0 = Egg, 1 = Hatchling, 2 = Adolescent, 3 = Mature
   traceCount?: number; // 0 to 20+
   dna?: GrowthDnaProps | null;
@@ -25,6 +26,7 @@ interface CompanionRendererProps {
 
 export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
   stage,
+  previewLabel,
   traceCount = 0,
   dna,
   moodState: _moodState = 'calm',
@@ -136,7 +138,8 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
         }}
         role="button"
         tabIndex={0}
-        aria-label={`ไข่แห่งการรู้ตัว ความคืบหน้า ${progress} จาก 20 Loop Traces`}
+        onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.currentTarget.click();}}}
+        aria-label={previewLabel || `ไข่แห่งการรู้ตัว ความคืบหน้า ${progress} จาก 20 Loop Traces`}
       >
         <style>{`
           @keyframes embryoBreathe {
@@ -724,3 +727,4 @@ export const CompanionRenderer: React.FC<CompanionRendererProps> = ({
     </div>
   );
 };
+

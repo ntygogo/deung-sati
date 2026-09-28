@@ -5,6 +5,7 @@
 
 export type Screen =
   | 'home'
+  | 'phase2'
   | 'pause'
   | 'chat'
   | 'beforeSpeak'
@@ -186,3 +187,4 @@ export interface SafetyClassificationResult {
   reason: string;
   confidence: number;
 }
+

@@ -1,3 +1,4 @@
+import { PhaseTwo } from './components/PhaseTwo';
 import { useBetaTrial } from './context/BetaTrialContext';
 import { BetaTrialNotice } from './components/BetaTrialNotice';
 import { CHAT_ONLY_BETA, betaScreenAllowed } from './shared/release';
@@ -241,6 +242,9 @@ const BottomNav = ({
         icon="chat"
         onClick={() => setScreen("chat")}
       />
+      {CHAT_ONLY_BETA && <button className={`navItem phase-nav ${screen === 'phase2' ? 'navActive' : ''}`} onClick={()=>setScreen('phase2')} aria-label="เฟส 2 Coming soon" aria-current={screen === 'phase2' ? 'page' : undefined}>
+        <div className="navIconWrap"><SvgIcon name="egg" size={24} stroke="#96769e"/><i className="phase-nav-spark" aria-hidden="true"/></div><span>Coming soon</span>
+      </button>}
       {!CHAT_ONLY_BETA && <><NavItem
         active={screen === "companion"}
         label={eggLabel}
@@ -609,6 +613,8 @@ export default function App() {
             onOpenMenu={() => setIsDrawerOpen(true)}
           />
         )}
+
+        {screen === "phase2" && <PhaseTwo onClose={()=>setScreen("home")}/>}
 
         {screen === "profile" && (
           <FutureSelf onBack={() => setScreen('home')} onChat={text => void handleFutureChat(text)} />
@@ -4890,4 +4896,5 @@ button {
   }
 }
 `;
+
 
