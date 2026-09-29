@@ -32,19 +32,19 @@ await test('daily quota, reservations and bounded input', async t => {
       const id = await reserveChat(user, 'failed-first', false, now);
       await assert.rejects(reserveChat(user, 'other-device', false, tick()), {code:'CHAT_IN_PROGRESS'});
       await settleChat(id, false);
-      assert.equal((await quotaStatus(user, false, now)).remaining, 15);
+      assert.equal((await quotaStatus(user, false, now)).remaining, 30);
       await assert.rejects(reserveChat(user, 'failed-first', false, tick()), {code:'CHAT_REQUEST_DUPLICATE'});
     });
-    await t.test('trial allows exactly 15 successful responses; paid upgrade allows 50 total', async () => {
-      for (let i=0;i<15;i++) await settleChat(await reserveChat(user, `trial-${i}`, false, tick()), true);
+    await t.test('trial allows exactly 30 successful responses; paid upgrade allows 50 total', async () => {
+      for (let i=0;i<30;i++) await settleChat(await reserveChat(user, `trial-${i}`, false, tick()), true);
       assert.equal((await quotaStatus(user, false, now)).remaining, 0);
       await assert.rejects(reserveChat(user, 'trial-blocked', false, tick()), {code:'CHAT_QUOTA_EXHAUSTED'});
-      assert.equal((await quotaStatus(user, true, now)).remaining, 35);
-      for (let i=15;i<50;i++) await settleChat(await reserveChat(user, `paid-${i}`, true, tick()), true);
+      assert.equal((await quotaStatus(user, true, now)).remaining, 20);
+      for (let i=30;i<50;i++) await settleChat(await reserveChat(user, `paid-${i}`, true, tick()), true);
       await assert.rejects(reserveChat(user, 'paid-blocked', true, tick()), {code:'CHAT_QUOTA_EXHAUSTED'});
       assert.equal((await quotaStatus(user, true, now)).used, 50);
       now=Date.parse('2026-09-27T17:00:00Z');
-      assert.equal((await quotaStatus(user, false, now)).remaining,15);
+      assert.equal((await quotaStatus(user, false, now)).remaining,30);
     });
     await t.test('abandoned requests expire and cannot later consume or deliver another answer', async () => {
       const old=await reserveChat(user,'abandoned',false,tick());
