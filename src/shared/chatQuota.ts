@@ -1,4 +1,4 @@
-export const CHAT_LIMITS = { trial: 15, paid: 50, messageChars: 4000, contextChars: 16000 } as const;
+export const CHAT_LIMITS = { trial: 30, paid: 50, messageChars: 4000, contextChars: 16000 } as const;
 export interface ChatQuotaStatus {
   limit: number;
   used: number;
