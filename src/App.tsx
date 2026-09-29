@@ -450,6 +450,13 @@ export default function App() {
   const [activeExerciseModal, setActiveExerciseModal] = useState<ExerciseId | null>(null);
 
   const chats = useConversations(traces);
+  // A confirmed loop makes its source conversation read-only. Move the main
+  // chat to a fresh conversation so the composer remains usable; the saved
+  // loop and its history are still available from the archive.
+  useEffect(() => {
+    if (!chats.ready || !chats.locked) return;
+    void chats.startNew().catch(() => undefined);
+  }, [chats.ready, chats.locked, chats.active.id]);
   const chatMessages = chats.active.messages;
   const setChatMessages = chats.setMessages;
   const chatContext = { id: chats.active.id, pastContext: chats.pastContext };
@@ -4895,4 +4902,3 @@ button {
   }
 }
 `;
-
