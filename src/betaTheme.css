@@ -58,3 +58,24 @@ body {background:linear-gradient(145deg,#e7d9e7,#f7e7dd)!important;color:#51445e
 .beta-access-strip>button{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;padding:6px 0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .beta-access-strip>span{display:block;padding:8px 0}.beta-access-label{font-weight:600;white-space:nowrap}.beta-access-quota{color:#927e95;white-space:nowrap}.beta-access-more{margin-left:auto;color:#86608e;white-space:nowrap}.beta-access-strip[data-expired=true]{background:#f6e7eb;color:#9a627d}.beta-access-strip>button:focus-visible{outline:2px solid #af8fbc;outline-offset:-2px;border-radius:7px}
 @media(max-width:350px){.beta-access-strip{padding:0 10px;font-size:10px}.beta-access-strip>button{gap:6px}}
+
+/* Give the conversation the screen while the mobile keyboard is open. */
+@media (max-width: 600px) {
+  .beta-app .phone:has(.chatScreen .composer input:focus) .beta-access-strip,
+  .beta-app .phone:has(.chatScreen .composer input:focus) .beta-chat-tools,
+  .beta-app .phone:has(.chatScreen .composer input:focus) .chat-journey-bar,
+  .beta-app .phone:has(.chatScreen .composer input:focus) .chat-loop-status,
+  .beta-app .phone:has(.chatScreen .composer input:focus) .bottomNav {
+    display: none !important;
+  }
+  .beta-app .chatScreen:has(.composer input:focus) .chatBody {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    padding-bottom: 76px;
+    scroll-padding-bottom: 76px;
+  }
+  .beta-app .chatScreen:has(.composer input:focus) .composer {
+    bottom: 10px;
+  }
+}
