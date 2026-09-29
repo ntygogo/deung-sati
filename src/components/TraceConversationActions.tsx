@@ -21,9 +21,9 @@ export function TraceConversationActions({ trace, history, resume, remove, isGue
     <p style={{ marginTop: 0 }}>กลับมาคุยเรื่องนี้ได้เสมอ</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       <button style={buttonStyle} disabled={loading || !!error || !hasHistory} onClick={() => setReading(true)}>อ่านแชทเดิม</button>
-      <button style={buttonStyle} disabled={loading || !!error} onClick={async () => {
+      {!hasHistory && <button style={buttonStyle} disabled={loading || !!error} onClick={async () => {
         setLoading(true); try { await resume(trace); } catch { setError('เปิดแชทไม่สำเร็จ ลองอีกครั้งได้'); } finally { setLoading(false); }
-      }}>{loading ? 'กำลังเปิด...' : hasHistory ? 'คุยเรื่องนี้ต่อ' : 'เริ่มคุยจากลูปนี้'}</button>
+      }}>{loading ? 'กำลังเปิด...' : 'เริ่มคุยจากลูปนี้'}</button>}
     </div>
     {!loading && !error && !hasHistory && <p>ยังไม่มีประวัติแชทของลูปนี้ เริ่มคุยจากสรุปที่บันทึกไว้ได้</p>}
     {isGuest && <p style={{ fontSize: 12 }}>โหมดทดลอง: ประวัติแชทเก็บในเบราว์เซอร์นี้เท่านั้น</p>}
@@ -37,7 +37,13 @@ export function TraceConversationActions({ trace, history, resume, remove, isGue
           {doc.messages.map(m => <div key={`${i}-${m.id}`} style={{ margin: '12px 0', marginLeft: m.role === 'user' ? 32 : 0, padding: 16, background: m.role === 'user' ? '#e3eadc' : '#fff', borderRadius: 20, whiteSpace: 'pre-wrap' }}><small>{m.role === 'user' ? 'คุณ' : 'เพื่อนร่วมทาง'}</small><p>{m.text}</p></div>)}
         </section>)}
       </div>
-      {confirmDelete ? <div><p>ลบแชททั้งหมดที่เชื่อมกับลูปนี้? สรุปลูปยังอยู่ แต่กู้ข้อความที่ลบไม่ได้</p><button style={buttonStyle} onClick={async () => { setLoading(true); try { await remove(trace); setReading(false); setConfirmDelete(false); await load(); } catch { setError('ลบไม่สำเร็จ ลองใหม่อีกครั้ง'); } finally { setLoading(false); } }} disabled={loading}>ยืนยันลบประวัติ</button> <button style={buttonStyle} onClick={() => setConfirmDelete(false)}>เก็บไว้</button></div> : <button style={buttonStyle} onClick={() => setConfirmDelete(true)}>ลบประวัติแชทของลูปนี้</button>}
+      {error && <p role="alert">{error}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button style={buttonStyle} disabled={loading} onClick={async () => {
+          setLoading(true); try { await resume(trace); } catch { setError('เปิดแชทไม่สำเร็จ ลองอีกครั้งได้'); } finally { setLoading(false); }
+        }}>{loading ? 'กำลังเปิด...' : 'คุยเรื่องนี้ต่อ'}</button>
+        {confirmDelete ? <div><p>ลบแชททั้งหมดที่เชื่อมกับลูปนี้? สรุปลูปยังอยู่ แต่กู้ข้อความที่ลบไม่ได้</p><button style={buttonStyle} onClick={async () => { setLoading(true); try { await remove(trace); setReading(false); setConfirmDelete(false); await load(); } catch { setError('ลบไม่สำเร็จ ลองใหม่อีกครั้ง'); } finally { setLoading(false); } }} disabled={loading}>ยืนยันลบประวัติ</button> <button style={buttonStyle} onClick={() => setConfirmDelete(false)}>เก็บไว้</button></div> : <button style={buttonStyle} onClick={() => setConfirmDelete(true)}>ลบประวัติแชทของลูปนี้</button>}
+      </div>
     </div>}
   </section>;
 }
