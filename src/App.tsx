@@ -574,7 +574,6 @@ export default function App() {
             pastContext={chats.pastContext}
             beforeSave={chats.flush}
             disabled={!canChat || !chats.ready || chats.locked}
-            onContinue={() => resumeTrace(chats.sourceTrace)}
             onOpenSaved={() => setShowSavedLoops(true)}
             onNewChat={() => { if(canChat) void chats.startNew().catch(() => undefined); }}
             onHistory={async () => { try { await chats.flush(); setRecentChats(await chats.listAll()); } catch {} }}
@@ -1173,7 +1172,7 @@ function PauseScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // REAL Interactive Chat Screen
 function ChatScreen({
-  conversationId, trace, continuation, pastContext, beforeSave, disabled, onContinue,
+  conversationId, trace, continuation, pastContext, beforeSave, disabled,
   onOpenSaved, onNewChat, onHistory, onReload, storageError, isGuest,
   setScreen,
   messages,
@@ -1184,7 +1183,7 @@ function ChatScreen({
   onOpenMenu,
 }: {
   conversationId: string; trace?: any; continuation: boolean; pastContext?: string;
-  beforeSave: () => Promise<void>; disabled: boolean; onContinue: () => Promise<void>;
+  beforeSave: () => Promise<void>; disabled: boolean;
   onOpenSaved: () => void; onNewChat: () => void; onHistory: () => void; onReload: () => void;
   storageError: string; isGuest: boolean;
   setScreen: (s: Screen) => void;
@@ -1641,13 +1640,13 @@ function ChatScreen({
           <button onClick={onNewChat} disabled={debugInfo.isLoading || !trialCanChat || disabled && !trace}>เริ่มเรื่องใหม่</button>
         </div>
         {trace && <p>{continuation ? 'คุยต่อจากลูป' : 'ลูปเดิม'}: {trace.title} · {new Date(trace.created_at).toLocaleDateString('th-TH')}</p>}
-        {trialCanChat && disabled && trace && <button onClick={() => void onContinue().catch(() => undefined)}>คุยเรื่องนี้ต่อ</button>}
         {isGuest && <div>ประวัติแชทเก็บในเบราว์เซอร์นี้เท่านั้น</div>}
         {storageError && <div role="alert">{storageError} <button onClick={() => void beforeSave().catch(() => undefined)}>ลองเก็บแชทอีกครั้ง</button> <button onClick={onReload}>เปิดข้อมูลล่าสุดแทนแชทในหน้านี้</button></div>}
         {continuationNotice && <p role="status">{continuationNotice}</p>}
       </div>
       {/* 4-Step Chat Journey Path Bar (Decluttered Single Line) */}
       <div
+        className="chat-journey-bar"
         style={{
           display: activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review' ? 'none' : 'flex',
           flexDirection: "column",
@@ -1740,7 +1739,7 @@ function ChatScreen({
       </div>
 
       {(activeLoopGuide?.mode === 'guided' || activeLoopGuide?.mode === 'review') && (
-        <div role="status" style={{ padding: '8px 16px', background: '#FFF7FA', color: '#9D174D', fontSize: '12px' }}>
+        <div className="chat-loop-status" role="status" style={{ padding: '8px 16px', background: '#FFF7FA', color: '#9D174D', fontSize: '12px' }}>
           รายละเอียดที่เห็นแล้ว {LOOP_CHAT_FIELDS.filter(key => activeLoopGuide.fields[key]).length}/8 ส่วน
           <span> · ตอบเท่าที่พร้อม ไม่ต้องครบวันนี้</span>
           <button type="button" onClick={handleOpenLoopReview} style={{ display: 'block', marginTop: '6px', padding: '4px 10px', border: '1px solid #FDA4AF', borderRadius: '999px', background: 'white', color: '#9D174D', cursor: 'pointer' }}>
@@ -4896,6 +4895,4 @@ button {
   }
 }
 `;
-
-
 
