@@ -1,3 +1,4 @@
+import { ROOM_WEATHERS, type RoomWeather } from '../shared/roomProgress';
 import React, { useState } from 'react';
 import { useCompanion } from '../context/CompanionContext';
 import { CompanionRenderer } from './CompanionRenderer';
@@ -17,6 +18,7 @@ export const ConversationalOnboarding: React.FC<ConversationalOnboardingProps> =
   const [step, setStep] = useState<number>(initialStep);
   const [toneStyle, setToneStyle] = useState<string>('gentle');
   const [focusArea, setFocusArea] = useState<string>('anxiety');
+  const [weather, setWeather] = useState<RoomWeather>('sunny');
   const [safeSpace, setSafeSpace] = useState<string>('moonlit_pond');
   const [companionName, setCompanionName] = useState<string>(() => companion?.name || 'น้องดึงสติ');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -29,6 +31,7 @@ export const ConversationalOnboarding: React.FC<ConversationalOnboardingProps> =
         toneStyle,
         focusArea,
         safeSpace,
+        weather,
         companionName,
       });
       setCreatedDnaPreview(created.dna);
@@ -300,6 +303,7 @@ export const ConversationalOnboarding: React.FC<ConversationalOnboardingProps> =
               ห้องพักผ่อนสำหรับเลี้ยงดูมาสคอตและพักใจของคุณ
             </p>
 
+            <fieldset style={{border:0, marginBottom:20}}><legend>อากาศที่อยากอยู่ด้วย</legend>{ROOM_WEATHERS.map(w => <button type="button" key={w} aria-pressed={weather===w} onClick={()=>setWeather(w)} style={{padding:10,margin:4,borderRadius:14,background:weather===w?'#d7e8d5':'#fff'}}>{{sunny:'แดดอ่อน',rain:'ฝนพรำ',mist:'หมอก',snow:'หิมะ'}[w]}</button>)}</fieldset>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
               {[
                 {

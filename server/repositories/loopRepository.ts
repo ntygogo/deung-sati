@@ -1,3 +1,5 @@
+import { RoomRepository } from './roomRepository.js';
+import { growthLevel, roomUnlocks } from '../../src/shared/roomProgress.js';
 import crypto from 'crypto';
 import { ConversationRepository } from './conversationRepository.js';
 import { db } from '../db/database.js';
@@ -398,7 +400,11 @@ export class LoopRepository {
       data.idempotencyKey = `growth_${traceId}`;
     }
 
+    await RoomRepository.ensureReady(this.adapter);
     return await this.adapter.transaction(async (tx) => {
+      // Serialize all growth for this account, including wallet totals and hatch.
+      await tx.queryOne('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+      const beforeWallet = await tx.queryOne<any>('SELECT xp FROM wallets WHERE user_id = $1', [userId]);
       // 1. Check ownership of Loop Trace
       const trace = await tx.queryOne<LoopTraceRecord>(
         'SELECT * FROM loop_traces WHERE id = $1 AND user_id = $2',
@@ -434,8 +440,8 @@ export class LoopRepository {
 
       // 2. Check existing Growth Event (Idempotent return)
       const existing = await tx.queryOne<CompletedLoopRecord>(
-        'SELECT * FROM completed_loops WHERE loop_trace_id = $1 OR idempotency_key = $2',
-        [data.loopTraceId, data.idempotencyKey]
+        'SELECT * FROM completed_loops WHERE user_id = $1 AND (loop_trace_id = $2 OR idempotency_key = $3)',
+        [userId, data.loopTraceId, data.idempotencyKey]
       );
       if (existing) {
         const countRow = await tx.queryOne<{ count: number | string }>(
@@ -474,22 +480,23 @@ export class LoopRepository {
       }
 
       // 3. Normalized skills (each 0 or 1 only)
-      const ea = data.skills?.emotional_awareness ? 1 : 0;
-      const sa = data.skills?.somatic_awareness ? 1 : 0;
-      const cc = data.skills?.cognitive_clarity ? 1 : 0;
-      const ca = data.skills?.conscious_action ? 1 : 0;
+      const contributes = !data.isReview && !data.isCrisis;
+      const ea = contributes && data.skills?.emotional_awareness ? 1 : 0;
+      const sa = contributes && data.skills?.somatic_awareness ? 1 : 0;
+      const cc = contributes && data.skills?.cognitive_clarity ? 1 : 0;
+      const ca = contributes && data.skills?.conscious_action ? 1 : 0;
 
       const isReviewOnly = Boolean(data.isReview);
       const isCrisis = Boolean(data.isCrisis);
-      const progressCounted = !isReviewOnly;
+      const progressCounted = !isReviewOnly && !isCrisis;
 
       // Rewards: +15 EXP, +10 Shells per spec with 5-loop daily cap
       let rewardXp = 0;
       let rewardShells = 0;
       let dailyRewardCapped = false;
       if (!isCrisis && !isReviewOnly) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        const day = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+        const todayStart = new Date(`${day}T00:00:00+07:00`);
         const todayTxCount = await tx.queryOne<{ count: number | string }>(
           `SELECT COUNT(DISTINCT event_id) as count FROM currency_transactions
            WHERE user_id = $1 AND event_type = 'growth_event_reward' AND currency = 'xp' AND created_at >= $2`,
@@ -681,6 +688,21 @@ export class LoopRepository {
         walletRecord = { xp: mXp, level: currentWallet?.level || 1, shells: mShells, memory_crystals: currentWallet?.memory_crystals || 0 };
         companion = await tx.queryOne<any>('SELECT * FROM companions WHERE user_id = $1', [userId]);
       }
+
+      const totalXp = Number(beforeWallet?.xp || 0) + rewardXp + (hatchMilestoneReward?.xp || 0);
+      const level = growthLevel(totalXp);
+      await tx.execute('UPDATE wallets SET level = $1 WHERE user_id = $2', [level, userId]);
+      if (walletRecord) walletRecord.level = level;
+      const roomBond = newlyHatched ? await tx.queryOne<any>('SELECT bond FROM companion_rooms WHERE user_id = $1', [userId]) : null;
+      if (progressCounted) await RoomRepository.enqueue(tx, userId, {
+        id: `growth_${loopId}`, kind: 'growth', payload: {
+          xp: rewardXp + (hatchMilestoneReward?.xp || 0), progress: progressCount,
+          previousProgress: progressCount - 1, level,
+          levelUp: level > growthLevel(Number(beforeWallet?.xp || 0)), hatched: newlyHatched,
+          unlocks: newlyHatched ? roomUnlocks(0, roomBond?.bond || 0) : [],
+          skills: { emotional_awareness: ea, somatic_awareness: sa, cognitive_clarity: cc, conscious_action: ca }
+        }
+      });
 
       const growthEvent = (await tx.queryOne<CompletedLoopRecord>(
         'SELECT * FROM completed_loops WHERE id = $1',

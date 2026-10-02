@@ -1,7 +1,7 @@
 import { PhaseTwo } from './components/PhaseTwo';
 import { useBetaTrial } from './context/BetaTrialContext';
 import { BetaTrialNotice } from './components/BetaTrialNotice';
-import { CHAT_ONLY_BETA, betaScreenAllowed } from './shared/release';
+import { COMPANION_ROOM_ENABLED, CHAT_ONLY_BETA, betaScreenAllowed } from './shared/release';
 import { ChatBetaHome } from './components/ChatBetaHome';
 import { authHeaders } from './utils/authHeaders';
 import React, { useEffect, useRef, useState } from "react";
@@ -30,7 +30,7 @@ import {
   FutureSelfCard,
 } from "./components/HomeComponents";
 import { playDeepTibetanSingingBowl } from "./utils/tibetanBowlAudio";
-import { CompanionRoom } from "./components/CompanionRoom";
+import { RoomExperience } from "./components/RoomExperience";
 import { ConversationalOnboarding } from "./components/ConversationalOnboarding";
 import { useCompanion } from "./context/CompanionContext";
 import { LoopReviewCard } from "./components/LoopReviewCard";
@@ -242,8 +242,8 @@ const BottomNav = ({
         icon="chat"
         onClick={() => setScreen("chat")}
       />
-      {CHAT_ONLY_BETA && <button className={`navItem phase-nav ${screen === 'phase2' ? 'navActive' : ''}`} onClick={()=>setScreen('phase2')} aria-label="เฟส 2 Coming soon" aria-current={screen === 'phase2' ? 'page' : undefined}>
-        <div className="navIconWrap"><SvgIcon name="egg" size={24} stroke="#96769e"/><i className="phase-nav-spark" aria-hidden="true"/></div><span>Coming soon</span>
+      {CHAT_ONLY_BETA && <button className={`navItem phase-nav ${(screen === 'phase2' || screen === 'companion') ? 'navActive' : ''}`} onClick={()=>setScreen(COMPANION_ROOM_ENABLED ? 'companion' : 'phase2')} aria-label={COMPANION_ROOM_ENABLED ? 'ห้องน้อง' : 'เฟส 2 Coming soon'} aria-current={(screen === 'phase2' || screen === 'companion') ? 'page' : undefined}>
+        <div className="navIconWrap"><SvgIcon name="egg" size={24} stroke="#96769e"/><i className="phase-nav-spark" aria-hidden="true"/></div><span>{COMPANION_ROOM_ENABLED ? 'ห้องน้อง' : 'Coming soon'}</span>
       </button>}
       {!CHAT_ONLY_BETA && <><NavItem
         active={screen === "companion"}
@@ -531,7 +531,7 @@ export default function App() {
         {isDebugMode && <DevDebugPanel debugInfo={debugInfo} />}
 
         {/* Conversational Onboarding if new user or pending reveal (Decoupled lifecycle) */}
-        {!CHAT_ONLY_BETA && (onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
+        {(!CHAT_ONLY_BETA || COMPANION_ROOM_ENABLED) && (onboardingLifecycle === "active" || onboardingLifecycle === "reveal_only") && (
           <ConversationalOnboarding
             initialStep={onboardingLifecycle === "reveal_only" ? 5 : 1}
             onComplete={handleOnboardingComplete}
@@ -563,11 +563,7 @@ export default function App() {
         )}
 
         {screen === "companion" && companion && (
-          <CompanionRoom
-            onBack={() => setScreen("home")}
-            onOpenChat={() => setScreen("chat")}
-            conversationActions={{ history: chats.history, resume: resumeTrace, remove: chats.removeHistory, isGuest: chats.isGuest }}
-          />
+          <RoomExperience onBack={() => setScreen("home")} onOpenChat={() => setScreen("chat")} />
         )}
 
         {screen === "pause" && <PauseScreen setScreen={setScreen} />}

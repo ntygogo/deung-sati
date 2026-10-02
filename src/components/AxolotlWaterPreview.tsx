@@ -9,8 +9,8 @@ import type { CompanionAppearance } from '../shared/companionAppearance';
 import { CompanionIdleDirector, IDLE_DURATIONS, idleEnvelope, type CompanionIdleKind } from '../shared/companionIdleMotion';
 import './LivingCompanion3D.css';
 
-export type CompanionCaptureHandle = { capture: (framing?: 'full' | 'view') => Promise<string>; playIdle: (kind: CompanionIdleKind) => void };
-type Props = { ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean; onReady?: () => void; onError?: () => void };
+export type CompanionCaptureHandle = { capture: (framing?: 'full' | 'view') => Promise<string>; playIdle: (kind: CompanionIdleKind) => void; roomAction: (action: 'feed' | 'ball' | 'pet' | 'rest') => void };
+type Props = { allowedIdleKinds?: readonly CompanionIdleKind[]; walking?: boolean; ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean; onReady?: () => void; onError?: () => void };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
 const HELLO_DURATION = 11.8;
@@ -37,10 +37,21 @@ const GILLS = [
   { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
-export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false, onReady, onError }: Props) {
+export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false, onReady, onError }: Props) {
+  const allowedIdleRef = useRef(allowedIdleKinds);
+  allowedIdleRef.current = allowedIdleKinds;
+  const walkingRef = useRef(walking);
+  walkingRef.current = walking;
   const captureRef = useRef<((framing?: 'full' | 'view') => Promise<string>) | null>(null);
   const idleRequestRef = useRef<CompanionIdleKind | undefined>(undefined);
   useImperativeHandle(ref, () => ({
+    roomAction: action => {
+      const t = elapsedRef.current;
+      restRef.current = { phase: action === 'rest' ? 'sleeping' : 'awake', started: t - SLEEP_SETTLE_DURATION, wakeAge: 0 };
+      reactionRef.current = { kind: action === 'feed' ? 'blep' : action === 'ball' ? 'squish' : 'content', started: t };
+      touchedRef.current = t;
+      lastActivityRef.current = t;
+    },
     capture: framing => captureRef.current ? captureRef.current(framing) : Promise.reject(new Error('รอให้น้องโหลดเสร็จก่อนนะ')),
     playIdle: kind => {
       if (pausedRef.current) return;
@@ -903,8 +914,9 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
             const busy = age >= 0 && age < reactionDuration;
             const request = idleRequestRef.current;
             idleRequestRef.current = undefined;
-            const idle = idleDirector.step(t, resting.phase === 'awake' && !busy && !dragRef.current
-              && !reducedMotion.matches && (request !== undefined || lastActivityRef.current === 0 || t - lastActivityRef.current > 4), request);
+            const candidateIdle = idleDirector.step(t, resting.phase === 'awake' && !busy && !dragRef.current
+              && !walkingRef.current && !reducedMotion.matches && (request !== undefined || lastActivityRef.current === 0 || t - lastActivityRef.current > 4), request);
+            const idle = candidateIdle && (!allowedIdleRef.current || allowedIdleRef.current.includes(candidateIdle.kind)) ? candidateIdle : null;
             if (idle?.kind === 'glass' && idleKind !== 'glass') {
               orbitRef.current += Math.atan2(Math.sin(FRONT_YAW - orbitRef.current), Math.cos(FRONT_YAW - orbitRef.current));
             }
@@ -1208,6 +1220,11 @@ export function AxolotlWaterPreview({ ref, paused = false, appearance, mode = 'c
               foot.tip.getWorldPosition(localTip);
               foot.target.lerpVectors(localTip, foot.target, scratch);
               solvePaw(foot, 0.22);
+            }
+            if (walkingRef.current) {
+              pivot.position.y += Math.abs(Math.sin(t * 9)) * 0.012;
+              scene.updateMatrixWorld(true);
+              plantWalkingFeet(t * 2.2, 1);
             }
             if (planting > 0) {
               scene.updateMatrixWorld(true);

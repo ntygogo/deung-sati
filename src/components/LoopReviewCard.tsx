@@ -499,7 +499,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
         <h3 style={{ margin: '0 0 6px 0', color: '#9D174D', fontSize: '18px', fontWeight: 700 }}>
           {newlyHatched
             ? '🎉 สหายสติฟักออกจากไข่แล้ว!'
-            : feedback.message || 'บันทึก Growth Event เรียบร้อยแล้ว!'}
+            : feedback.message || 'บันทึกลูปเรียบร้อยแล้ว!'}
         </h3>
         <p style={{ fontSize: '13px', color: '#B91C1C', fontStyle: 'italic', margin: '0 0 16px 0' }}>
           “{feedback.quote || 'ทุกครั้งที่เราตระหนักรู้ คือการโอบกอดและเติบโตขึ้นหนึ่งก้าว'}”
@@ -572,6 +572,7 @@ export const LoopReviewCard: React.FC<LoopReviewCardProps> = ({
           )}
         </div>
 
+        {successResult.growthEvent?.progress_counted && <p>การเรียนรู้ครั้งนี้ส่งถึงน้องแล้ว ✨ กลับห้องไปดูการเติบโตด้วยกันนะ</p>}
         <button
           type="button"
           onClick={onClose}
