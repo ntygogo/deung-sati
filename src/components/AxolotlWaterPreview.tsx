@@ -1234,7 +1234,7 @@ export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, locomot
               foot.target.lerpVectors(localTip, foot.target, scratch);
               solvePaw(foot, 0.22);
             }
-            if (locomotionRef.current) {
+            if (locomotionRef.current && resting.phase === 'awake') {
               const gait = locomotionRef.current;
               headingRef.current += Math.atan2(Math.sin(gait.heading-headingRef.current),Math.cos(gait.heading-headingRef.current))*(1-Math.exp(-dt*5));
               pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, headingRef.current));
@@ -1248,7 +1248,7 @@ export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, locomot
                 pivot.position.addScaledVector(screenForward,dip*.08);
               }
               scene.updateMatrixWorld(true);
-              for(const foot of walkingFeet) {
+              if(walkingRef.current || feeding) for(const foot of walkingFeet) {
                 const phase = ((gait.phase-foot.offset)%4+4)%4;
                 const swing = phase<1;
                 const stride = walkingRef.current ? (swing ? -.075+.15*smooth(phase,0,1) : .075-.15*(phase-1)/3) : 0;
