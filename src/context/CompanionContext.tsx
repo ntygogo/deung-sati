@@ -25,6 +25,7 @@ export interface CompanionData {
   mood_state: string;
   last_interacted_at: string;
   dna?: GrowthDnaData;
+  snapshot?: unknown;
   equippedItems?: Record<string, string>;
 }
 
@@ -73,6 +74,7 @@ interface CompanionContextType {
     toneStyle: string;
     focusArea: string;
     safeSpace: string;
+    weather?: string;
     companionName: string;
   }) => Promise<CompanionData>;
   recordTrace: (
@@ -313,6 +315,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     toneStyle: string;
     focusArea: string;
     safeSpace: string;
+    weather?: string;
     companionName: string;
   }): Promise<CompanionData> => {
     // Generate deterministic Growth DNA based on mindful choices
@@ -381,6 +384,10 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         throw new Error('Failed to create companion on server');
       }
       const data = await res.json();
+      if (answers.weather) {
+        const weatherRes = await fetch('/api/room/weather', { method: 'PUT', headers: getAuthHeaders(), credentials: 'include', body: JSON.stringify({weather: answers.weather}) });
+        if (!weatherRes.ok) console.warn('Room weather save failed');
+      }
       setCompanion(data.companion);
       return data.companion;
     } else {
@@ -778,7 +785,7 @@ export const CompanionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setWallet(result.reward.wallet);
       }
       if (result.companion) {
-        setCompanion(result.companion);
+        setCompanion(prev => ({...prev, ...result.companion, dna: result.companion.dna || prev?.dna, snapshot: result.snapshot || result.companion.snapshot || prev?.snapshot}));
       }
       setTraces((prev) =>
         prev.map((t) =>

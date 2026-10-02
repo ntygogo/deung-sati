@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/room/:path*",
+      "destination": "/api"
+    },
+    {
       "source": "/api/notebook/:path*",
       "destination": "/api"
     },

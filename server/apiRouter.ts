@@ -1,3 +1,4 @@
+import { roomRouter } from './routes/room.js';
 import { notebookRouter } from './routes/notebook.js';
 import { settleChat } from './services/chatQuota.js';
 import { billingRouter, stripeWebhook } from './routes/billing.js';
@@ -32,6 +33,7 @@ apiApp.use((req, res, next) => {
   }
   next();
 });
+apiApp.use('/room', roomRouter);
 apiApp.use('/notebook', notebookRouter);
 apiApp.use('/beta', betaRouter);
 apiApp.use('/billing', billingRouter);
