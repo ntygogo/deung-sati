@@ -10,7 +10,7 @@ import { CompanionIdleDirector, IDLE_DURATIONS, idleEnvelope, type CompanionIdle
 import './LivingCompanion3D.css';
 
 export type CompanionCaptureHandle = { capture: (framing?: 'full' | 'view') => Promise<string>; playIdle: (kind: CompanionIdleKind) => void; roomAction: (action: 'feed' | 'ball' | 'pet' | 'rest') => void };
-type Props = { allowedIdleKinds?: readonly CompanionIdleKind[]; walking?: boolean; ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean; onReady?: () => void; onError?: () => void };
+type Props = { allowedIdleKinds?: readonly CompanionIdleKind[]; walking?: boolean; locomotion?: {phase:number;heading:number}; ref?: Ref<CompanionCaptureHandle>; paused?: boolean; appearance?: CompanionAppearance; mode?: 'companion' | 'embryo'; progress?: number; interactionPulse?: number; onPet?: () => void; showControls?: boolean; activityVersion?: number; autoGreet?: boolean; onReady?: () => void; onError?: () => void };
 const FLIP_DURATION = 3.2;
 const TICKLE_DURATION = 9.4;
 const HELLO_DURATION = 11.8;
@@ -37,18 +37,22 @@ const GILLS = [
   { root: 'Bone_048', mids: ['Bone_047'], tip: 'Bone_046', phase: 1.85, side: 1 },
 ] as const;
 
-export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false, onReady, onError }: Props) {
+export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, locomotion, ref, paused = false, appearance, mode = 'companion', progress = 0, interactionPulse = 0, onPet, showControls = true, activityVersion = 0, autoGreet = false, onReady, onError }: Props) {
   const allowedIdleRef = useRef(allowedIdleKinds);
   allowedIdleRef.current = allowedIdleKinds;
   const walkingRef = useRef(walking);
   walkingRef.current = walking;
+  const locomotionRef = useRef(locomotion); locomotionRef.current = locomotion;
+  const feedStarted = useRef(-100);
+  const headingRef = useRef(0);
   const captureRef = useRef<((framing?: 'full' | 'view') => Promise<string>) | null>(null);
   const idleRequestRef = useRef<CompanionIdleKind | undefined>(undefined);
   useImperativeHandle(ref, () => ({
     roomAction: action => {
       const t = elapsedRef.current;
+      feedStarted.current = action === 'feed' ? t : -100;
       restRef.current = { phase: action === 'rest' ? 'sleeping' : 'awake', started: t - SLEEP_SETTLE_DURATION, wakeAge: 0 };
-      reactionRef.current = { kind: action === 'feed' ? 'blep' : action === 'ball' ? 'squish' : 'content', started: t };
+      reactionRef.current = { kind: action === 'feed' ? 'content' : action === 'ball' ? 'squish' : 'content', started: t };
       touchedRef.current = t;
       lastActivityRef.current = t;
     },
@@ -911,7 +915,13 @@ export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, ref, pa
             const reaction = reactionRef.current;
             const age = t - reaction.started;
             const reactionDuration = reaction.kind === 'hello' ? HELLO_DURATION : reaction.kind === 'tickle' ? TICKLE_DURATION : reaction.kind === 'flip' ? FLIP_DURATION : 3.2;
-            const busy = age >= 0 && age < reactionDuration;
+            const feedAge = t-feedStarted.current;
+            const feeding = !reducedMotion.matches && feedAge >= 0 && feedAge < 6.2;
+            const dip = feeding ? smooth(feedAge,0,.9)*(1-smooth(feedAge,3,4)) : 0;
+            const chewing = feeding ? smooth(feedAge,1,1.3)*(1-smooth(feedAge,3.1,3.6)) : 0;
+            const licking = feeding ? smooth(feedAge,4,4.3)*(1-smooth(feedAge,4.9,5.2)) : 0;
+            const yum = feeding ? smooth(feedAge,4.8,5.2)*(1-smooth(feedAge,5.8,6.2)) : 0;
+            const busy = feeding || (age >= 0 && age < reactionDuration);
             const request = idleRequestRef.current;
             idleRequestRef.current = undefined;
             const candidateIdle = idleDirector.step(t, resting.phase === 'awake' && !busy && !dragRef.current
@@ -962,13 +972,16 @@ export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, ref, pa
             const tired = tickleActive ? THREE.MathUtils.smoothstep(age, 4.1, 4.7) * (1 - THREE.MathUtils.smoothstep(age, 6.5, 8)) : 0;
             const stroking = resting.phase === 'awake' && !helloActive && !tickleActive && t - strokeRef.current < 0.3;
             affection += ((stroking ? 1 : 0) - affection) * (1 - Math.exp(-dt * (stroking ? 5 : 2.8)));
-            const content = Math.max(affection, reaction.kind === 'content' ? envelope : 0, tired * 0.85);
+            const content = Math.max(yum, affection, reaction.kind === 'content' ? envelope : 0, tired * 0.85);
             const response = Math.max(greeting, affection, laughing * 0.8, sleepy * 0.22, stand * 0.78);
-            const squint = Math.max(reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)), sleepy * 0.35);
+            const squint = Math.max(yum * .75, reaction.kind === 'squish' ? envelope : 0, laughing * (0.82 + 0.15 * Math.sin(age * 5.5)), sleepy * 0.35);
             squish.value += (squint - squish.value) * (1 - Math.exp(-dt * 12));
-            const blep = Math.max(reaction.kind === 'blep' ? envelope : 0, tired * 0.6);
+            const blep = Math.max(licking, reaction.kind === 'blep' ? envelope : 0, tired * 0.6);
             tongue.visible = blep > 0.01;
             tongue.scale.set(0.85 + blep * 0.15, blep, blep);
+            tongueTip.position.x = licking * Math.sin((feedAge-4)*7)*.035;
+            mouth.scale.y = .025 + chewing*(.006+.012*Math.sin(feedAge*15));
+            if(chewing>.01) { tongue.visible=true; tongue.scale.setScalar(1); tongueTip.visible=false; } else tongueTip.visible=true;
             const flipping = reaction.kind === 'flip' && age >= 0 && age < FLIP_DURATION;
             // Lift first, turn near the apex, then unfold before drifting down.
             const flight = flipping ? THREE.MathUtils.clamp((age - 0.4) / 2.3, 0, 1) : 0;
@@ -1221,10 +1234,30 @@ export function AxolotlWaterPreview({ allowedIdleKinds, walking = false, ref, pa
               foot.target.lerpVectors(localTip, foot.target, scratch);
               solvePaw(foot, 0.22);
             }
-            if (walkingRef.current) {
-              pivot.position.y += Math.abs(Math.sin(t * 9)) * 0.012;
+            if (locomotionRef.current) {
+              const gait = locomotionRef.current;
+              headingRef.current += Math.atan2(Math.sin(gait.heading-headingRef.current),Math.cos(gait.heading-headingRef.current))*(1-Math.exp(-dt*5));
+              pivot.quaternion.premultiply(delta.setFromAxisAngle(upAxis, headingRef.current));
+              if(walkingRef.current) {
+                pivot.position.y -= .045 + .012*(1-Math.cos(gait.phase*Math.PI*2));
+                pivot.quaternion.multiply(rollQuaternion.setFromAxisAngle(rollAxis,Math.sin(gait.phase*Math.PI/2)*.025));
+              }
+              if(feeding) {
+                bendBody('Bone_034',dip*.32 + chewing*Math.sin(feedAge*15)*.025);
+                pivot.position.y -= dip*.075;
+                pivot.position.addScaledVector(screenForward,dip*.08);
+              }
               scene.updateMatrixWorld(true);
-              plantWalkingFeet(t * 2.2, 1);
+              for(const foot of walkingFeet) {
+                const phase = ((gait.phase-foot.offset)%4+4)%4;
+                const swing = phase<1;
+                const stride = walkingRef.current ? (swing ? -.075+.15*smooth(phase,0,1) : .075-.15*(phase-1)/3) : 0;
+                foot.target.copy(foot.neutral).addScaledVector(screenForward,stride);
+                pivot.localToWorld(foot.target);
+                foot.target.y = -.635 + (walkingRef.current && swing ? Math.sin(phase*Math.PI)*.065 : 0);
+                solvePaw(foot);
+              }
+              mount.parentElement?.setAttribute('data-room-action', walkingRef.current ? 'walking' : feeding ? feedAge<1 ? 'lowering' : feedAge<3.6 ? 'chewing' : feedAge<5.2 ? 'licking' : 'satisfied' : 'idle');
             }
             if (planting > 0) {
               scene.updateMatrixWorld(true);

@@ -23,6 +23,12 @@ export function RoomExperience({ onBack, onOpenChat }: { onBack: () => void; onO
   const [quote, setQuote] = useState('ดีใจที่ได้เจอ วันนี้มาอยู่ด้วยกันสักพักนะ');
   const [position, setPosition] = useState({ x: 50, y: 70 });
   const [walking, setWalking] = useState(false);
+  const [locomotion, setLocomotion] = useState({ phase: 0, heading: 0 });
+  const [ballPosition, setBallPosition] = useState({ x: 75, y: 78 });
+  const frame = useRef(0);
+  const positionRef = useRef(position);
+  const stepRef = useRef(0);
+  const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [ballPlaying, setBallPlaying] = useState(false);
   const [ready, setReady] = useState(false);
@@ -33,21 +39,64 @@ export function RoomExperience({ onBack, onOpenChat }: { onBack: () => void; onO
   const event = state?.events[0];
   const egg = companion?.stage === 0;
   const refresh = useCallback(async () => { try { const data = await api(''); if(active.current) { setState(data); setError(''); } } catch(e) { if(active.current) setError((e as Error).message); } }, []);
-  useEffect(() => { const pendingTimers = timers.current; active.current = true; void refresh(); const visible = () => { if (!document.hidden) void refresh(); }; document.addEventListener('visibilitychange', visible); window.addEventListener('focus',visible); return () => { active.current = false; pendingTimers.forEach(clearTimeout); document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus',visible); }; }, [refresh]);
+  useEffect(() => { const pendingTimers = timers.current; active.current = true; void refresh(); const visible = () => { if (!document.hidden) void refresh(); }; document.addEventListener('visibilitychange', visible); window.addEventListener('focus',visible); return () => { active.current = false; cancelAnimationFrame(frame.current); pendingTimers.forEach(clearTimeout); document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus',visible); }; }, [refresh]);
   useEffect(() => { const t = setTimeout(() => setQuote(''), 6500); return () => clearTimeout(t); }, [quote]);
   const later = (fn: () => void, delay: number) => { timers.current.push(setTimeout(fn, delay)); };
+  const pause = (ms: number) => new Promise<void>(resolve => later(resolve, ms));
+  const travel = (target: {x:number;y:number}, running = false) => new Promise<void>(resolve => {
+    const from = positionRef.current;
+    const dx = target.x-from.x, dy = target.y-from.y;
+    const distance = Math.hypot(dx,dy);
+    if(distance < .1) { resolve(); return; }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration = reduced ? 100 : Math.max(900, distance * (running ? 65 : 125));
+    const start = performance.now(), startStep = stepRef.current;
+    setWalking(!reduced);
+    const tick = (now:number) => {
+      if(!active.current) return;
+      const u = Math.min(1,(now-start)/duration);
+      // Accelerate and brake gently; gait phase follows distance, not wall-clock time.
+      const progress = u*u*(3-2*u);
+      const next = {x:from.x+dx*progress,y:from.y+dy*progress};
+      positionRef.current = next; setPosition(next);
+      stepRef.current = startStep + distance*progress / 3.5;
+      setLocomotion({phase:stepRef.current,heading:Math.atan2(dx,dy)});
+      if(u<1) frame.current=requestAnimationFrame(tick);
+      else {setWalking(false);resolve();}
+    };
+    frame.current=requestAnimationFrame(tick);
+  });
   const interact = async (action: keyof typeof QUOTES) => {
-    if (busy || !state || event || (!egg && !ready)) return;
+    if (busyRef.current || !state || event || (!egg && !ready)) return;
     if (egg && action !== 'pet') { setQuote('อยู่เป็นเพื่อนกันก่อนนะ อีกหน่อยเราจะได้เล่นด้วยกัน'); return; }
-    setBusy(true); setError('');
-    const targets = { feed: {x:35,y:75}, ball: {x:68,y:76}, rest: {x:78,y:38}, pet:{x:50,y:72} };
-    if (!egg) { setWalking(true); model.current?.roomAction('pet'); setPosition(targets[action]); }
-    later(() => {
-      setWalking(false); model.current?.roomAction(action); setQuote(QUOTES[action]);
-      if(action === 'ball') setBallPlaying(true);
-      later(() => { setBallPlaying(false); setBusy(false); }, 2200);
-      void api('/interact', 'POST', {action, requestId: crypto.randomUUID()}).then(data => { if(active.current) setState(data); }).catch(e => { if(active.current) setError(e.message); });
-    }, egg || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 100 : 1800);
+    busyRef.current=true; setBusy(true); setError('');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!egg) {
+      model.current?.roomAction('pet');
+      if(action==='feed') {
+        await travel({x:21,y:82});
+        setLocomotion(v=>({...v,heading:0}));
+        model.current?.roomAction('feed');
+        await pause(reduced ? 200 : 6200);
+      } else if(action==='ball') {
+        setBallPlaying(true);
+        for(const target of [{x:73,y:68},{x:43,y:72},{x:64,y:66}]) {
+          setBallPosition(target);
+          await pause(reduced ? 50 : 350);
+          await travel({x:target.x-11,y:target.y+8},true);
+          model.current?.roomAction('ball');
+          await pause(reduced ? 50 : 450);
+        }
+        setBallPlaying(false);
+      } else if(action==='rest') {
+        await travel({x:78,y:38}); model.current?.roomAction('rest');
+      } else model.current?.roomAction('pet');
+    }
+    if(!active.current) return;
+    setQuote(QUOTES[action]);
+    try { const data=await api('/interact','POST',{action,requestId:crypto.randomUUID()}); if(active.current)setState(data); }
+    catch(e) {if(active.current)setError((e as Error).message);}
+    finally {busyRef.current=false;if(active.current)setBusy(false);}
   };
   const acknowledge = useCallback(async (tryAction = false) => {
     if(!event || ackBusy) return;
@@ -74,9 +123,9 @@ export function RoomExperience({ onBack, onOpenChat }: { onBack: () => void; onO
       <div className="room-light" aria-hidden="true" />
       <button className="room-bed" aria-label="ชวนน้องไปนอน" disabled={busy} onClick={()=>void interact('rest')}><span>พักด้วยกัน</span></button>
       <button className="room-prop room-food" aria-label="ป้อนอาหารน้อง" disabled={busy} onClick={()=>void interact('feed')}><img src="/images/room/bowl.webp" alt="" /><span>ป้อนอาหาร</span></button>
-      <button className={`room-prop room-ball ${ballPlaying?'playing':''}`} aria-label="เล่นลูกบอลกับน้อง" disabled={busy} onClick={()=>void interact('ball')}><img src="/images/room/ball.webp" alt="" /><span>เล่นด้วยกัน</span></button>
+      <button className={`room-prop room-ball ${ballPlaying?'playing':''}`} style={{left:`${ballPosition.x}%`,top:`${ballPosition.y}%`}} aria-label="เล่นลูกบอลกับน้อง" disabled={busy} onClick={()=>void interact('ball')}><img src="/images/room/ball.webp" alt="" /><span>เล่นด้วยกัน</span></button>
       <div className={`room-pet ${event?.kind==='growth'?'receiving-growth':''}`} style={{left:`${position.x}%`,top:`${position.y}%`,zIndex:Math.round(position.y),transform:`translate(-50%,-85%) scale(${.78+(position.y-49)*.01})`}}>
-        {egg ? <CompanionRenderer stage={0} traceCount={traceCount} dna={companion?.dna} size={280} onPet={()=>void interact('pet')}/> : <CurrentCompanion source={companion || undefined} captureRef={model} allowedIdleKinds={ROOM_ACTIONS.filter(a=>a.bond <= (state?.bond || 0)).map(a=>a.id)} walking={walking} onPet={()=>void interact('pet')} onReady={()=>setReady(true)} onError={()=>setError('โหลดน้องไม่สำเร็จ ลองเปิดห้องอีกครั้งนะ')} />}
+        {egg ? <CompanionRenderer stage={0} traceCount={traceCount} dna={companion?.dna} size={280} onPet={()=>void interact('pet')}/> : <CurrentCompanion source={companion || undefined} captureRef={model} allowedIdleKinds={ROOM_ACTIONS.filter(a=>a.bond <= (state?.bond || 0)).map(a=>a.id)} walking={walking} locomotion={locomotion} onPet={()=>void interact('pet')} onReady={()=>setReady(true)} onError={()=>setError('โหลดน้องไม่สำเร็จ ลองเปิดห้องอีกครั้งนะ')} />}
       </div>
       <img className="room-foreground" src="/images/room/foreground.webp" alt="" />
       {event?.kind==='growth' && <div className="room-growth-particles" key={event.id} aria-hidden="true">{Array.from({length:12},(_,i)=><i key={i} style={{animationDelay:`${i*.12}s`,left:`${20+i*5}%`}}>✦</i>)}</div>}
