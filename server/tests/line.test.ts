@@ -12,7 +12,7 @@ import { ensureLineSchema } from '../services/lineSchema.js';
 import { createLineWebhook, lineMessages } from '../routes/line.js';
 import { createLineCheckout, handleLineStripeEvent, linePaidUntil, type LineOrder } from '../services/lineBilling.js';
 import { thaiDay } from '../services/lineConfig.js';
-import { allowLinePilot } from '../services/linePilot.js';
+import { allowLinePilot, isLinePilotCode } from '../services/linePilot.js';
 import { lineConversationChoices, lineChoiceInput, isLineSummaryRequest } from '../services/lineConversation.js';
 import { prepareLoopChat, applyLoopChat } from '../../src/shared/chat-protocol/loopChatGuide.js';
 
@@ -36,8 +36,17 @@ await test('LINE chat, quotas, privacy, delivery and payments use an isolated DB
     assert.equal(await allowLinePilot('pilot-a',process.env.LINE_PILOT_CODE,now),true);
     assert.equal(await allowLinePilot('pilot-b',process.env.LINE_PILOT_CODE,now),false);
     assert.equal(await allowLinePilot('pilot-a','hello',now),true);
+    process.env.LINE_PILOT_FRIEND_CODE='test-only-friend-invitation-987654321';
+    assert.equal(await allowLinePilot('pilot-a',process.env.LINE_PILOT_FRIEND_CODE,now),true);
+    assert.equal(await allowLinePilot('pilot-b',process.env.LINE_PILOT_FRIEND_CODE,now),true);
+    assert.equal(await allowLinePilot('pilot-c',process.env.LINE_PILOT_FRIEND_CODE,now),false);
+    assert.equal(await allowLinePilot('pilot-a','hello again',now),true);
+    assert.equal(await allowLinePilot('pilot-b','hello',now),true);
+    assert.equal(isLinePilotCode(process.env.LINE_PILOT_FRIEND_CODE),true);
+    assert.equal(isLinePilotCode('wrong'),false);
+    assert.equal(await allowLinePilot('pilot-b','hello',now+60001),false);
     assert.equal(await allowLinePilot('pilot-a','hello',now+60001),false);
-    delete process.env.LINE_PILOT_CODE; delete process.env.LINE_PILOT_EXPIRES_AT;
+    delete process.env.LINE_PILOT_CODE; delete process.env.LINE_PILOT_FRIEND_CODE; delete process.env.LINE_PILOT_EXPIRES_AT;
   });
   await t.test('consent before AI, menus do not charge, no web account required',async()=>{
     assert.match((await chat('alice','เรื่องส่วนตัว'))!.text,/ยินยอม/);assert.equal(calls,0);

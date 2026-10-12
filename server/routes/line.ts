@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { LINE_FRIEND_URL, lineEnabled, lineUserAllowed } from '../services/lineConfig.js';
 import { prepareLineReply, markLineReplySent, forgetUnsentLineContext, type LineReply } from '../services/lineChat.js';
-import { allowLinePilot } from '../services/linePilot.js';
+import { allowLinePilot, isLinePilotCode } from '../services/linePilot.js';
 import { lineChoiceLabel } from '../services/lineConversation.js';
 
 export function validLineSignature(body: Buffer, signature: unknown, secret: string) {
@@ -61,7 +61,7 @@ export function createLineWebhook(prepare = prepareLineReply, send = sendLineRep
         if (event.type === 'unsend') { await forgetUnsentLineContext(event.source.userId,event.webhookEventId); return; }
         if (!event.replyToken) return;
         if (event.type !== 'message' && event.type !== 'follow') return;
-        const input = event.type === 'follow' || (process.env.LINE_PILOT_CODE && invitation.trim() === process.env.LINE_PILOT_CODE) ? 'เมนู' : event.message?.type === 'text' && typeof event.message.text === 'string'
+        const input = event.type === 'follow' || isLinePilotCode(invitation) ? 'เมนู' : event.message?.type === 'text' && typeof event.message.text === 'string'
           ? event.message.text : 'วิธีส่งข้อความ';
         const reply = await prepare(event.source.userId,event.webhookEventId,input);
         if (reply) { await send(event.replyToken,reply); await markSent(event.webhookEventId); }
