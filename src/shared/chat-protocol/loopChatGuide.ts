@@ -297,14 +297,6 @@ function actionGuidanceMessage(guidance: ActionGuidance): string {
   return [guidance.reflection, optionList, recommendation, guidance.question].filter(Boolean).join('\n\n');
 }
 
-const fallbackActionGuidance: ActionGuidance = {
-  reflection: 'ตอนนี้เธอไม่จำเป็นต้องคิดทางออกทั้งหมดคนเดียวนะ เราช่วยย่อยให้เลือกได้',
-  options: ['ลดสิ่งที่จะทำให้เล็กพอเริ่มได้ทันที', 'พักให้พอ แล้วกำหนดเวลาชัด ๆ ว่าจะกลับมาลองเมื่อไหร่'],
-  recommendation: 'ข้อ 1 โดยเลือกแค่ก้าวที่ใช้เวลา 5 นาที',
-  reason: 'ยังได้ขยับไปข้างหน้าโดยไม่กดดันตัวเองให้ทำทั้งหมด',
-  question: 'สองทางนี้ ทางไหนใกล้กับสิ่งที่เธอพอทำไหวกว่า?',
-};
-
 export function loopChatInstruction(context: LoopChatContext): string {
   return `
 [LOOP TRACE CHAT — applies after all safety rules]
@@ -337,6 +329,8 @@ HELPFUL PROGRESS takes precedence over routine missing-field questions and mode 
 - When there is enough concrete context to help, you may set actionGuidance.needed=true and offer 2 feasible approaches with a recommended starting step, without waiting for all eight fields or a request containing magic words. Do this only when a practical obstacle is clear, not just because they disclosed a feeling; do not repeat advice already given. Never override a request to only vent/listen (${context.wantsListeningOnly || context.state.preferListening === true}).
 - Distinguish observations from hypotheses. Offer alternative interpretations only as tentative, relevant possibilities; never infer hidden motives, diagnoses or childhood causes. Explain what observation could distinguish them. Do not agree merely to please the person.
 - If critical context is missing, give what can be answered and ask only the one detail that changes the advice. Do not replace missing context with generic five-minute tasks. Short answers are preferred, but useful options or scripts may take 4–8 short lines.
+- Before suggesting a step, check what they ALREADY tried. Do not repackage that same step as the main recommendation. When an agreement repeatedly fails, consider discussing what prevented it, asking the other person to propose and take responsibility for a feasible agreement, or a boundary on the user's own time. Do not automatically shrink the user's needs or make them responsible for reminding/managing the other person.
+- Never promise that a new wording will fix the relationship or change another person. A draft message must use only the user's stated feelings and observed behavior: do not add “เราไม่สำคัญ”, “เขาลืม”, “เขาเพลิน”, or motives unless the user actually said them. Alternatives are possibilities, not explanations asserted as true. Use เรา/เธอ with natural neutral endings, not ครับ.
 When practical action guidance is explicitly requested, answer it NOW instead of asking another discovery question. Set actionGuidance.needed=true. Give 2 or 3 specific, feasible options based only on the user's real situation and constraints; recommend ONE starting option and explain briefly why it fits. The recommendation must include a first step small enough to do. End with at most one easy choice question. Do not make the user generate all the options, do not merely summarize, and do not suggest pausing as the only answer unless immediate rest is genuinely one of several useful options. Keep agency with the user: options are invitations, not orders.
 For guideQuestion, choose the first missing non-skipped field AFTER your valid loopTrace extraction. Ask about that field naturally in the user's situation, without importing a boss, partner or other person not mentioned. The app checks the field before using it. For facts, use the actual observable event and gently distinguish it from its meaning; acknowledge that their feelings are real. Never require evidence that the other person cares, positive memories, or proof against their feelings. We can leave another person's intent unknown. For needs, ask about a small missing support or condition, not what another person must do or what they need deep inside. For options, if they cannot think of any, provide TWO specific feasible examples IN THE MESSAGE, clearly optional, then one simple question. Do not refer to invisible choices or rely on quickReplies; the application replaces them. If they already chose a concrete action, extract micro_action and do not ask for that action again.
 Field meaning matters: emotion_or_body holds sensations (e.g. "อัดแน่นในหัว") and feelings. automatic_story is the actual interpretation/prediction/self-talk (e.g. "เงินจะไม่พอ", "เราไม่สำคัญ"), NOT a sensation or the label "ด่าตัวเอง". If no thought content is known leave it absent. A quote must be copied EXACTLY, not summarized; prefer the latest explicit clarification over a vague older phrase. One USER sentence can support multiple fields. Do not discard an explicit action just because earlier turns expressed uncertainty.
@@ -429,14 +423,16 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
   } else if (!context.wantsListeningOnly && (context.actionGuidanceRequested ||
       (!context.control && !state.preferListening && Boolean(readActionGuidance(parsed?.actionGuidance)) &&
        Boolean(state.fields.trigger) && context.count >= 2))) {
-    const guidance = readActionGuidance(parsed?.actionGuidance) || fallbackActionGuidance;
+    const guidance = readActionGuidance(parsed?.actionGuidance);
     state.mode = 'guided';
     state.preferListening = false;
     state.actionPlanning = true;
     state.asked = 'options';
     state.helpAttempts = { ...state.helpAttempts, options: 0, micro_action: 0 };
-    message = actionGuidanceMessage(guidance);
-    replies = guidance.options.every(option => option.length <= 80) ? guidance.options : [];
+    // A valid natural answer can arrive without the optional guidance object.
+    // Never replace it with unrelated stock advice (e.g. a five-minute task).
+    message = guidance ? actionGuidanceMessage(guidance) : turn.assistant_message;
+    replies = guidance?.options.every(option => option.length <= 80) ? guidance.options : [];
   } else if (state.mode === 'listening' && /(?:ไม่|ไม่ได้)ร้องไห้.*(?:ใจดำ|ไร้หัวใจ).*(?:ไหม|หรือเปล่า)/u.test(context.latest)) {
     // Answer the moral self-judgment without inventing an emotional/clinical cause.
     message = 'การไม่ร้องไห้เพียงอย่างเดียวไม่ได้บอกว่าเธอเป็นคนใจดำหรือไม่ใส่ใจนะ ไม่ต้องฝืนร้องไห้เพื่อพิสูจน์ความรู้สึกให้ใครเห็น';

@@ -69,8 +69,8 @@ assert.match(picked.assistant_message, /วันนี้ลองเดิน 
 assert.doesNotMatch(picked.assistant_message, /ก่อนรู้สึกแบบนี้/);
 
 const fallback = applyLoopChat(prepareLoopChat([u('ช่วยคิดทางออกให้หน่อย')]), {}, base);
-assert.match(fallback.assistant_message, /1\. ลดสิ่งที่จะทำให้เล็ก/);
-assert.match(fallback.assistant_message, /เราแนะนำให้เริ่มจาก/);
+assert.equal(fallback.assistant_message, base.assistant_message);
+assert.doesNotMatch(fallback.assistant_message, /5 นาที/);
 assert.equal(fallback.loop_guide.actionPlanning, true);
 
 const actionHelp = applyLoopChat(
