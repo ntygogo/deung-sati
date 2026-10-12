@@ -40,6 +40,16 @@ Consent precedes normal AI processing. Context is at most 40 recent messages and
 
 LINE offers listening/exploration only after at least three substantive messages and grounded event/feeling context (unless explicitly requested). Quick replies follow the guide state, using short user-facing labels; entitlement is last. Summary commands render retained, grounded loop fields without another AI call or quota charge; unknown fields remain unknown. Summaries are in-chat only, not saved or synced to the web notebook. This fix cannot restore context already erased by older deployments.
 
+## Optional notebook transfer (pilot)
+
+Set `LINE_NOTEBOOK_ORIGIN` to the HTTPS origin of the **same environment and database** as this LINE deployment. Leave unset to hide transfer buttons. Never point a sandbox transfer at the production web app, put a Vercel bypass secret in a user link, or disable deployment protection to make a link work. A protected preview still requires Vercel access, separately from the app account; do not invite external users to the notebook pilot until a suitable release is approved.
+
+After a summary, “บันทึกลงสมุด” issues a 30-minute private fragment-token link. The server stores only the token hash. A signed-in web user sees no summary until their LINE identity is linked. First-time linking requires an explicit web consent and a separate 10-minute confirmation command sent by the original LINE account. The identities remain one-to-one; “ยกเลิกเชื่อมบัญชี” revokes the link and outstanding transfers. Links may be reissued; the newest link invalidates the previous token.
+
+Review presents the eight fields with editable text and unknown fields left empty. Save atomically writes one account-owned notebook entry plus confirmed structured provenance. Duplicate saves or reissued links for the same source snapshot cannot duplicate the entry. No growth event, wallet, XP, hatching or DNA mutation occurs. Future growth policy is intentionally not implemented or retroactively promised. No web/LINE subscription entitlement is transferred.
+
+History deletion and unsend revoke outstanding transfers; already confirmed web entries must be deleted from the web notebook. Deleting an entry cascades its structured provenance; old transfer receipts cannot restore it. Run `npm run test:line-notebook` (and with isolated localhost `LINE_TEST_DATABASE_URL`) for identity, CSRF, ownership, duplicate save, expiry, deletion and no-growth regressions.
+
 ## Validation and remaining release checks
 
 `npm run build`, `npm run test:line`, `npm run test:billing`, `npm run test:quota`.

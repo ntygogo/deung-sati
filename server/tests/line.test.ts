@@ -99,7 +99,8 @@ await test('LINE chat, quotas, privacy, delivery and payments use an isolated DB
       const choices=lineConversationChoices({mode,fields:{},skipped:[],asked:null,nextOfferAt:3});
       assert.equal(choices.at(-1),'สิทธิ์ของฉัน');assert.ok(!choices.includes('เริ่มเรื่องใหม่'));
       const payload=lineMessages({text:'คำตอบ',choices})[0];
-      assert.equal(payload.quickReply!.items.at(-1)!.action.text,'สิทธิ์ของฉัน');
+      const last=payload.quickReply!.items.at(-1)!.action;
+      assert.ok('text' in last);assert.equal(last.text,'สิทธิ์ของฉัน');
       if(mode==='review') assert.equal(payload.quickReply!.items[0].action.label,'สรุปที่คุยกัน');
       if(mode==='offered') assert.ok(choices.includes('ค่อย ๆ สำรวจลูปด้วยกัน'));
     }

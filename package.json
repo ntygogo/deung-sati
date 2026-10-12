@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:line": "node --import tsx --test server/tests/line.test.ts",
+    "test:line-notebook": "node --import tsx --test server/tests/lineNotebook.test.ts",
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc -b && vite build",
     "lint": "oxlint",

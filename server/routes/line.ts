@@ -4,6 +4,7 @@ import { LINE_FRIEND_URL, lineEnabled, lineUserAllowed } from '../services/lineC
 import { prepareLineReply, markLineReplySent, forgetUnsentLineContext, type LineReply } from '../services/lineChat.js';
 import { allowLinePilot, isLinePilotCode } from '../services/linePilot.js';
 import { lineChoiceLabel } from '../services/lineConversation.js';
+import { lineNotebookRouter } from './lineNotebook.js';
 
 export function validLineSignature(body: Buffer, signature: unknown, secret: string) {
   if (!secret || typeof signature !== 'string') return false;
@@ -20,9 +21,11 @@ export function lineMessages(reply: LineReply) {
   }
   if (current) chunks.push(current);
   return chunks.slice(0,5).map((text,i) => ({type:'text',text,
-    ...(i === Math.min(chunks.length,5)-1 && reply.choices?.length ? {quickReply:{items:[...reply.choices.filter(x => x !== 'สิทธิ์ของฉัน'), ...reply.choices.includes('สิทธิ์ของฉัน') ? ['สิทธิ์ของฉัน'] : []].slice(-13).map(label => ({
+    ...(i === Math.min(chunks.length,5)-1 && (reply.choices?.length || reply.link) ? {quickReply:{items:[
+      ...(reply.link?[{type:'action',action:{type:'uri',label:reply.link.label,uri:reply.link.url}}]:[]),
+      ...[...(reply.choices||[]).filter(x => x !== 'สิทธิ์ของฉัน'), ...(reply.choices||[]).includes('สิทธิ์ของฉัน') ? ['สิทธิ์ของฉัน'] : []].slice(-12).map(label => ({
       type:'action',action:{type:'message',label:Array.from(lineChoiceLabel(label)).slice(0,20).join(''),text:label},
-    }))}} : {}),
+    }))]}} : {}),
   }));
 }
 export async function sendLineReply(token: string, reply: LineReply) {
@@ -77,6 +80,7 @@ export function createLineWebhook(prepare = prepareLineReply, send = sendLineRep
 }
 export const lineWebhook = createLineWebhook();
 export const lineRouter = Router();
+lineRouter.use('/notebook',lineNotebookRouter);
 lineRouter.get('/payment-return',(_req,res) => {
   res.setHeader('Cache-Control','no-store');
   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");

@@ -5,11 +5,11 @@ const kinds = {free:'เขียนอิสระ',feelings:'ทบทวน�
 type Kind = keyof typeof kinds;
 interface Entry {id:string;kind:Kind;text:string;createdAt:string}
 const prompts:Record<Kind,string> = {free:'วันนี้อยากเก็บเรื่องอะไรไว้ให้ตัวเอง?',feelings:'เกิดอะไรขึ้น ฉันรู้สึกอย่างไร และตอนนี้ต้องการอะไร?',gratitude:'วันนี้มีสิ่งเล็ก ๆ อะไรที่อยากขอบคุณ?'};
-export function Notebook({ownerId,onClose}:{ownerId:string;onClose:()=>void}) {
+export function Notebook({ownerId,onClose,initialHistory=false}:{ownerId:string;onClose:()=>void;initialHistory?:boolean}) {
   const [entries,setEntries]=useState<Entry[]>([]);
   const [kind,setKind]=useState<Kind>('gratitude');
   const [title,setTitle]=useState('');
-  const [history,setHistory]=useState(false);
+  const [history,setHistory]=useState(initialHistory);
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{dialog.current?.showModal();},[]);
   const [text,setText]=useState('');

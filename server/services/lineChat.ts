@@ -8,9 +8,10 @@ import { classifySafety } from '../safetyClassifier.js';
 import type { ChatEngineTurnResponse } from '../../src/shared/chat-protocol/index.js';
 import type { UsageMetadata } from './aiUsage.js';
 import { lineChoiceInput, lineConversationChoices, isLineSummaryRequest, lineLoopSummary } from './lineConversation.js';
+import { createLineNotebookTransfer, confirmLineNotebookLink, revokeLineNotebookTransfers, lineNotebookOrigin, LineNotebookError } from './lineNotebook.js';
 
 type Message = { role: string; content: string };
-export interface LineReply { text: string; choices?: string[] }
+export interface LineReply { text: string; choices?: string[]; link?: {label:string;url:string} }
 interface User {
   id: string; consent_at: string | null; history_json: Message[] | string; loop_json: unknown;
   month_key: string; rounds: number; round_messages: number; last_chat: string | null;
@@ -80,11 +81,17 @@ export async function prepareLineReply(id: string, eventId: string, input: strin
     if (text === 'ลบประวัติ' || text === 'ยืนยันลบประวัติ') {
       if (text === 'ลบประวัติ') return reply({text:'ต้องการล้างบทสนทนาที่ดึงสติเก็บไว้และหยุดการจดจำใช่ไหม? สิทธิ์สมาชิกและโควต้ายังอยู่ ข้อความใน LINE ต้องลบในแอป LINE เอง', choices:['ยืนยันลบประวัติ','เมนู']});
       await tx.execute("UPDATE line_chat_users SET history_json='[]',loop_json=NULL,consent_at=NULL,last_chat=NULL,round_messages=0 WHERE id=$1", [id]);
+      await revokeLineNotebookTransfers(tx,id);
       // Keep content-free tombstones so an old webhook cannot restore erased messages or consent.
       await tx.execute("UPDATE line_chat_events SET status='sent',response_json=NULL WHERE user_id=$1 AND id<>$2", [id,eventId]);
-      return reply({text:'ล้างบทสนทนาฝั่งดึงสติแล้วจ้ะ สิทธิ์และโควต้ายังอยู่ ถ้าอยากเริ่มคุยอีกครั้ง พิมพ์ “เมนู” เพื่ออ่านและยินยอมใหม่'});
+      return reply({text:'ล้างบทสนทนาฝั่ง LINE และยกเลิกลิงก์ส่งเข้าสมุดแล้วจ้ะ บันทึกที่ยืนยันลงสมุดเว็บแล้วต้องลบในสมุดเอง สิทธิ์และโควต้ายังอยู่ ถ้าอยากเริ่มคุยอีกครั้ง พิมพ์ “เมนู” เพื่ออ่านและยินยอมใหม่'});
     }
-    if (text === 'เปิดเว็บ' || text === 'เลี้ยงน้อง') return reply({text:`เข้าเว็บดึงสติได้ที่ ${LINE_WEB_URL}\nระบบเลี้ยงน้องยังเป็น Coming soon สิทธิ์แชท LINE แยกจากเว็บ และยังไม่เชื่อมประวัติข้ามช่องทาง`});
+    if (text === 'ยกเลิกเชื่อมบัญชี') {
+      await tx.execute('DELETE FROM line_web_links WHERE line_id=$1',[id]);
+      await revokeLineNotebookTransfers(tx,id);
+      return reply({text:'ยกเลิกการเชื่อมบัญชีและลิงก์ค้างแล้วจ้ะ บันทึกที่เคยยืนยันในสมุดเว็บยังอยู่ ถ้าต้องการลบให้ลบในสมุดนะ',choices:menu});
+    }
+    if (text === 'เปิดเว็บ' || text === 'เลี้ยงน้อง') return reply({text:`เข้าเว็บดึงสติได้ที่ ${LINE_WEB_URL}\nระบบเลี้ยงน้องยังเป็น Coming soon สิทธิ์แชท LINE แยกจากเว็บ ส่งเฉพาะสรุปที่เลือกและยืนยันเข้าสมุดได้ ไม่ซิงก์บทสนทนาทั้งหมด`});
     const day = thaiDay(now), month = day.slice(0,7);
     const paidUntil = await linePaidUntil(id,now,tx);
     const rounds = user.month_key === month ? user.rounds : 0;
@@ -98,6 +105,14 @@ export async function prepareLineReply(id: string, eventId: string, input: strin
       await tx.execute('UPDATE line_chat_users SET consent_at=$1 WHERE id=$2', [iso(now),id]);
       return reply({text:'พร้อมรับฟังแล้วจ้ะ วันนี้มีอะไรอยากเล่า หรืออยากเช็กความรู้สึกตัวเอง?',choices:menu});
     }
+    if (!crisis && text.startsWith('เชื่อมบัญชี')) return reply({text:await confirmLineNotebookLink(tx,id,text,now),choices:['เมนู','สิทธิ์ของฉัน']});
+    if (!crisis && text === 'บันทึกลงสมุด') {
+      try {
+        const loop=typeof user.loop_json==='string'?JSON.parse(user.loop_json):user.loop_json;
+        const url=await createLineNotebookTransfer(tx,id,loop,now);
+        return reply({text:'กด “ตรวจแล้วบันทึก” เพื่อเข้าสู่บัญชีเว็บ ตรวจแก้สรุป และยืนยันบันทึกลงสมุด ลิงก์ใช้ได้ 30 นาทีและเป็นลิงก์ส่วนตัวนะ\n\nครั้งแรกต้องยืนยันเชื่อมบัญชีใน LINE ก่อน ระบบยังไม่เพิ่มการเติบโตของไข่',link:{label:'ตรวจแล้วบันทึก',url},choices:['อยากระบายต่อ','สิทธิ์ของฉัน']});
+      } catch(error) {if(error instanceof LineNotebookError)return reply({text:error.message,choices:menu});throw error;}
+    }
     const prompts: Record<string,string> = {
       'วิธีส่งข้อความ':'ตอนนี้ดึงสติอ่านได้เฉพาะข้อความจ้ะ ลองพิมพ์สิ่งที่อยากเล่าแทนรูป เสียง หรือสติกเกอร์นะ',
       'เมนู':'วันนี้อยากคุยแบบไหน?', 'เริ่มคุย':'พร้อมรับฟังแล้วจ้ะ เล่าได้เลย',
@@ -109,7 +124,7 @@ export async function prepareLineReply(id: string, eventId: string, input: strin
     if (!crisis && isLineSummaryRequest(text)) {
       const loop = typeof user.loop_json === 'string' ? JSON.parse(user.loop_json) : user.loop_json;
       const summary = lineLoopSummary(loop);
-      if (summary) return reply({text:summary,choices:['อยากระบายต่อ','เมนู','สิทธิ์ของฉัน']});
+      if (summary) return reply({text:summary,choices:[...lineNotebookOrigin()?['บันทึกลงสมุด']:[],'อยากระบายต่อ','เมนู','สิทธิ์ของฉัน']});
       // With no extracted fields, let the AI summarize the available conversation.
       // Do not claim a saved notebook or invent an eight-part completed loop.
     }
@@ -175,6 +190,7 @@ export async function forgetUnsentLineContext(id: string, eventId: string) {
     // We keep only recent context, not individual LINE message IDs. An unsend therefore
     // clears that entire context and invalidates in-flight writers, preserving quotas.
     await tx.execute("UPDATE line_chat_users SET history_json='[]',loop_json=NULL,busy_event=NULL,busy_until=NULL WHERE id=$1",[id]);
+    await revokeLineNotebookTransfers(tx,id);
     await tx.execute("UPDATE line_chat_events SET status='sent',response_json=NULL WHERE user_id=$1",[id]);
     await tx.execute("INSERT INTO line_chat_events (id,user_id,status,created_at) VALUES ($1,$2,'sent',$3)",[eventId,id,iso(Date.now())]);
   });
