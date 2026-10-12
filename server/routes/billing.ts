@@ -5,6 +5,7 @@ import { ensureBillingSchema } from '../services/billingSchema.js';
 import { ordersForUser } from '../services/billing.js';
 import { createCheckout, reconcileOrder, handleStripeEvent, stripeClient } from '../services/stripeBilling.js';
 import { db } from '../db/database.js';
+import { handleLineStripeEvent } from '../services/lineBilling.js';
 import { chatAccessStatus } from '../services/betaTrial.js';
 
 export async function stripeWebhook(req: Request, res: Response) {
@@ -14,7 +15,7 @@ export async function stripeWebhook(req: Request, res: Response) {
   try { event = stripeClient().webhooks.constructEvent(req.body, req.headers['stripe-signature'] as string, process.env.STRIPE_WEBHOOK_SECRET!); }
   catch { res.status(400).json({error:'Invalid signature'}); return; }
   if (event.livemode !== (billingMode() === 'live')) { res.status(400).json({error:'Event mode mismatch'}); return; }
-  try { await ensureBillingSchema(); await handleStripeEvent(event); res.json({received:true}); }
+  try { await ensureBillingSchema(); await handleStripeEvent(event); await handleLineStripeEvent(event); res.json({received:true}); }
   catch { console.error('[Billing] Event processing failed', event.id); res.status(500).json({error:'Retry delivery'}); }
 }
 

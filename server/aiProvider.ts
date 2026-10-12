@@ -21,6 +21,8 @@ import { classifySafety, type SafetyClassification } from './safetyClassifier.js
 
 export interface StreamChatResponseParams {
   userId?: string;
+  channel?: 'line';
+  recordUsage?: typeof recordAiUsage;
   messages: Array<{ role: string; content: string }>;
   safety?: SafetyClassification;
   sessionState?: any;
@@ -253,7 +255,8 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
       'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite-preview',
     ];
-    const uniqueCandidates = Array.from(new Set(modelCandidates));
+    // Reply tokens are short-lived: LINE gets one bounded attempt, not the web fallback chain.
+    const uniqueCandidates = params.channel === 'line' ? [primaryModel] : Array.from(new Set(modelCandidates));
 
     // Keep only recent non-empty messages
     const validMessages = messages.filter((m) => m.content && m.content.trim());
@@ -331,10 +334,11 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           model: modelCandidate,
           contents,
           config: {
-            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext),
+            systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext)
+              + (params.channel === 'line' ? '\nช่องทางนี้คือแชท LINE แบบข้อความเท่านั้น ตอบภาษาไทยกระชับ ไม่ใช้ Markdown ไม่บอกให้กดเครื่องมือหรือแบบฝึกหัดที่ไม่มีในแชท ไม่อ้างว่าได้บันทึกสมุดหรือเชื่อมบัญชีเว็บแล้ว ไม่มีการเลี้ยงน้องหรือให้ XP ใน LINE หากชวนฝึก ให้ทำผ่านคำถามในแชทได้เลย' : ''),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
-            httpOptions: { timeout: 45000 },
+            httpOptions: { timeout: params.channel === 'line' ? 30000 : 45000 },
             thinkingConfig: {
               thinkingBudget: 0,
             },
@@ -342,7 +346,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           },
         });
 
-        await recordAiUsage(userId, modelCandidate, response.usageMetadata);
+        await (params.recordUsage || recordAiUsage)(userId, modelCandidate, response.usageMetadata);
         usageRecorded = true;
         const rawText = response.text || '';
         if (rawText.trim()) {
@@ -360,7 +364,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           return;
         }
       } catch (err: any) {
-        if (!usageRecorded) await recordAiUsage(userId, modelCandidate, undefined, 'provider_error');
+        if (!usageRecorded) await (params.recordUsage || recordAiUsage)(userId, modelCandidate, undefined, 'provider_error');
         lastError = err;
         const status = err?.status || err?.statusCode || '';
         console.warn(`[AI Provider] Model ${modelCandidate} call failed (${status}). Trying next candidate...`);
