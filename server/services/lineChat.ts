@@ -7,6 +7,7 @@ import { streamChatResponse } from '../aiProvider.js';
 import { classifySafety } from '../safetyClassifier.js';
 import type { ChatEngineTurnResponse } from '../../src/shared/chat-protocol/index.js';
 import type { UsageMetadata } from './aiUsage.js';
+import { lineChoiceInput, lineConversationChoices, isLineSummaryRequest, lineLoopSummary } from './lineConversation.js';
 
 type Message = { role: string; content: string };
 export interface LineReply { text: string; choices?: string[] }
@@ -27,8 +28,8 @@ const welcome: LineReply = {
 };
 export function boundedHistory(messages: Message[]) {
   const kept: Message[] = []; let size = 0;
-  for (const m of messages.slice(-12).reverse()) {
-    if (size + m.content.length > 16000) break;
+  for (const m of messages.slice(-40).reverse()) {
+    if (size + m.content.length > 24000) break;
     kept.unshift(m); size += m.content.length;
   }
   while (kept[0]?.role === 'assistant') kept.shift();
@@ -42,13 +43,15 @@ async function recordLineUsage(id: string | undefined, model: string, usage?: Us
       usage?.candidatesTokenCount ?? null,usage?.thoughtsTokenCount ?? null,iso(Date.now())]);
   } catch { console.error('[LINE] Usage recording failed'); }
 }
-export interface Generated { text: string; success: boolean; crisis: boolean; loop?: unknown }
+export interface Generated { text: string; success: boolean; crisis: boolean; loop?: unknown; choices?: string[] }
 export async function generateLineReply(id: string, messages: Message[], loop: unknown): Promise<Generated> {
   let output: Generated | undefined;
   await streamChatResponse({ userId: id, channel: 'line', recordUsage: recordLineUsage, messages, loopGuide: loop,
     onAssistantToken() {}, onAssistantMeta() {},
     onDone(text, source, turn: ChatEngineTurnResponse) {
-      output = { text, success: source === 'gemini', crisis: turn.safety_state === 'crisis', loop: turn.loop_guide };
+      const reviewReady = turn.loop_guide?.mode === 'review' && turn.quick_replies?.includes('สรุปแล้วบันทึก');
+      output = { text: reviewReady ? 'เราเก็บส่วนที่เธอเล่าไว้แล้วนะ กด “สรุปที่คุยกัน” เพื่อดูสรุปในแชทได้เลย ส่วนที่ยังไม่ได้เล่าจะเว้นไว้ ไม่ต้องฝืนตอบให้ครบ' : text,
+        success: source === 'gemini', crisis: turn.safety_state === 'crisis', loop: turn.loop_guide, choices: turn.quick_replies };
     },
   });
   if (!output) throw new Error('Missing LINE response');
@@ -57,7 +60,7 @@ export async function generateLineReply(id: string, messages: Message[], loop: u
 export async function prepareLineReply(id: string, eventId: string, input: string, now = Date.now(), generate = generateLineReply,
   checkout = createLineCheckout): Promise<LineReply | null> {
   await ensureLineSchema();
-  const text = input.trim();
+  const text = lineChoiceInput(input.trim());
   const crisis = (await classifySafety([{ role: 'user', content: text }])).mode === 'protect';
   const lease = randomUUID();
   const claim = await db.transaction(async tx => {
@@ -103,6 +106,13 @@ export async function prepareLineReply(id: string, eventId: string, input: strin
       'เขียนบันทึก':'วันนี้มีเหตุการณ์ไหนอยากเขียนถึง? เริ่มจากสิ่งที่เกิดขึ้น แล้วค่อยเล่าว่ารู้สึกอย่างไรก็ได้ แชทนี้เก็บเฉพาะบริบทล่าสุด ยังไม่ใช่สมุดบันทึกถาวร',
     };
     if (prompts[text]) return reply({text:prompts[text],choices:menu});
+    if (!crisis && isLineSummaryRequest(text)) {
+      const loop = typeof user.loop_json === 'string' ? JSON.parse(user.loop_json) : user.loop_json;
+      const summary = lineLoopSummary(loop);
+      if (summary) return reply({text:summary,choices:['อยากระบายต่อ','เมนู','สิทธิ์ของฉัน']});
+      // With no extracted fields, let the AI summarize the available conversation.
+      // Do not claim a saved notebook or invent an eight-part completed loop.
+    }
     if (text === 'เริ่มเรื่องใหม่') {
       await tx.execute("UPDATE line_chat_users SET history_json='[]',loop_json=NULL,last_chat=NULL,round_messages=0 WHERE id=$1", [id]);
       return reply({text:'เริ่มเรื่องใหม่ได้เลยจ้ะ ข้อความถัดไปจะเริ่มรอบใหม่ของแพ็กเกจฟรี',choices:menu});
@@ -123,16 +133,16 @@ export async function prepareLineReply(id: string, eventId: string, input: strin
   try {
     let generated: Generated | undefined;
     let response: LineReply;
-    // Never carry an old session's intimate context into an explicitly new free round.
-    const previous = claim.newRound && !claim.paidUntil ? [] : parse<Message[]>(claim.user.history_json);
+    // Quota windows are not topic boundaries. Only explicit new-topic/erase/unsend clears context.
+    const previous = parse<Message[]>(claim.user.history_json);
     const messages = boundedHistory([...previous,{role:'user',content:text}]);
     if (claim.purchase) {
       const url = await checkout(id);
       response = {text:`สมาชิกแชท LINE ${LINE_PLAN.amount/100} บาท / 30 วัน\nคุย ${LINE_PLAN.dailyMessages} ข้อความต่อวัน รีเซ็ตเที่ยงคืนไทย จ่าย PromptPay ไม่ต่ออายุอัตโนมัติ ไม่รวมสิทธิ์เว็บหรือเลี้ยงน้อง\n${url}\nหลังชำระกลับมากด “สิทธิ์ของฉัน” เพื่อตรวจสอบ`, choices:['สิทธิ์ของฉัน']};
     } else {
       const loop = typeof claim.user.loop_json === 'string' ? JSON.parse(claim.user.loop_json) : claim.user.loop_json;
-      generated = await generate(id,messages,claim.newRound && !claim.paidUntil ? undefined : loop);
-      response = {text:generated.text,choices:generated.crisis ? undefined : ['สิทธิ์ของฉัน','เริ่มเรื่องใหม่','เมนู']};
+      generated = await generate(id,messages,loop);
+      response = {text:generated.text,choices:generated.crisis ? undefined : lineConversationChoices(generated.loop,generated.choices)};
     }
     await db.transaction(async tx => {
       const current = await tx.queryOne<User>('SELECT * FROM line_chat_users WHERE id=$1 FOR UPDATE', [id]);

@@ -203,7 +203,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
   const { userId, messages, safety, requestId, exerciseResult, loopGuide, pastLoopContext, onAssistantToken, onAssistantMeta, onDone } = params;
 
   try {
-    const loopContext = prepareLoopChat(messages, loopGuide);
+    const loopContext = prepareLoopChat(messages, loopGuide, params.channel);
     const startTime = Date.now();
     const lastMsg = messages[messages.length - 1];
     const latestUserMsg = lastMsg?.content || '';
@@ -260,7 +260,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
 
     // Keep only recent non-empty messages
     const validMessages = messages.filter((m) => m.content && m.content.trim());
-    const recentMessages = validMessages.slice(-12);
+    const recentMessages = validMessages.slice(params.channel === 'line' ? -40 : -12);
     const firstUserIdx = recentMessages.findIndex((m) => m.role === 'user');
     const sliced = firstUserIdx >= 0 ? recentMessages.slice(firstUserIdx) : recentMessages;
 
@@ -335,7 +335,7 @@ export async function streamChatResponse(params: StreamChatResponseParams): Prom
           contents,
           config: {
             systemInstruction: DUENG_SATI_UNIFIED_MASTER_PROMPT + loopChatInstruction(loopContext) + pastLoopInstruction(pastLoopContext)
-              + (params.channel === 'line' ? '\nช่องทางนี้คือแชท LINE แบบข้อความเท่านั้น ตอบภาษาไทยกระชับ ไม่ใช้ Markdown ไม่บอกให้กดเครื่องมือหรือแบบฝึกหัดที่ไม่มีในแชท ไม่อ้างว่าได้บันทึกสมุดหรือเชื่อมบัญชีเว็บแล้ว ไม่มีการเลี้ยงน้องหรือให้ XP ใน LINE หากชวนฝึก ให้ทำผ่านคำถามในแชทได้เลย' : ''),
+              + (params.channel === 'line' ? '\nช่องทางนี้คือแชท LINE แบบข้อความเท่านั้น ตอบภาษาไทยกระชับ ไม่ใช้ Markdown ไม่บอกให้กดเครื่องมือหรือแบบฝึกหัดที่ไม่มีในแชท ไม่อ้างว่าได้บันทึกสมุดหรือเชื่อมบัญชีเว็บแล้ว ไม่มีการเลี้ยงน้องหรือให้ XP ใน LINE หากชวนฝึก ให้ทำผ่านคำถามในแชทได้เลย เริ่มด้วยรับฟังและถามความเป็นมาทีละคำถาม เช่นเกิดอะไรขึ้น ก่อนหน้านั้นเป็นอย่างไร ไม่เปิดด้วยการให้เลือกระบายหรือสำรวจ รอให้มีข้อมูลเหตุการณ์และความรู้สึกจากผู้ใช้พอสมควรก่อน ระบบจะเสนอทางเลือกเอง ห้ามเสนอเมนูเลือกระบายหรือสำรวจซ้ำใน assistantMessage ระหว่างรับฟัง หากผู้ใช้ขอสรุป ให้ใช้ประวัติและ loopTrace ที่มีอยู่ทันที ไม่ถามว่าจะสรุปเรื่องอะไรซ้ำ ไม่อ้างว่าไม่มีประวัติเมื่อมีข้อมูลอยู่ ไม่แต่งส่วนที่ไม่รู้ และไม่อ้างว่าบันทึกลงสมุดเว็บแล้ว' : ''),
             temperature: generationTemperature,
             maxOutputTokens: 2048,
             httpOptions: { timeout: params.channel === 'line' ? 30000 : 45000 },

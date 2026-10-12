@@ -13,6 +13,8 @@ import { createLineWebhook, lineMessages } from '../routes/line.js';
 import { createLineCheckout, handleLineStripeEvent, linePaidUntil, type LineOrder } from '../services/lineBilling.js';
 import { thaiDay } from '../services/lineConfig.js';
 import { allowLinePilot } from '../services/linePilot.js';
+import { lineConversationChoices, lineChoiceInput, isLineSummaryRequest } from '../services/lineConversation.js';
+import { prepareLoopChat, applyLoopChat } from '../../src/shared/chat-protocol/loopChatGuide.js';
 
 process.env.NODE_ENV='test'; process.env.DB_DRIVER='sqlite';
 const pgUrl=process.env.LINE_TEST_DATABASE_URL;
@@ -60,6 +62,51 @@ await test('LINE chat, quotas, privacy, delivery and payments use an isolated DB
     assert.equal(thaiDay(Date.parse('2026-10-31T17:00:00Z')),'2026-11-01');
     const nextMonth=Date.parse(new Date(now).toISOString().slice(0,7)+'-01T00:00:00Z')+40*86400_000;
     await chat('quota','เดือนใหม่',nextMonth);assert.equal((await row('quota')).rounds,1);
+  });
+  await t.test('quota rollover preserves topic and loop; summary uses stored fields without AI or quota',async()=>{
+    await chat('continuity','เริ่มคุย');
+    const loop={mode:'review',fields:{trigger:'รถเมล์มาช้า',emotion_or_body:'หงุดหงิด'},skipped:[],asked:null,nextOfferAt:3};
+    for(let i=0;i<10;i++) await prepareLineReply('continuity',`continuity-${i}`,i===0?'รถเมล์มาช้า':'เล่าต่อ '+i,now+100000+i*6000,
+      async()=>({text:'รับฟังอยู่',success:true,crisis:false,loop}));
+    await prepareLineReply('continuity','continuity-11','คุยต่อ',now+200000,async(_id,messages,previous)=>{
+      assert.ok(messages.some(m=>m.content==='รถเมล์มาช้า'));
+      assert.deepEqual(previous,loop);
+      return {text:'คุยเรื่องเดิมต่อ',success:true,crisis:false,loop};
+    });
+    assert.equal((await row('continuity')).rounds,2);
+    const before=(await row('continuity')).daily_messages;
+    const summary=await chat('continuity','สรุปเลย',now+210000);
+    assert.match(summary!.text,/รถเมล์มาช้า/);assert.match(summary!.text,/หงุดหงิด/);
+    assert.match(summary!.text,/ยังไม่ได้เล่า/);assert.match(summary!.text,/ยังไม่ได้บันทึกลงสมุด/);
+    assert.equal((await row('continuity')).daily_messages,before);
+    assert.equal(summary!.choices!.at(-1),'สิทธิ์ของฉัน');
+    await prepareLineReply('continuity','continuity-idle','เมื่อวานที่คุยกัน',now+220000+31*60000,async(_id,messages,previous)=>{
+      assert.ok(messages.some(m=>m.content==='รถเมล์มาช้า'));assert.deepEqual(previous,loop);
+      return {text:'จำเรื่องที่เล่าได้',success:true,crisis:false,loop};
+    });
+  });
+  await t.test('contextual buttons are user actions, with entitlement last and working summary aliases',()=>{
+    for(const mode of ['listening','offered','guided','review']) {
+      const choices=lineConversationChoices({mode,fields:{},skipped:[],asked:null,nextOfferAt:3});
+      assert.equal(choices.at(-1),'สิทธิ์ของฉัน');assert.ok(!choices.includes('เริ่มเรื่องใหม่'));
+      const payload=lineMessages({text:'คำตอบ',choices})[0];
+      assert.equal(payload.quickReply!.items.at(-1)!.action.text,'สิทธิ์ของฉัน');
+      if(mode==='review') assert.equal(payload.quickReply!.items[0].action.label,'สรุปที่คุยกัน');
+      if(mode==='offered') assert.ok(choices.includes('ค่อย ๆ สำรวจลูปด้วยกัน'));
+    }
+    assert.equal(lineChoiceInput('ยังเล่าไม่จบ'),'อยากระบายต่อ');
+    assert.ok(isLineSummaryRequest('สรุปเลย'));assert.ok(isLineSummaryRequest('สรุปที่คุยกัน'));
+    assert.ok(!isLineSummaryRequest('ไม่ต้องสรุป'));
+  });
+  await t.test('LINE first learns the story and feeling before offering modes; explicit exploration still works',()=>{
+    const seed={mode:'listening',fields:{trigger:'รถเมล์มาช้า',emotion_or_body:'หงุดหงิด'},skipped:[],asked:null,nextOfferAt:2};
+    const messages=[{role:'user',content:'รถเมล์มาช้า'},{role:'user',content:'หงุดหงิด'}];
+    const turn={assistant_message:'ก่อนหน้านั้นเกิดอะไรขึ้นบ้าง?',quick_replies:[],safety_state:'normal'} as any;
+    assert.equal(applyLoopChat(prepareLoopChat(messages,seed,'line'),{},turn).loop_guide!.mode,'listening');
+    messages.push({role:'user',content:'รออยู่ที่ป้ายครึ่งชั่วโมงแล้ว'});
+    assert.equal(applyLoopChat(prepareLoopChat(messages,seed,'line'),{},turn).loop_guide!.mode,'offered');
+    assert.equal(applyLoopChat(prepareLoopChat(messages,{...seed,fields:{trigger:'รถเมล์มาช้า'}},'line'),{},turn).loop_guide!.mode,'listening');
+    assert.equal(prepareLoopChat([{role:'user',content:'ค่อย ๆ สำรวจลูปด้วยกัน'}],undefined,'line').state.mode,'guided');
   });
   await t.test('new topic and inactivity start a round; user histories stay isolated',async()=>{
     await chat('new','เริ่มคุย');await chat('new','เรื่องแรก',now+200000);

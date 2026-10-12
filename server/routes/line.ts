@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from 'express';
 import { LINE_FRIEND_URL, lineEnabled, lineUserAllowed } from '../services/lineConfig.js';
 import { prepareLineReply, markLineReplySent, forgetUnsentLineContext, type LineReply } from '../services/lineChat.js';
 import { allowLinePilot } from '../services/linePilot.js';
+import { lineChoiceLabel } from '../services/lineConversation.js';
 
 export function validLineSignature(body: Buffer, signature: unknown, secret: string) {
   if (!secret || typeof signature !== 'string') return false;
@@ -19,8 +20,8 @@ export function lineMessages(reply: LineReply) {
   }
   if (current) chunks.push(current);
   return chunks.slice(0,5).map((text,i) => ({type:'text',text,
-    ...(i === Math.min(chunks.length,5)-1 && reply.choices?.length ? {quickReply:{items:reply.choices.slice(0,13).map(label => ({
-      type:'action',action:{type:'message',label:label.slice(0,20),text:label},
+    ...(i === Math.min(chunks.length,5)-1 && reply.choices?.length ? {quickReply:{items:[...reply.choices.filter(x => x !== 'สิทธิ์ของฉัน'), ...reply.choices.includes('สิทธิ์ของฉัน') ? ['สิทธิ์ของฉัน'] : []].slice(-13).map(label => ({
+      type:'action',action:{type:'message',label:Array.from(lineChoiceLabel(label)).slice(0,20).join(''),text:label},
     }))}} : {}),
   }));
 }

@@ -183,7 +183,7 @@ function groundedEmotionQuote(quote: string, source: string): boolean {
   }
   return false;
 }
-export function prepareLoopChat(messages: Message[], previous?: unknown) {
+export function prepareLoopChat(messages: Message[], previous?: unknown, channel?: 'line') {
   const input = previous && typeof previous === 'object' ? previous as Partial<LoopChatGuide> : {};
   const fields: LoopChatGuide['fields'] = {};
   const helpAttempts: NonNullable<LoopChatGuide['helpAttempts']> = {};
@@ -255,7 +255,7 @@ export function prepareLoopChat(messages: Message[], previous?: unknown) {
   const actionGuidanceRequested = !control && requestsActionGuidance(latest, state.asked);
   const requestedExercise = !/ไม่อยาก|ไม่ต้อง|อย่า|ยังไม่|บอกว่า/u.test(latest) && /(?:ขอ|อยาก|ช่วย|ลอง)(?:ฝึกหายใจ|ทำแบบฝึก|พาหายใจ|สอน(?:วิธี)?หายใจ|ทำgrounding)/u.test(latest.replace(/\s+/gu, ''));
   const deferOffer = /ไหม|เหรอ|หรือเปล่า|ยังไง|อย่างไร|หมายถึง|ขอ(?:แค่)?(?:ตัวอย่าง|ประโยค|คำอธิบาย)|อย่าเพิ่ง|ไม่ต้อง(?:สรุป|บอก|เรียก)/u.test(latest);
-  return { state, userTexts, latest, count, control, helpRequested, actionGuidanceRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer };
+  return { state, userTexts, latest, count, control, helpRequested, actionGuidanceRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer, channel };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -429,6 +429,7 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     message = parsed.guideSupport.message.trim();
     replies = [];
   } else if (state.mode === 'listening' && !state.preferListening && context.count >= state.nextOfferAt &&
+      (context.channel !== 'line' || (context.count >= 3 && state.fields.trigger && state.fields.emotion_or_body)) &&
       (state.fields.trigger || state.fields.emotion_or_body) && !context.control && !context.deferOffer) {
     state.mode = 'offered';
     message = [summary || 'เราเริ่มเห็นประเด็นจากที่เธอเล่าแล้วนะ', 'ตอนนี้อยากระบายต่อ หรือค่อย ๆ สำรวจเรื่องนี้ไปด้วยกันทีละส่วน?'].join('\n\n');
