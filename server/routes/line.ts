@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { LINE_FRIEND_URL, lineEnabled, lineUserAllowed } from '../services/lineConfig.js';
 import { prepareLineReply, markLineReplySent, forgetUnsentLineContext, type LineReply } from '../services/lineChat.js';
+import { allowLinePilot } from '../services/linePilot.js';
 
 export function validLineSignature(body: Buffer, signature: unknown, secret: string) {
   if (!secret || typeof signature !== 'string') return false;
@@ -51,13 +52,15 @@ export function createLineWebhook(prepare = prepareLineReply, send = sendLineRep
       // Await all work before returning: serverless runtimes may freeze after the response.
       // Concurrent events for the same user are serialized by DB leases; busy events request redelivery.
       const results = await Promise.allSettled(payload.events.map(async event => {
-        if (!event || event.source?.type !== 'user' || !event.source.userId || !lineUserAllowed(event.source.userId)) return;
+        if (!event || event.source?.type !== 'user' || !event.source.userId) return;
         if (!event.webhookEventId || event.webhookEventId.length > 100) return;
         if (typeof event.timestamp !== 'number' || event.timestamp < Date.now()-24*3600_000 || event.timestamp > Date.now()+300_000) return;
+        const invitation = event.type === 'message' && event.message?.type === 'text' ? event.message.text || '' : '';
+        if (!lineUserAllowed(event.source.userId) && !await allowLinePilot(event.source.userId,invitation)) return;
         if (event.type === 'unsend') { await forgetUnsentLineContext(event.source.userId,event.webhookEventId); return; }
         if (!event.replyToken) return;
         if (event.type !== 'message' && event.type !== 'follow') return;
-        const input = event.type === 'follow' ? 'เมนู' : event.message?.type === 'text' && typeof event.message.text === 'string'
+        const input = event.type === 'follow' || (process.env.LINE_PILOT_CODE && invitation.trim() === process.env.LINE_PILOT_CODE) ? 'เมนู' : event.message?.type === 'text' && typeof event.message.text === 'string'
           ? event.message.text : 'วิธีส่งข้อความ';
         const reply = await prepare(event.source.userId,event.webhookEventId,input);
         if (reply) { await send(event.replyToken,reply); await markSent(event.webhookEventId); }

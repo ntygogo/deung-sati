@@ -12,6 +12,7 @@ import { ensureLineSchema } from '../services/lineSchema.js';
 import { createLineWebhook, lineMessages } from '../routes/line.js';
 import { createLineCheckout, handleLineStripeEvent, linePaidUntil, type LineOrder } from '../services/lineBilling.js';
 import { thaiDay } from '../services/lineConfig.js';
+import { allowLinePilot } from '../services/linePilot.js';
 
 process.env.NODE_ENV='test'; process.env.DB_DRIVER='sqlite';
 const pgUrl=process.env.LINE_TEST_DATABASE_URL;
@@ -26,6 +27,16 @@ const chat=(id:string,text:string,at=now+counter*6000) => prepareLineReply(id,`e
 const row=async(id:string)=>{const r=await db.queryOne<any>('SELECT * FROM line_chat_users WHERE id=$1',[id]);if(typeof r?.history_json==='string')r.history_json=JSON.parse(r.history_json);return r;};
 await test('LINE chat, quotas, privacy, delivery and payments use an isolated DB and provider stubs',async t=>{
  try {
+  await t.test('pilot invitation is single-recipient, replay-safe and expires',async()=>{
+    process.env.LINE_PILOT_CODE='test-only-pilot-invitation-123456789';
+    process.env.LINE_PILOT_EXPIRES_AT=new Date(now+60000).toISOString();
+    assert.equal(await allowLinePilot('pilot-a','wrong',now),false);
+    assert.equal(await allowLinePilot('pilot-a',process.env.LINE_PILOT_CODE,now),true);
+    assert.equal(await allowLinePilot('pilot-b',process.env.LINE_PILOT_CODE,now),false);
+    assert.equal(await allowLinePilot('pilot-a','hello',now),true);
+    assert.equal(await allowLinePilot('pilot-a','hello',now+60001),false);
+    delete process.env.LINE_PILOT_CODE; delete process.env.LINE_PILOT_EXPIRES_AT;
+  });
   await t.test('consent before AI, menus do not charge, no web account required',async()=>{
     assert.match((await chat('alice','เรื่องส่วนตัว'))!.text,/ยินยอม/);assert.equal(calls,0);
     await chat('alice','เริ่มคุย');await chat('alice','เช็กใจวันนี้');
