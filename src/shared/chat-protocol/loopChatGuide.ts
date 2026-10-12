@@ -253,9 +253,12 @@ export function prepareLoopChat(messages: Message[], previous?: unknown, channel
   const understood = state.mode === 'guided' && Boolean(state.asked && state.helpAttempts?.[state.asked]) && !control && understandsExplanation(latest, lastAssistantText);
   const helpRequested = state.mode === 'guided' && Boolean(state.asked) && !control && (isHelpText(latest) || understood);
   const actionGuidanceRequested = !control && requestsActionGuidance(latest, state.asked);
+  const wantsListeningOnly = /ไม่ต้อง(?:แนะนำ|ช่วยคิด|แก้ปัญหา)|ไม่(?:อยาก|ต้องการ)คำแนะนำ|แค่อยาก(?:ให้ฟัง|ระบาย)|ขอ(?:แค่)?(?:ฟัง|ระบาย).*ก่อน/u.test(latest);
+  const stuckRequest = !control && !wantsListeningOnly && !/[“”"'「」]|(?:เขา|เพื่อน|แม่|หัวหน้า)(?:บอก|ถาม)ว่า/u.test(latest) &&
+    /ถามวน|วนไปวนมา|ถามซ้ำ|ช่วยตอบ(?:ตรง|มา)|ขอคำตอบ|ช่วย(?:ร่าง|เขียน)(?:ข้อความ|ประโยค)|พูด(?:กับเขา)?ยังไง|มีทาง(?:อื่น|เลือก).*ไหม/u.test(latest);
   const requestedExercise = !/ไม่อยาก|ไม่ต้อง|อย่า|ยังไม่|บอกว่า/u.test(latest) && /(?:ขอ|อยาก|ช่วย|ลอง)(?:ฝึกหายใจ|ทำแบบฝึก|พาหายใจ|สอน(?:วิธี)?หายใจ|ทำgrounding)/u.test(latest.replace(/\s+/gu, ''));
   const deferOffer = /ไหม|เหรอ|หรือเปล่า|ยังไง|อย่างไร|หมายถึง|ขอ(?:แค่)?(?:ตัวอย่าง|ประโยค|คำอธิบาย)|อย่าเพิ่ง|ไม่ต้อง(?:สรุป|บอก|เรียก)/u.test(latest);
-  return { state, userTexts, latest, count, control, helpRequested, actionGuidanceRequested, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer, channel };
+  return { state, userTexts, latest, count, control, helpRequested, actionGuidanceRequested: actionGuidanceRequested || stuckRequest, wantsListeningOnly, understood, lastAssistantText, requestedExercise, emotionCorrection, preferredEmotion, storyCorrection, deferOffer, channel };
 }
 export type LoopChatContext = ReturnType<typeof prepareLoopChat>;
 
@@ -327,6 +330,13 @@ Add these keys to the existing JSON response:
 "guideSupport": {"needed": false, "message": ""}
 "guideQuestion": {"field": "the next missing field after your extraction, or null", "message": "ONE short concrete Thai question using the actual situation"}
 "actionGuidance": {"needed": false, "reflection": "", "options": [], "recommendation": "", "reason": "", "question": ""}
+"directAnswer": false
+HELPFUL PROGRESS takes precedence over routine missing-field questions and mode invitations (never over safety or service boundaries):
+- When the user asks a concrete question, requests wording, rejects a suggestion, says it was already tried, or adds a practical constraint during action planning, set directAnswer=true and answer in assistantMessage. Supply actual wording or an adapted next step; do not make them reselect the old options. A question is optional, not a required ending. Do not mark your suggestions as chosen actions.
+- If they complain that we are asking in circles, briefly acknowledge once and give the useful answer now. Do not ask what answer they want.
+- When there is enough concrete context to help, you may set actionGuidance.needed=true and offer 2 feasible approaches with a recommended starting step, without waiting for all eight fields or a request containing magic words. Do this only when a practical obstacle is clear, not just because they disclosed a feeling; do not repeat advice already given. Never override a request to only vent/listen (${context.wantsListeningOnly || context.state.preferListening === true}).
+- Distinguish observations from hypotheses. Offer alternative interpretations only as tentative, relevant possibilities; never infer hidden motives, diagnoses or childhood causes. Explain what observation could distinguish them. Do not agree merely to please the person.
+- If critical context is missing, give what can be answered and ask only the one detail that changes the advice. Do not replace missing context with generic five-minute tasks. Short answers are preferred, but useful options or scripts may take 4–8 short lines.
 When practical action guidance is explicitly requested, answer it NOW instead of asking another discovery question. Set actionGuidance.needed=true. Give 2 or 3 specific, feasible options based only on the user's real situation and constraints; recommend ONE starting option and explain briefly why it fits. The recommendation must include a first step small enough to do. End with at most one easy choice question. Do not make the user generate all the options, do not merely summarize, and do not suggest pausing as the only answer unless immediate rest is genuinely one of several useful options. Keep agency with the user: options are invitations, not orders.
 For guideQuestion, choose the first missing non-skipped field AFTER your valid loopTrace extraction. Ask about that field naturally in the user's situation, without importing a boss, partner or other person not mentioned. The app checks the field before using it. For facts, use the actual observable event and gently distinguish it from its meaning; acknowledge that their feelings are real. Never require evidence that the other person cares, positive memories, or proof against their feelings. We can leave another person's intent unknown. For needs, ask about a small missing support or condition, not what another person must do or what they need deep inside. For options, if they cannot think of any, provide TWO specific feasible examples IN THE MESSAGE, clearly optional, then one simple question. Do not refer to invisible choices or rely on quickReplies; the application replaces them. If they already chose a concrete action, extract micro_action and do not ask for that action again.
 Field meaning matters: emotion_or_body holds sensations (e.g. "อัดแน่นในหัว") and feelings. automatic_story is the actual interpretation/prediction/self-talk (e.g. "เงินจะไม่พอ", "เราไม่สำคัญ"), NOT a sensation or the label "ด่าตัวเอง". If no thought content is known leave it absent. A quote must be copied EXACTLY, not summarized; prefer the latest explicit clarification over a vague older phrase. One USER sentence can support multiple fields. Do not discard an explicit action just because earlier turns expressed uncertainty.
@@ -409,7 +419,16 @@ export function applyLoopChat(context: LoopChatContext, parsed: any, turn: ChatE
     // Keep this transition independent of model wrap-up/exercise suggestions.
     message = 'ได้เลย เล่าต่อได้ตามจังหวะของเธอนะ เราฟังอยู่';
     replies = [];
-  } else if (context.actionGuidanceRequested) {
+  } else if (context.wantsListeningOnly && !context.control) {
+    state.mode = 'listening'; state.asked = null; state.preferListening = true; state.actionPlanning = false;
+    replies = [];
+  } else if (!context.wantsListeningOnly && !context.control && parsed?.directAnswer === true && message.trim()) {
+    // Preserve a useful answer instead of replacing it with a missing-field question.
+    state.nextOfferAt = context.count + 3;
+    replies = [];
+  } else if (!context.wantsListeningOnly && (context.actionGuidanceRequested ||
+      (!context.control && !state.preferListening && Boolean(readActionGuidance(parsed?.actionGuidance)) &&
+       Boolean(state.fields.trigger) && context.count >= 2))) {
     const guidance = readActionGuidance(parsed?.actionGuidance) || fallbackActionGuidance;
     state.mode = 'guided';
     state.preferListening = false;
