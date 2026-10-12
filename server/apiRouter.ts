@@ -1,4 +1,5 @@
 import { notebookRouter } from './routes/notebook.js';
+import { lineRouter, lineWebhook } from './routes/line.js';
 import { settleChat } from './services/chatQuota.js';
 import { billingRouter, stripeWebhook } from './routes/billing.js';
 import { betaRouter } from './routes/beta.js';
@@ -22,6 +23,7 @@ import { validateLoopForConfirmation } from '../src/shared/chat-protocol/index.j
 export const apiApp = express();
 
 apiApp.post('/billing/webhook', express.raw({type:'application/json', limit:'256kb'}), stripeWebhook);
+apiApp.post('/line/webhook', express.raw({type:'application/json', limit:'256kb'}), lineWebhook);
 apiApp.use(express.json({ limit: '750kb' }));
 apiApp.use(cookieParser());
 // Enforce the beta scope on the server as well as the navigation.
@@ -35,6 +37,7 @@ apiApp.use((req, res, next) => {
 apiApp.use('/notebook', notebookRouter);
 apiApp.use('/beta', betaRouter);
 apiApp.use('/billing', billingRouter);
+apiApp.use('/line', lineRouter);
 apiApp.use('/loops/conversations', conversationsRouter);
 apiApp.use('/user/future-self', futureSelfRouter);
 

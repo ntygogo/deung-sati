@@ -1,19 +1,15 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
+import { ensureNotebookSchema } from '../services/notebookSchema.js';
 
 export const notebookRouter = Router();
-let ready: Promise<unknown> | undefined;
 notebookRouter.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 notebookRouter.use(requireAuth);
 notebookRouter.use(async (req: AuthenticatedRequest, res, next) => {
   if (req.get('X-DeungSati-Owner') !== req.userId) { res.status(409).json({error:'บัญชีเปลี่ยนแล้ว กรุณาเปิดสมุดใหม่'}); return; }
   try {
-    ready ??= db.execute(`CREATE TABLE IF NOT EXISTS notebook_entries (
-      id VARCHAR(80) PRIMARY KEY, user_id VARCHAR(80) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      kind VARCHAR(20) NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL
-    )`).catch(e => { ready = undefined; throw e; });
-    await ready; next();
+    await ensureNotebookSchema(); next();
   } catch { res.status(503).json({error:'ยังเชื่อมต่อสมุดไม่ได้ กรุณาลองอีกครั้ง'}); }
 });
 notebookRouter.get('/', async (req: AuthenticatedRequest, res) => {
