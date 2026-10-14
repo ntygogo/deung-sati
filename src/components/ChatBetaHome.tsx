@@ -13,7 +13,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
   onStartChat: (text: string) => void; ready: boolean; roomOnly?: boolean;
 }) {
   const { currentUser } = useAuth();
-  const [journeyOpen,setJourneyOpen] = useState(()=>{try{return !localStorage.getItem(`mind-intro:${currentUser?.id}`);}catch{return true;}});
+  const [journeyOpen,setJourneyOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [notebookOpen,setNotebookOpen] = useState(false);
   const [journeyView,setJourneyView] = useState<'checkin'|'overview'|'history'|'intro'|undefined>();
@@ -37,7 +37,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
       <button onClick={()=>openJourney('history')}><span className="sanctuary-object sage"><Flower2 size={30}/></span><strong>เส้นทางของฉัน</strong><span>วงจรและสิ่งที่ได้ลอง</span><ArrowUpRight size={17}/></button>
       <button onClick={()=>setNotebookOpen(true)}><span className="sanctuary-object cream"><BookOpen size={29}/></span><strong>สมุดของฉัน</strong><span>เก็บเรื่องราวที่มีความหมาย</span><ArrowUpRight size={17}/></button>
     </div>
-    <button className="sanctuary-learn" onClick={()=>openJourney('intro')}><span className="sanctuary-orbit" aria-hidden="true">↻</span><span><small>มารู้จักตัวเองอีกนิด</small><strong>ทำไมเราถึงกลับมารู้สึกแบบเดิม?</strong><span>เข้าใจวงจร และรู้ว่าดึงสติช่วยตรงไหน →</span></span></button>
+    <section className="sanctuary-video" aria-label="คลิปแนะนำจากนัตตี้"><h2>เริ่มต้นกับดึงสติ</h2>{import.meta.env.VITE_INTRO_VIDEO_URL ? <video className="mj-intro-video" controls playsInline preload="metadata" src={import.meta.env.VITE_INTRO_VIDEO_URL} aria-label="คลิปแนะนำดึงสติโดยนัตตี้"/> : <div className="mj-video-placeholder"><span aria-hidden="true">▷</span><p>คลิปจากนัตตี้ เร็ว ๆ นี้</p></div>}</section>
     <p className="sanctuary-footnote">ไม่ต้องเปลี่ยนทั้งชีวิตในวันเดียว<br/>แค่วันนี้แวะมารับฟังตัวเอง ก็เริ่มได้แล้ว ♡</p>
     <BetaTrialNotice/>
     <p className="sanctuary-disclaimer">AI อาจเข้าใจคลาดเคลื่อน และไม่ใช่บริการฉุกเฉินหรือการรักษา</p>
@@ -57,13 +57,8 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
       <div className="dreamy-greeting"><img className="dreamy-avatar" src="/images/deung-sati-selfie.webp" alt="น้องดึงสติ" /><strong>สวัสดี {currentUser?.name || 'เธอ'}</strong></div>
       <p className="dreamy-note">พักตรงนี้<br />ได้เสมอนะ <span>♡</span></p>
       <div className="beta-live-companion"><CurrentCompanion /></div>
-      <button type="button" className="room-journal beta-room-journal" onClick={()=>setNotebookOpen(true)} aria-label="เปิดสมุดของฉัน เขียนบันทึก" disabled={!currentUser}>
-        <span className="book-invitation">วันนี้มีอะไรดี ๆ บ้าง?</span>
-        <span className="room-book" aria-hidden="true"><BookOpen size={25}/><i/></span>
-        <span className="room-object-label">สมุดของฉัน <span aria-hidden="true">✎</span></span>
-      </button>
     </section>
-    {roomOnly && <section className="beta-room-welcome"><h1>ห้องน้องดึงสติ</h1><p>แวะมาพักใจ อยู่เป็นเพื่อนน้อง หรือเปิดสมุดเก็บเรื่องราวของวันนี้ได้เลย</p><button className="beta-start" onClick={onOpenChat}>มีเรื่องอยากเล่าให้น้องฟัง</button></section>}
+    {roomOnly && <section className="beta-room-welcome"><h1>ห้องน้องดึงสติ</h1><p>พื้นที่ของเรากับน้อง ♡</p></section>}
     {!roomOnly && <><section className="dreamy-chat-card" aria-labelledby="beta-heading">
       <div className="dreamy-chat-heading"><div><h1 id="beta-heading">ตอนนี้ข้างในเป็นยังไงบ้าง?</h1><p>ไม่ต้องเรียบเรียงให้ดี ก็เริ่มเล่าได้เลย</p></div></div>
       <form onSubmit={submit} className="dreamy-composer">
