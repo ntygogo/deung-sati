@@ -1,3 +1,4 @@
+import { mindJourneyRouter } from './routes/mindJourney.js';
 import { notebookRouter } from './routes/notebook.js';
 import { lineRouter, lineWebhook } from './routes/line.js';
 import { settleChat } from './services/chatQuota.js';
@@ -35,6 +36,7 @@ apiApp.use((req, res, next) => {
   next();
 });
 apiApp.use('/notebook', notebookRouter);
+apiApp.use('/mind-journey', mindJourneyRouter);
 apiApp.use('/beta', betaRouter);
 apiApp.use('/billing', billingRouter);
 apiApp.use('/line', lineRouter);

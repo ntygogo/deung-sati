@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/mind-journey/:path*",
+      "destination": "/api"
+    },
+    {
       "source": "/api/line/:path*",
       "destination": "/api"
     },

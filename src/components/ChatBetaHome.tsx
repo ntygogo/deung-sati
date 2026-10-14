@@ -1,3 +1,4 @@
+import { MindJourney } from './MindJourney';
 import { Notebook } from './Notebook';
 import { CurrentCompanion } from './CurrentCompanion';
 import { BetaTrialNotice } from './BetaTrialNotice';
@@ -12,6 +13,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
   onStartChat: (text: string) => void; ready: boolean;
 }) {
   const { currentUser } = useAuth();
+  const [journeyOpen,setJourneyOpen] = useState(()=>{try{return !localStorage.getItem(`mind-intro:${currentUser?.id}`);}catch{return true;}});
   const [message, setMessage] = useState('');
   const [notebookOpen,setNotebookOpen] = useState(false);
   function submit(event: FormEvent) {
@@ -20,6 +22,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
     if (message.trim()) onStartChat(message.trim());
     else onOpenChat();
   }
+  if(journeyOpen && currentUser) return <MindJourney ready={ready} key={currentUser.id} ownerId={currentUser.id} onClose={()=>setJourneyOpen(false)} onChat={onStartChat} onHistory={onHistory}/>;
   return <main className="dreamy-home beta-home" data-testid="chat-beta-home">
     <section className="dreamy-hero" aria-label="ห้องพักใจ">
       <div className="room-architecture" aria-hidden="true">
@@ -50,8 +53,9 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
       <button className="beta-start" onClick={onOpenChat}>เข้าห้องแชท</button>
       <button className="beta-history" onClick={onHistory}><History size={17} /> ย้อนอ่านบทสนทนา</button>
     </section>
+    <section className="mj-entry-card"><h2>ภาพรวมใจของฉัน</h2><p>เช็คอินอารมณ์ เห็นวงจร เข้าใจความต้องการ และเก็บสิ่งที่ได้ลองในชีวิตจริง</p><button disabled={!currentUser} onClick={()=>setJourneyOpen(true)}>เปิดพื้นที่ดูแลใจ →</button></section>
     <BetaTrialNotice />
-    <aside className="beta-intro"><strong>พื้นที่ทดลองเล่า และค่อย ๆ เข้าใจตัวเอง</strong><p>แชท AI ช่วยรับฟัง แยกสิ่งที่เกิดขึ้นกับสิ่งที่เราคิด และช่วยมองทางเลือก โดยเธอเป็นคนตัดสินใจเอง</p><p>ทดลองแชทฟรี 14 วัน พร้อมสมุดบันทึกที่ผูกกับบัญชีของเธอ ส่วนบันทึกลูปและการเลี้ยงไข่กำลังพัฒนาในเฟส 2</p><small>AI อาจเข้าใจคลาดเคลื่อนได้ และไม่ใช่บริการฉุกเฉินหรือการรักษา</small></aside>
+    <aside className="beta-intro"><strong>พื้นที่ทดลองเล่า และค่อย ๆ เข้าใจตัวเอง</strong><p>แชท AI ช่วยรับฟัง แยกสิ่งที่เกิดขึ้นกับสิ่งที่เราคิด และช่วยมองทางเลือก โดยเธอเป็นคนตัดสินใจเอง</p><p>ทดลองแชทฟรี 14 วัน พร้อมสมุดบันทึกที่ผูกกับบัญชีของเธอ พร้อมเช็คอินและบันทึกเส้นทางดูแลใจ ส่วนการเลี้ยงไข่อยู่ในเฟส 2</p><small>AI อาจเข้าใจคลาดเคลื่อนได้ และไม่ใช่บริการฉุกเฉินหรือการรักษา</small></aside>
     {notebookOpen && currentUser && <Notebook key={currentUser.id} ownerId={currentUser.id} onClose={()=>setNotebookOpen(false)}/>}
   </main>;
 }
