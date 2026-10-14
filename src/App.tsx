@@ -245,6 +245,7 @@ const BottomNav = ({
       {CHAT_ONLY_BETA && <button className={`navItem phase-nav ${screen === 'phase2' ? 'navActive' : ''}`} onClick={()=>setScreen('phase2')} aria-label="เฟส 2 Coming soon" aria-current={screen === 'phase2' ? 'page' : undefined}>
         <div className="navIconWrap"><SvgIcon name="egg" size={24} stroke="#96769e"/><i className="phase-nav-spark" aria-hidden="true"/></div><span>Coming soon</span>
       </button>}
+      {CHAT_ONLY_BETA && <NavItem active={screen === 'companion'} label="ห้องน้องดึงสติ" icon="heart" onClick={() => setScreen('companion')} />}
       {!CHAT_ONLY_BETA && <><NavItem
         active={screen === "companion"}
         label={eggLabel}
@@ -553,7 +554,12 @@ export default function App() {
           />
         )}
 
-        {screen === "companion" && !companion && (
+        {screen === 'companion' && CHAT_ONLY_BETA && <ChatBetaHome roomOnly
+          onOpenMenu={() => setIsDrawerOpen(true)} onOpenChat={() => setScreen('chat')}
+          ready={canChat && chats.ready && !chats.locked && !debugInfo.isLoading}
+          onStartChat={handleStartChatFromHome} onHistory={() => setScreen('chat')}
+        />}
+        {screen === "companion" && !CHAT_ONLY_BETA && !companion && (
           <section style={{ padding: "40px 24px", textAlign: "center" }}>
             <h2>มาสร้างเพื่อนร่วมทางกัน 🌱</h2>
             <p>เลือกสไตล์และตั้งชื่อน้อง เพื่อเริ่มดูแลและเติบโตไปด้วยกัน</p>
@@ -562,7 +568,7 @@ export default function App() {
           </section>
         )}
 
-        {screen === "companion" && companion && (
+        {screen === "companion" && !CHAT_ONLY_BETA && companion && (
           <CompanionRoom
             onBack={() => setScreen("home")}
             onOpenChat={() => setScreen("chat")}

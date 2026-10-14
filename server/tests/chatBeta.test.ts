@@ -26,8 +26,8 @@ try {
   for (const path of ['/companion/create','/companion/hatch','/wallet/purchase','/user/future-self']) {
     assert.equal((await request(path,'POST',{},token)).status,404,path);
   }
-  for (const screen of ['companion','profile','journey','beforeSpeak','perspective']) assert.equal(betaScreenAllowed(screen),false);
-  for (const screen of ['home','chat','pause']) assert.equal(betaScreenAllowed(screen),true);
+  for (const screen of ['profile','journey','beforeSpeak','perspective']) assert.equal(betaScreenAllowed(screen),false);
+  for (const screen of ['home','chat','pause','companion']) assert.equal(betaScreenAllowed(screen),true);
   const doc = {revision:0,messages:[{id:'u1',role:'user',text:'วันนี้อยากพัก',createdAt:Date.now()}]};
   const saved = await request('/loops/conversations/beta-test','PUT',doc,token);
   assert.equal(saved.status,200,await saved.text());
