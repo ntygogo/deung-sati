@@ -1,4 +1,4 @@
-import { trialStatus } from '../services/betaTrial.js';
+import { trialStatus, chatAccessStatus, requireBetaTrial } from '../services/betaTrial.js';
 import { db } from '../db/database.js';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -59,15 +59,20 @@ try {
   assert.equal((await trialStatus(userId,false,new Date(starts[0].expiresAt!).getTime()-1)).state,'active');
   assert.equal((await trialStatus(userId,false,new Date(starts[0].expiresAt!).getTime())).state,'expired');
   await db.execute('UPDATE beta_trials SET expires_at = $1 WHERE user_id = $2',[new Date(Date.now()-1000).toISOString(),userId]);
-  assert.equal((await request('/chat/stream','POST',{messages:[{role:'user',content:'hello'}]},token)).status,403);
+  const freeAccess = await chatAccessStatus(userId);
+  assert.equal(freeAccess.state, 'active');
+  assert.equal(freeAccess.expiresAt, null);
+  assert.equal(freeAccess.quota?.limit, 30);
+  assert.equal((await request('/billing/checkout','POST',{},token)).status,410);
   assert.equal((await request('/loops/conversations/beta-test','GET',undefined,token)).status,200);
   assert.equal((await request('/beta/interest','POST',{},token)).status,200);
   assert.equal((await trialStatus(userId)).interested,true);
   assert.equal((await trialStatus(userId,true)).state,'expired','reload must never restart a trial');
-  let deniedStatus=0;
-  await handler({method:'POST',headers:{authorization:`Bearer ${token}`},cookies:{},body:{messages:[{role:'user',content:'hello'}]}},{status(n:number){deniedStatus=n;return this;},json(){return this;}});
-  assert.equal(deniedStatus,403,'production handler denies expired trials');
+  let allowed = false;
+  await requireBetaTrial({userId,body:{messages:[{role:'user',content:'hello'}],requestId:'free-expired-trial-test'}} as any,
+    {locals:{},status(){throw new Error('Free access denied');}} as any, ()=>{allowed=true;});
+  assert.equal(allowed,true,'expired trial can chat for free');
   await authService.logout(token);
   assert.equal((await request('/chat/stream','POST',{messages:[]},token)).status,401);
-  console.log('PASS beta: sign-up, second-session persistence, account isolation, auth/CSRF in both handlers, disabled routes, exact 14-day expiry, no resets, read-only archive, interest and logout');
+  console.log('PASS beta: sign-up, second-session persistence, account isolation, auth/CSRF in both handlers, disabled routes, legacy expiry preserved, free access after expiry, checkout disabled, interest and logout');
 } finally { server.close(); }
