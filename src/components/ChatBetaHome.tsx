@@ -51,7 +51,7 @@ export function ChatBetaHome({ onOpenMenu, onOpenChat, onHistory, onStartChat, r
       <button className="beta-history" onClick={onHistory}><History size={17} /> ย้อนอ่านบทสนทนา</button>
     </section>
     <BetaTrialNotice />
-    <aside className="beta-intro"><strong>พื้นที่ทดลองเล่า และค่อย ๆ เข้าใจตัวเอง</strong><p>แชท AI ช่วยรับฟัง แยกสิ่งที่เกิดขึ้นกับสิ่งที่เราคิด และช่วยมองทางเลือก โดยเธอเป็นคนตัดสินใจเอง</p><p>ทดลองแชทฟรี 14 วัน พร้อมสมุดบันทึกที่ผูกกับบัญชีของเธอ ส่วนบันทึกลูปและการเลี้ยงไข่กำลังพัฒนาในเฟส 2</p><small>AI อาจเข้าใจคลาดเคลื่อนได้ และไม่ใช่บริการฉุกเฉินหรือการรักษา</small></aside>
+    <aside className="beta-intro"><strong>พื้นที่ทดลองเล่า และค่อย ๆ เข้าใจตัวเอง</strong><p>แชท AI ช่วยรับฟัง แยกสิ่งที่เกิดขึ้นกับสิ่งที่เราคิด และช่วยมองทางเลือก โดยเธอเป็นคนตัดสินใจเอง</p><p>แชทฟรี ไม่มีวันหมดอายุ พร้อมสมุดบันทึกที่ผูกกับบัญชีของเธอ ส่วนบันทึกลูปและการเลี้ยงไข่กำลังพัฒนาในเฟส 2</p><small>AI อาจเข้าใจคลาดเคลื่อนได้ และไม่ใช่บริการฉุกเฉินหรือการรักษา</small></aside>
     {notebookOpen && currentUser && <Notebook key={currentUser.id} ownerId={currentUser.id} onClose={()=>setNotebookOpen(false)}/>}
   </main>;
 }

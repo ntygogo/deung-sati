@@ -3,7 +3,7 @@ import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
 import { BILLING_PLAN, billingConfigured, canUseBilling, inUserList, billingMode, billingOrdersTable } from '../services/billingConfig.js';
 import { ensureBillingSchema } from '../services/billingSchema.js';
 import { ordersForUser } from '../services/billing.js';
-import { createCheckout, reconcileOrder, handleStripeEvent, stripeClient } from '../services/stripeBilling.js';
+import { reconcileOrder, handleStripeEvent, stripeClient } from '../services/stripeBilling.js';
 import { db } from '../db/database.js';
 import { chatAccessStatus } from '../services/betaTrial.js';
 
@@ -24,28 +24,14 @@ billingRouter.use((_req,res,next) => { res.setHeader('Cache-Control','private, n
 billingRouter.get('/status', async (req: AuthenticatedRequest,res) => {
   try {
     const orders = await ordersForUser(req.userId!);
-    res.json({ mode: billingMode(), enabled: billingConfigured() && canUseBilling(req.userId!), plan:BILLING_PLAN,
+    res.json({ mode: billingMode(), enabled: false, plan:BILLING_PLAN,
       isAdmin: inUserList('BILLING_ADMIN_USER_IDS', req.userId!), access: await chatAccessStatus(req.userId!),
       orders: orders.map(o => ({id:o.id,amount:o.amount,currency:o.currency,status:o.status,createdAt:o.created_at,
         paidAt:o.paid_at,startsAt:o.starts_at,expiresAt:o.expires_at,refundedAmount:o.refunded_amount,mode:o.mode})) });
   } catch { res.status(503).json({error:'ยังโหลดข้อมูลการชำระเงินไม่ได้ กรุณาลองอีกครั้ง'}); }
 });
-billingRouter.post('/checkout', async (req: AuthenticatedRequest,res) => {
-  if (!billingConfigured() || !canUseBilling(req.userId!)) { res.status(503).json({error:'ยังไม่เปิดรับชำระเงินจริง ขณะนี้ทดสอบเฉพาะบัญชีที่กำหนดไว้'}); return; }
-  try { res.json(await createCheckout(req.userId!)); }
-  catch (error) {
-    // Never log provider messages, headers, request bodies or credentials.
-    const e = error as { type?: string; code?: string; statusCode?: number; requestId?: string; raw?: { detail?: { code?: string } } };
-    const safeToken = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(value) ? value : undefined;
-    console.error('[Billing] Checkout failed', {
-      type: safeToken(e?.type), code: safeToken(e?.code),
-      connectionCode: safeToken(e?.raw?.detail?.code),
-      keyFormatValid: /^(sk|rk)_(test|live)_[A-Za-z0-9]+$/.test(process.env.STRIPE_SECRET_KEY || ''),
-      status: typeof e?.statusCode === 'number' ? e.statusCode : undefined,
-      requestId: typeof e?.requestId === 'string' && /^req_[A-Za-z0-9]+$/.test(e.requestId) ? e.requestId : undefined,
-    });
-    res.status(503).json({error:'ยังเปิดหน้าชำระเงินไม่ได้ กรุณาลองอีกครั้ง'});
-  }
+billingRouter.post('/checkout', async (_req: AuthenticatedRequest,res) => {
+  res.status(410).json({code:'FREE_ACCESS',error:'ดึงสติเปิดให้ใช้ฟรี ไม่ต้องชำระเงิน'});
 });
 billingRouter.post('/orders/:id/reconcile', async (req: AuthenticatedRequest,res) => {
   if (!billingConfigured() || !canUseBilling(req.userId!)) { res.status(503).json({error:'ระบบทดสอบยังไม่พร้อม'}); return; }

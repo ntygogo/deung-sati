@@ -46,7 +46,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
  try{
   await t.test('anonymous, closed checkout, and server admin authorization',async()=>{
     assert.equal((await http('/billing/status')).status,401);
-    assert.equal((await http('/billing/checkout',alice.token,'POST',{})).status,503);
+    assert.equal((await http('/billing/checkout',alice.token,'POST',{})).status,410);
     assert.equal((await http('/billing/admin/report',bob.token)).status,403);
     setup();
   });
@@ -106,7 +106,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
     await applyPayment(snapshot(first,{refundedAmount:14900}),null,'evt_refund',now+day);
     await applyPayment(snapshot(first),null,'evt_stale_success',now+day);
     assert.equal((await ordersForUser(alice.id)).find(o=>o.id===first.id)!.status,'refunded');
-    assert.equal((await chatAccessStatus(alice.id,false,now+15*day)).state,'expired','must not bridge refunded coverage gap');
+    assert.equal((await chatAccessStatus(alice.id,false,now+15*day)).state,'active','free access survives refunded coverage gap');
     assert.equal((await chatAccessStatus(alice.id,false,now+45*day)).state,'active','later independent purchase is preserved');
     const cancelled=await reserveOrder(bob.id,now+2000);
     await applyPayment(snapshot(cancelled,{refundedAmount:14900}),null,'evt_refund_before_success');
@@ -114,8 +114,8 @@ await test('billing integration — isolated database, no Stripe/AI network call
   });
   await t.test('sandbox access is isolated and live keys fail closed',async()=>{
     process.env.BILLING_TEST_USER_IDS=bob.id;
-    assert.equal((await chatAccessStatus(alice.id,false,now+45*day)).state,'expired');
-    assert.equal((await http('/billing/checkout',alice.token,'POST',{})).status,503);
+    assert.equal((await chatAccessStatus(alice.id,false,now+45*day)).state,'active');
+    assert.equal((await http('/billing/checkout',alice.token,'POST',{})).status,410);
     process.env.STRIPE_SECRET_KEY='sk_live_not_real';assert.equal(billingConfigured(),false);
     setup();
   });
@@ -148,12 +148,12 @@ await test('billing integration — isolated database, no Stripe/AI network call
     const rows=await db.query('SELECT * FROM ai_usage');assert.equal('messages' in rows[0],false);
     assert.equal((await http('/billing/admin/report',bob.token)).status,403);
   });
-  await t.test('cookie mutations need CSRF header; expired chat is denied while archive remains available',async()=>{
+  await t.test('cookie mutations need CSRF header; expired accounts keep free chat and archive access',async()=>{
     assert.equal((await http('/billing/checkout',undefined,'POST',{}, {Cookie:`deung_sati_session=${alice.token}`})).status,403);
     let status=0,next=false;
     await db.execute('UPDATE beta_trials SET expires_at = $1 WHERE user_id = $2',[new Date(now-day).toISOString(),alice.id]);
-    await requireBetaTrial({userId:alice.id,body:{messages:[{role:'user',content:'hello'}]}} as any,{status(n:number){status=n;return this;},json(){return this;}} as any,()=>{next=true;});
-    assert.equal(status,403);assert.equal(next,false);
+    await requireBetaTrial({userId:alice.id,body:{messages:[{role:'user',content:'hello'}],requestId:'billing-free-test'}} as any,{status(n:number){status=n;return this;},json(){return this;}} as any,()=>{next=true;});
+    assert.equal(status,0);assert.equal(next,true);
     assert.equal((await http('/loops/conversations',alice.token)).status,200);
   });
   await t.test('live checkout, isolated entitlements, replay, mode mismatch and refunds',async()=>{
@@ -166,7 +166,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
     await createCheckout(alice.id,liveProvider);
     const live=(await ordersForUser(alice.id))[0];assert.equal(live.mode,'live');
     assert.ok(!checkoutParams!.line_items![0].price_data!.product_data!.name.includes('ทดสอบ'));
-    assert.equal((await chatAccessStatus(alice.id)).state,'expired');
+    assert.equal((await chatAccessStatus(alice.id)).state,'active');
     remoteSession.payment_status='paid';remoteSession.payment_intent='pi_live_'+live.id;
     remoteIntent={id:remoteSession.payment_intent,livemode:true,metadata:{orderId:live.id},amount:14900,currency:'thb',latest_charge:{amount_refunded:0}};
     await reconcileOrder(live,'evt_live_paid',false,liveProvider);
@@ -190,7 +190,7 @@ await test('billing integration — isolated database, no Stripe/AI network call
     assert.equal((await ordersForUser(alice.id))[0].status,'partially_refunded');
     refundState='succeeded';
     await handleStripeEvent({id:'evt_live_full',type:'refund.updated',livemode:true,data:{object:{payment_intent:remoteIntent.id}}} as Stripe.Event,liveProvider);
-    assert.equal((await chatAccessStatus(alice.id)).state,'expired');
+    assert.equal((await chatAccessStatus(alice.id)).state,'active');
     const payload=JSON.stringify({id:'evt_live_ignored',type:'customer.created',livemode:true,data:{object:{}}});
     const signature=fixtureStripe.webhooks.generateTestHeaderString({payload,secret});
     assert.equal((await http('/billing/webhook',undefined,'POST',payload,{'stripe-signature':signature})).status,200);

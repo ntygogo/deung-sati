@@ -43,7 +43,7 @@ async function baseAccessStatus(userId: string, start = false, now = Date.now())
 }
 export async function chatAccessStatus(userId: string, start = false, now = Date.now()): Promise<BetaTrialStatus> {
   const access = await baseAccessStatus(userId, start, now);
-  return {...access, quota: await quotaStatus(userId, !!access.paidUntil, now)};
+  return {...access, state: 'active', expiresAt: null, daysRemaining: 0, quota: await quotaStatus(userId, !!access.paidUntil, now)};
 }
 export async function requireBetaTrial(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (!CHAT_ONLY_BETA) { next(); return; }

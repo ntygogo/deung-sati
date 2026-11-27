@@ -67,13 +67,6 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
     return()=>{disposed=true;if(timer)clearTimeout(timer);};
   },[refresh]);
   async function reload(){setBusy(true);try{setStatus(await api<Status>('/status'));setError('');await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-  async function checkout(){
-    setBusy(true);setError('');
-    try {const result=await api<{url:string}>('/checkout','POST');const url=new URL(result.url);
-      if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw new Error('ลิงก์ชำระเงินไม่ถูกต้อง');
-      window.location.assign(url.href);
-    }catch(e){setError((e as Error).message);setBusy(false);}
-  }
   async function reconcile(id:string){setConfirmationOrderId(id);setBusy(true);try{await api('/orders/'+id+'/reconcile','POST');await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function loadReport(){setBusy(true);try{setReport(await api<Report>('/admin/report'));setError('');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   function exportOrders(){
@@ -104,19 +97,11 @@ function BillingPanel({onClose}:{onClose:()=>void}) {
     {error&&<p role="alert" className="billing-error">{error} <button disabled={busy} onClick={()=>void reload()}>ลองอีกครั้ง</button></p>}
     {!status&&!error&&<p role="status">กำลังโหลดสิทธิ์ใช้งาน…</p>}
     {status&&<>
-      <section className="billing-plan"><h3>สนับสนุนนัตตี้ ให้ดึงสติเติบโตไปด้วยกัน</h3><p className="billing-price">{baht(status.plan.amount)} <span>/ 30 วัน</span></p>
-        <p>หากคิดว่าแอพนี้มีประโยชน์ สามารถสนับสนุนนัตตี้ได้เพียง 149 บาท</p>
-        <p><strong>ได้สิทธิ์ใช้งานเพิ่ม 30 วัน</strong> สำหรับคุยกับน้องดึงสติ และย้อนอ่านบทสนทนาของตัวเอง</p>
-        <p>สมุดบันทึกเปิดให้ใช้แล้ว เขียนและย้อนอ่านได้แม้สิทธิ์แชทหมดอายุ</p>
-        <p className="billing-muted">เฟส 2 อยู่ระหว่างพัฒนา ยังไม่เปิดใช้งาน และยังไม่มีกำหนดเปิดตัว</p>
-        <p>แชทได้ {CHAT_LIMITS.paid} ข้อความ/วัน · ทดลองฟรี {CHAT_LIMITS.trial} ข้อความ/วัน เป็นเวลา 14 วัน</p>
-        <p>รีเซ็ตเที่ยงคืนเวลาไทย · ครั้งละไม่เกิน 4,000 ตัวอักษร · ข้อความที่ระบบตอบไม่สำเร็จไม่หักโควตา</p>
-        <p>จ่ายเป็นครั้ง ๆ ไม่มีการต่ออายุหรือตัดเงินอัตโนมัติ</p>
-        <p>{status.access.state==='not_started'?'ยังไม่ได้เริ่มทดลองฟรี 14 วัน':status.access.state==='expired'?'สิทธิ์แชทหมดแล้ว ยังย้อนอ่านประวัติได้':`สิทธิ์ปัจจุบันถึง ${date(status.access.expiresAt)} น. (เวลาไทย)`}</p>
-        <p>ขอคืนเงินหรือตรวจสอบรายการได้ที่ puksorn.gg@gmail.com การคืนเงินเต็มจำนวนจะยกเลิกช่วงสิทธิ์ของรายการนั้น และไม่เลื่อนช่วงสิทธิ์ของรายการอื่น</p>
-        <p>ซื้อก่อนหมดอายุ: เพิ่มวันต่อจากสิทธิ์เดิม ซื้อหลังหมดอายุ: เริ่มเมื่อยืนยันยอดสำเร็จ</p>
-        <button className="billing-primary" disabled={!status.enabled||busy} onClick={()=>void checkout()}>{busy?'กำลังดำเนินการ…':status.mode === 'live' ? 'สนับสนุน 149 บาทด้วยพร้อมเพย์' : 'ทดสอบชำระด้วยพร้อมเพย์'}</button>
-        {!status.enabled&&<p className="billing-muted">ขณะนี้ระบบชำระเงินยังไม่พร้อม กรุณากลับมาตรวจสอบอีกครั้ง</p>}
+      <section className="billing-plan"><h3>ใช้งานฟรี · ไม่มีวันหมดอายุ</h3>
+        <p>แชทฟรี {CHAT_LIMITS.trial} ข้อความต่อวัน พร้อมสมุดบันทึกและประวัติของเธอ ไม่ต้องชำระเงิน</p>
+        <p>โควตาเริ่มใหม่เที่ยงคืนเวลาไทย · ข้อความที่ระบบตอบไม่สำเร็จไม่หักโควตา</p>
+        <p>ผู้ที่มีสิทธิ์ชำระเงินเดิมยังได้โควตา {CHAT_LIMITS.paid} ข้อความต่อวันจนสิทธิ์เดิมสิ้นสุด จากนั้นใช้ฟรีต่อได้</p>
+        <p>ตรวจสอบรายการเดิมหรือขอคืนเงินได้ที่ puksorn.gg@gmail.com</p>
       </section>
       <section><h3>ประวัติการชำระเงิน</h3><button disabled={busy} onClick={()=>void reload()}>อัปเดตข้อมูล</button>
         {!status.orders.length?<p className="billing-muted">ยังไม่มีรายการชำระเงิน</p>:<ul className="billing-orders">{status.orders.map(o=><li key={o.id}>
